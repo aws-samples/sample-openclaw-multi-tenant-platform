@@ -170,6 +170,7 @@ This creates: VPC Origin → internal ALB, CloudFront #2 (`*.your-domain.com`), 
 ./scripts/setup-waf.sh                         # WAF → ALB (also done by post-deploy.sh)
 ./scripts/usage-report.sh [--month YYYY-MM]    # Monthly cost report
 ./scripts/setup-argocd-apps.sh                 # ArgoCD Applications + ApplicationSets
+./scripts/setup-audit-logging.sh [region]      # CloudTrail + S3 + Athena for Bedrock audit
 ```
 
 ### ArgoCD (GitOps)
