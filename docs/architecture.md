@@ -1,6 +1,6 @@
 # OpenClaw Platform Architecture
 
-> Domain: `claw.snese.net` | Cluster: `openclaw-cluster` (us-west-2)
+> Domain: `your-domain.com` | Cluster: `openclaw-cluster` (us-west-2)
 > Tenants: alice, bob, carol
 > Image: `ghcr.io/openclaw/openclaw:2026.3.24` | Helm: `thepagent/openclaw-helm v1.3.14`
 
@@ -12,7 +12,7 @@
                           ┌─────────────────────────────────────────────────────────┐
                           │                      AWS (us-west-2)                    │
                           │                                                         │
-User ──► Browser ──► Cognito ──┬──► ALB (HTTPS, *.claw.snese.net)                  │
+User ──► Browser ──► Cognito ──┬──► ALB (HTTPS, *.your-domain.com)                  │
                           │    │                │                                    │
                           │    │                ▼                                    │
                           │    │          EKS Pod (OpenClaw Gateway, trusted-proxy)  │
@@ -46,11 +46,11 @@ graph TB
     end
 
     subgraph Route53
-        R53[Route53<br/>claw.snese.net<br/>*.claw.snese.net → ALB]
+        R53[Route53<br/>your-domain.com<br/>*.your-domain.com → ALB]
     end
 
     subgraph ACM
-        Cert[ACM Certificate<br/>*.claw.snese.net]
+        Cert[ACM Certificate<br/>*.your-domain.com]
     end
 
     subgraph Cognito
@@ -176,7 +176,7 @@ graph TB
         DepA[Deployment<br/>openclaw-alice]
         PVCA[PVC<br/>gp3 EBS]
         SvcA[Service<br/>ClusterIP:18789]
-        IngA[Ingress<br/>alice.claw.snese.net]
+        IngA[Ingress<br/>alice.your-domain.com]
         NPA[NetworkPolicy<br/>deny-all + allow-alb]
         RQA[ResourceQuota]
         SAA[ServiceAccount<br/>→ TenantRole-alice]
@@ -186,7 +186,7 @@ graph TB
         DepB[Deployment<br/>openclaw-bob]
         PVCB[PVC<br/>gp3 EBS]
         SvcB[Service<br/>ClusterIP:18789]
-        IngB[Ingress<br/>bob.claw.snese.net]
+        IngB[Ingress<br/>bob.your-domain.com]
         NPB[NetworkPolicy<br/>deny-all + allow-alb]
         RQB[ResourceQuota]
         SAB[ServiceAccount<br/>→ TenantRole-bob]
@@ -196,7 +196,7 @@ graph TB
         DepC[Deployment<br/>openclaw-carol]
         PVCC[PVC<br/>gp3 EBS]
         SvcC[Service<br/>ClusterIP:18789]
-        IngC[Ingress<br/>carol.claw.snese.net]
+        IngC[Ingress<br/>carol.your-domain.com]
         NPC[NetworkPolicy<br/>deny-all + allow-alb]
         RQC[ResourceQuota]
         SAC[ServiceAccount<br/>→ TenantRole-carol]
@@ -253,7 +253,7 @@ sequenceDiagram
     participant Cognito
     participant Pod as EKS Pod<br/>(OpenClaw Gateway)
 
-    User->>Browser: Navigate to alice.claw.snese.net
+    User->>Browser: Navigate to alice.your-domain.com
     Browser->>ALB: GET /
     ALB->>ALB: Check session cookie
 
@@ -331,11 +331,11 @@ sequenceDiagram
 │    --namespace openclaw-<tenant> --create-namespace                 │
 │    --set tenant=<tenant>                                            │
 │    --set image=ghcr.io/openclaw/openclaw:2026.3.24                  │
-│    --set ingress.host=<tenant>.claw.snese.net                       │
+│    --set ingress.host=<tenant>.your-domain.com                       │
 │                                                                     │
 │  Step 4: DNS — No action needed                                     │
 │  ──────────────────────────────                                     │
-│  Wildcard *.claw.snese.net already points to ALB                    │
+│  Wildcard *.your-domain.com already points to ALB                    │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -366,7 +366,7 @@ User ──► Cognito Hosted UI ──► Pre-signup Lambda
                           │
                           ▼
                     Tenant ready at
-                    <tenant>.claw.snese.net
+                    <tenant>.your-domain.com
 ```
 
 Lambda source: `cdk/lambda/pre-signup/index.py`, `cdk/lambda/post-confirmation/index.py`

@@ -29,7 +29,7 @@ User ──→ Cognito Hosted UI ──→ 註冊（email + password）
                           EKS: namespace + pod + ingress
                                   │
                                   ▼
-                          SNS 通知 user：你的 URL 是 {tenant}.claw.snese.net
+                          SNS 通知 user：你的 URL 是 {tenant}.your-domain.com
 ```
 
 ## Pre-sign-up Lambda
