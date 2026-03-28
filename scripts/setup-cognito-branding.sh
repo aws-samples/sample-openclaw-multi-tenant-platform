@@ -1,56 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="us-west-2"
+REGION="${1:-us-west-2}"
+STACK="OpenClawEksStack"
 LOGO=""
+[[ "${2:-}" == "--logo" ]] && LOGO="${3:-}"
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --logo)   LOGO="$2"; shift 2 ;;
-    --region) REGION="$2"; shift 2 ;;
-    *)        echo "Unknown option: $1" >&2; exit 1 ;;
-  esac
-done
+get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
 
-COGNITO_POOL_ID="${COGNITO_POOL_ID:-<COGNITO_POOL_ID>}"
-COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-<COGNITO_CLIENT_ID>}"
+POOL_ID=$(get_output CognitoPoolId)
+CLIENT_ID=$(get_output CognitoClientId)
 
-CSS=$(cat <<'EOF'
-.background-customizable { background-color: #1a1a2e; }
-.banner-customizable { background-color: #1a1a2e; }
+echo "==> Applying Cognito branding"
+echo "  Pool:   $POOL_ID"
+echo "  Client: $CLIENT_ID"
+echo "  Region: $REGION"
+
+CSS=".background-customizable { background-color: #0a0a12; }
+.banner-customizable { background-color: #0a0a12; }
 .label-customizable { color: #ffffff; font-weight: 400; }
 .textDescription-customizable { color: #cccccc; font-size: 14px; padding-top: 10px; padding-bottom: 10px; display: block; }
-.inputField-customizable { color: #ffffff; background-color: #16213e; border: 1px solid #e94560; width: 100%; height: 40px; }
-.inputField-customizable:focus { border: 1px solid #e94560; }
-.submitButton-customizable { background-color: #e94560; color: #ffffff; font-size: 16px; font-weight: bold; width: 100%; height: 44px; margin: 20px 0 0 0; }
-.submitButton-customizable:hover { background-color: #c73652; color: #ffffff; }
-.idpButton-customizable { background-color: #16213e; color: #ffffff; height: 40px; }
-.idpButton-customizable:hover { background-color: #0f3460; color: #ffffff; }
-.socialButton-customizable { background-color: #16213e; color: #ffffff; height: 40px; }
+.inputField-customizable { color: #ffffff; background-color: #111119; border: 1px solid #6366F1; width: 100%; height: 40px; }
+.inputField-customizable:focus { border: 1px solid #6366F1; }
+.submitButton-customizable { background-color: #6366F1; color: #ffffff; font-size: 16px; font-weight: bold; width: 100%; height: 44px; margin: 20px 0 0 0; }
+.submitButton-customizable:hover { background-color: #5558e6; color: #ffffff; }
+.idpButton-customizable { background-color: #111119; color: #ffffff; height: 40px; }
+.idpButton-customizable:hover { background-color: #1e1e2e; color: #ffffff; }
+.socialButton-customizable { background-color: #111119; color: #ffffff; height: 40px; }
 .logo-customizable { max-width: 400px; }
 .legalText-customizable { color: #999999; }
-.redirect-customizable { color: #e94560; }
-EOF
-)
+.redirect-customizable { color: #6366F1; }"
 
-CMD=(
-  aws cognito-idp set-ui-customization
-  --user-pool-id "$COGNITO_POOL_ID"
-  --client-id "$COGNITO_CLIENT_ID"
+CMD=(aws cognito-idp set-ui-customization
+  --user-pool-id "$POOL_ID"
+  --client-id "$CLIENT_ID"
   --css "$CSS"
-  --region "$REGION"
-)
+  --region "$REGION")
 
-if [[ -n "$LOGO" ]]; then
-  [[ -f "$LOGO" ]] || { echo "Logo file not found: $LOGO" >&2; exit 1; }
-  CMD+=(--image-file "fileb://$LOGO")
-fi
+[ -n "$LOGO" ] && [ -f "$LOGO" ] && CMD+=(--image-file "fileb://$LOGO")
 
-echo "Setting Cognito Hosted UI branding..."
-echo "  Pool:   $COGNITO_POOL_ID"
-echo "  Client: $COGNITO_CLIENT_ID"
-echo "  Region: $REGION"
-[[ -n "$LOGO" ]] && echo "  Logo:   $LOGO"
-
-"${CMD[@]}"
-echo "Done."
+"${CMD[@]}" > /dev/null
+echo "✅ Cognito branding applied"
