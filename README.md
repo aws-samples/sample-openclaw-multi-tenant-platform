@@ -124,20 +124,21 @@ aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster --profile <
 
 OpenClaw's bundled `@smithy/credential-provider-imds` has `GREENGRASS_HOSTS` that only allows `localhost` and `127.0.0.1`, rejecting EKS Pod Identity Agent's `169.254.170.23`. The `init-tools` container patches this via `sed` at startup. See [aws-sdk-js-v3#5709](https://github.com/aws/aws-sdk-js-v3/issues/5709).
 
-## Cost Estimate (3 tenants)
+## Cost Estimate
 
-| Resource | Monthly Cost |
-|----------|-------------|
-| EKS control plane | ~$73 |
-| EC2 (2x t4g.medium Graviton) | ~$48 |
-| EBS (3x 10Gi gp3) | ~$2.40 |
-| ALB | ~$16 |
-| NAT Gateway (x2 HA) | ~$64 |
-| Bedrock (usage-based) | varies |
-| CloudWatch (Container Insights) | ~$10-15 |
-| **Total (infra only)** | **~$214-219/mo** |
+| Resource | Monthly Cost (3 tenants) | At 100 tenants |
+|----------|------------------------|----------------|
+| EKS control plane | ~$73 | ~$73 |
+| EC2 (t3.medium + Karpenter spot) | ~$60 | ~$60-150 |
+| EBS (gp3 10Gi per tenant) | ~$2.40 | ~$80 |
+| ALB | ~$16 | ~$16 |
+| NAT Gateway | ~$32 | ~$32 |
+| CloudWatch (Container Insights) | ~$10-15 | ~$15-30 |
+| Lambda + S3 | ~$0 | ~$0 |
+| Bedrock (usage-based) | varies | varies |
+| **Total (infra)** | **~$194-199/mo** | **~$276-381/mo** |
 
-> With KEDA scale-to-zero enabled and ~70% idle time, EC2 cost drops to ~$15, saving ~$33/mo.
+> KEDA scale-to-zero is active. EC2 scales with concurrent usage, not total tenants.
 
 ## Project Structure
 
