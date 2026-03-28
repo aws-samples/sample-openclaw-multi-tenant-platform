@@ -1,0 +1,13 @@
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+spec:
+  hard:
+    limits.cpu: {{ .Values.resourceQuota.cpu | quote }}
+    limits.memory: {{ .Values.resourceQuota.memory }}
+    pods: {{ .Values.resourceQuota.pods | quote }}
+{{- end }}

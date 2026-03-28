@@ -1,0 +1,132 @@
+image:
+  repository: ghcr.io/openclaw/openclaw
+  tag: "2026.3.24"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+resources:
+  limits:
+    cpu: 2
+    memory: 2Gi
+  requests:
+    cpu: 200m
+    memory: 512Mi
+
+service:
+  type: ClusterIP
+  port: 18789
+
+persistence:
+  enabled: true
+  storageClass: ""
+  size: 10Gi
+
+serviceAccount:
+  annotations: {}
+
+ingress:
+  enabled: false
+  className: alb
+  host: ""
+  annotations:
+    alb.ingress.kubernetes.io/group.name: openclaw-shared
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+
+networkPolicy:
+  enabled: true
+
+resourceQuota:
+  enabled: true
+  cpu: "4"
+  memory: 8Gi
+  pods: "10"
+
+config:
+  gateway:
+    port: 18789
+    mode: local
+    controlUi:
+      allowedOrigins:
+        - "*"
+    trustedProxies:
+      - "10.0.0.1"
+  
+  browser:
+    enabled: false
+  
+  agents:
+    defaults:
+      workspace: /home/node/.openclaw/workspace
+      userTimezone: UTC
+      timeoutSeconds: 600
+      maxConcurrent: 1
+    list:
+      - id: main
+        default: true
+        identity:
+          name: OpenClaw
+          emoji: "🦞"
+  
+  session:
+    scope: per-sender
+    store: /home/node/.openclaw/sessions
+    reset:
+      mode: idle
+      idleMinutes: 60
+  
+  logging:
+    level: info
+    consoleLevel: info
+    consoleStyle: compact
+    redactSensitive: tools
+  
+  tools:
+    profile: full
+    web:
+      search:
+        enabled: false
+      fetch:
+        enabled: true
+
+  secrets:
+    providers:
+      aws-sm:
+        source: exec
+        command: node
+        args:
+          - /home/node/.openclaw/workspace/bin/fetch-secret.mjs
+        timeoutMs: 10000
+        passEnv:
+          - AWS_CONTAINER_CREDENTIALS_FULL_URI
+          - AWS_CONTAINER_AUTHORIZATION_TOKEN
+          - AWS_REGION
+          - TENANT_NAMESPACE
+          - NODE_PATH
+
+skills:
+  - weather
+  - gog
+
+gateway:
+  token:
+    generate: true
+    secretName: ""
+
+env: {}
+
+envFrom: []
+
+fetchSecret: |
+  #!/usr/bin/env node
+  import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+  const input = JSON.parse(await new Response(process.stdin).text());
+  const sm = new SecretsManagerClient({});
+  const ns = process.env.TENANT_NAMESPACE;
+  const result = {};
+  for (const id of input.ids) {
+    const { SecretString } = await sm.send(new GetSecretValueCommand({ SecretId: `openclaw/${ns}/${id}` }));
+    result[id] = SecretString;
+  }
+  process.stdout.write(JSON.stringify(result));

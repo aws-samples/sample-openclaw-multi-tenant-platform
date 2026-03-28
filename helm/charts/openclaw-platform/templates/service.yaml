@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: 18789
+      protocol: TCP
+      name: gateway
+  selector:
+    {{- include "openclaw-helm.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include "openclaw-helm.fullname" . }}-test-connection"
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  template:
+    metadata:
+      name: "{{ include "openclaw-helm.fullname" . }}-test-connection"
+    spec:
+      serviceAccountName: {{ include "openclaw-helm.fullname" . }}-test
+      containers:
+        - name: test
+          image: bitnami/kubectl:latest
+          command:
+            - sh
+            - -c
+            - |
+              POD=$(kubectl get pod -l app.kubernetes.io/name=openclaw-helm -o jsonpath='{.items[0].metadata.name}')
+              kubectl exec $POD -c main -- curl -f http://127.0.0.1:18789/
+      restartPolicy: Never
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec"]
+    verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}-test
+  annotations:
+    "helm.sh/hook": test
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "openclaw-helm.fullname" . }}-test
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "openclaw-helm.fullname" . }}-test

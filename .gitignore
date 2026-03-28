@@ -1,0 +1,10 @@
+node_modules/
+cdk.out/
+*.js
+!jest.config.js
+*.d.ts
+*.log
+cdk-outputs.json
+research/
+.npm/
+/tmp/

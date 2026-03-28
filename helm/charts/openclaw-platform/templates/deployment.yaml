@@ -1,0 +1,164 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      {{- include "openclaw-helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "openclaw-helm.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "openclaw-helm.fullname" . }}
+      initContainers:
+      - name: init-config
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command:
+        - sh
+        - -c
+        - |
+          mkdir -p /home/node/.openclaw
+          [ -f /home/node/.openclaw/openclaw.json ] || cp /config/openclaw.json /home/node/.openclaw/openclaw.json
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: data
+          mountPath: /home/node/.openclaw
+        - name: tmp
+          mountPath: /tmp
+      
+      - name: init-skills
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command:
+        - sh
+        - -c
+        - |
+          mkdir -p /home/node/.openclaw/workspace/skills
+          cd /home/node/.openclaw/workspace
+          {{- range .Values.skills }}
+          if [ ! -d "skills/{{ . }}" ]; then
+            npx -y clawhub install "{{ . }}" --no-input || true
+          fi
+          {{- end }}
+        env:
+        - name: HOME
+          value: /tmp
+        - name: NPM_CONFIG_CACHE
+          value: /tmp/.npm
+        volumeMounts:
+        - name: data
+          mountPath: /home/node/.openclaw
+        - name: tmp
+          mountPath: /tmp
+
+      - name: init-tools
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command: ["sh", "-c"]
+        args:
+          - |
+            mkdir -p /home/node/.openclaw/workspace/bin
+            if [ ! -f /home/node/.openclaw/workspace/node_modules/@aws-sdk/client-secrets-manager/dist-cjs/index.js ]; then
+              cd /home/node/.openclaw/workspace && npm install --save=false @aws-sdk/client-secrets-manager 2>/dev/null
+            fi
+            cp /config/fetch-secret.mjs /home/node/.openclaw/workspace/bin/fetch-secret.mjs
+            chmod 700 /home/node/.openclaw/workspace/bin/fetch-secret.mjs
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: data
+          mountPath: /home/node/.openclaw
+        - name: tmp
+          mountPath: /tmp
+      
+      containers:
+      - name: main
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+        - node
+        - dist/index.js
+        args:
+        - gateway
+        - --port
+        - "18789"
+        ports:
+        - containerPort: 18789
+          protocol: TCP
+        livenessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "curl -f http://127.0.0.1:18789/ || exit 1"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "curl -f http://127.0.0.1:18789/ || exit 1"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+        startupProbe:
+          exec:
+            command:
+            - sh
+            - -c
+            - "curl -f http://127.0.0.1:18789/ || exit 1"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 30
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        env:
+        - name: TENANT_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_PATH
+          value: /home/node/.openclaw/workspace/node_modules
+        {{- range $key, $value := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        envFrom:
+        {{- if .Values.gateway.token.generate }}
+        - secretRef:
+            name: {{ include "openclaw-helm.fullname" . }}-gateway-token
+        {{- else if .Values.gateway.token.secretName }}
+        - secretRef:
+            name: {{ .Values.gateway.token.secretName }}
+        {{- end }}
+        {{- with .Values.envFrom }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        volumeMounts:
+        - name: data
+          mountPath: /home/node/.openclaw
+        - name: tmp
+          mountPath: /tmp
+        - name: bash-aliases
+          mountPath: /home/node/.bash_aliases
+          subPath: bash_aliases
+      
+      volumes:
+      - name: config
+        configMap:
+          name: {{ include "openclaw-helm.fullname" . }}
+      - name: bash-aliases
+        configMap:
+          name: {{ include "openclaw-helm.fullname" . }}
+      - name: data
+        persistentVolumeClaim:
+          claimName: {{ include "openclaw-helm.fullname" . }}
+      - name: tmp
+        emptyDir: {}
