@@ -129,7 +129,7 @@ config:
     providers:
       aws-sm:
         source: exec
-        command: node
+        command: /usr/local/bin/node
         args:
           - /home/node/.openclaw/workspace/bin/fetch-secret.mjs
         timeoutMs: 10000
