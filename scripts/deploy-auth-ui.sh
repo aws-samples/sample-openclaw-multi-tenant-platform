@@ -25,9 +25,9 @@ echo "  Domain:    $DOMAIN"
 
 # Inject config into HTML files
 TMPDIR=$(mktemp -d)
-INJECT="s|userPoolId: ''|userPoolId: '${POOL_ID}'|;s|clientId: ''|clientId: '${CLIENT_ID}'|;s|domain: ''|domain: '${DOMAIN}'|"
+INJECT="s|userPoolId:''|userPoolId: '${POOL_ID}'|;s|clientId:''|clientId: '${CLIENT_ID}'|;s|domain:''|domain: '${DOMAIN}'|"
 
-sed "${INJECT};s|turnstileSiteKey: ''|turnstileSiteKey: '${TURNSTILE_SITE_KEY}'|" \
+sed "${INJECT};s|turnstileSiteKey:''|turnstileSiteKey: '${TURNSTILE_SITE_KEY}'|" \
   auth-ui/index.html > "${TMPDIR}/index.html"
 sed "${INJECT}" auth-ui/admin.html > "${TMPDIR}/admin.html"
 for f in auth-ui/*.html; do
