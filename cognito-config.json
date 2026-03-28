@@ -1,7 +1,0 @@
-{
-  "userPoolId": "us-west-2_6Axwxv1QD",
-  "clientId": "28fn7sdr2pfjfq9235c0h7tsmi",
-  "domain": "https://openclaw-platform.auth.us-west-2.amazoncognito.com",
-  "certArn": "arn:aws:acm:us-west-2:387671391109:certificate/6ea4e416-f559-4bed-8362-9846fc45211e",
-  "hostedZoneId": ""
-}
