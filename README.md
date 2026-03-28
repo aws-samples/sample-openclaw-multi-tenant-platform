@@ -22,6 +22,7 @@ EKS Cluster (CDK)
 │  Managed Node Group (Graviton ARM64) + Karpenter (spot)
 │  Add-ons: ALB Controller, EBS CSI, Pod Identity Agent, CloudWatch Container Insights
 │  KEDA HTTP Add-on (scale-to-zero)
+│  ArgoCD (EKS Capability — fully managed by AWS)
 │
 ├── namespace: openclaw-{tenant}
 │   ├── ServiceAccount + Pod Identity → shared IAM Role (ABAC)
@@ -40,6 +41,8 @@ Full diagrams: [`docs/architecture.md`](docs/architecture.md)
 | Layer | Control |
 |-------|---------|
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit 2000/IP) |
+| Signup | Cloudflare Turnstile CAPTCHA (optional) + email domain restriction + admin approval |
+| Cost | Per-tenant monthly budget enforcement (Lambda + EventBridge, per-model pricing) |
 | Network | ALB is **internal** — not accessible from internet |
 | Auth | Cognito + ALB trusted-proxy (`x-amzn-oidc-identity` header) |
 | Signup | Pre-signup Lambda restricts email domain; admin approval required |
@@ -163,11 +166,20 @@ This creates: VPC Origin → internal ALB, CloudFront #2 (`*.your-domain.com`), 
 ./scripts/setup-cognito.sh                     # Cognito config (auth flows, triggers, branding)
 ./scripts/setup-cognito-branding.sh            # Cognito hosted UI branding (fallback)
 ./scripts/setup-keda.sh                        # Install KEDA for scale-to-zero
+./scripts/setup-argocd.sh                      # Check ArgoCD EKS Capability status
+./scripts/setup-argocd-apps.sh                 # Apply ArgoCD Applications + ApplicationSets
 ./scripts/setup-alerts.sh <email>              # Subscribe to CloudWatch alerts
 ./scripts/setup-pvc-backup.sh                  # Daily PVC backup CronJob
 ./scripts/setup-image-update.sh                # Image auto-update CronJob
 ./scripts/setup-usage-tracking.sh              # CloudWatch usage dashboard
+./scripts/setup-bedrock-latency.sh             # Bedrock latency alarm (P95 > 10s)
+./scripts/setup-coldstart-alarm.sh             # KEDA cold start alarm (> 60s)
+./scripts/setup-audit-logging.sh               # CloudTrail + S3 + Athena for audit
 ./scripts/setup-waf.sh                         # WAF → ALB (also done by post-deploy.sh)
+./scripts/health-check.sh                      # Platform health check (JSON output)
+./scripts/admin-list-tenants.sh                # List all tenants + status + cost
+./scripts/backup-tenant.sh <name> <bucket>     # Backup tenant workspace to S3
+./scripts/restore-tenant.sh <name> <s3-path>   # Restore tenant workspace from S3
 ./scripts/usage-report.sh [--month YYYY-MM]    # Monthly cost report
 ./scripts/setup-argocd-apps.sh                 # ArgoCD Applications + ApplicationSets
 ./scripts/setup-audit-logging.sh [region]      # CloudTrail + S3 + Athena for Bedrock audit
@@ -240,7 +252,11 @@ To migrate from v1 to v2, see [`docs/migration-guide.md`](docs/migration-guide.m
 │   └── applicationsets/
 │       └── tenants.yaml              # Auto-discover tenants from helm/tenants/
 ├── auth-ui/                          # Custom login/signup page (S3 + CloudFront)
-│   └── index.html                    # AI-Native design, Cognito SDK
+│   ├── index.html                    # AI-Native design, Cognito SDK, Turnstile CAPTCHA
+│   ├── admin.html                    # Admin dashboard (tenant list, health, AWS Console links)
+│   ├── terms.html                    # Terms of service (placeholder)
+│   ├── privacy.html                  # Privacy policy (placeholder)
+│   └── manifest.json                 # PWA manifest
 ├── cdk/                              # CDK stack
 │   ├── lambda/
 │   │   ├── pre-signup/               # Email domain restriction
@@ -281,6 +297,12 @@ To migrate from v1 to v2, see [`docs/migration-guide.md`](docs/migration-guide.m
 | [image-update.md](docs/image-update.md) | Auto image update strategy |
 | [self-service-signup.md](docs/self-service-signup.md) | Cognito signup + auto provisioning |
 | [usage-tracking.md](docs/usage-tracking.md) | Per-tenant cost tracking |
+| [argocd.md](docs/argocd.md) | ArgoCD EKS Capability setup |
+| [webhook-setup.md](docs/webhook-setup.md) | Slack/Discord webhook integration |
+| [migration-guide.md](docs/migration-guide.md) | v1 → v2 migration steps |
+| [tenant-crd.md](docs/tenant-crd.md) | Tenant CRD + Operator design (future) |
+| [multi-region.md](docs/multi-region.md) | Multi-region architecture design (future) |
+| [terraform.md](docs/terraform.md) | Terraform alternative design (future) |
 | [migration-guide.md](docs/migration-guide.md) | v1 → v2 migration (VPC rebuild) |
 
 ## What CDK Manages vs Scripts
