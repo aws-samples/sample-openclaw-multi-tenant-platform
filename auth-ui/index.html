@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenClaw Platform</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0f0f1a;color:#fff;font-family:-apple-system,system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.container{width:100%;max-width:420px;padding:2rem}
+.logo{text-align:center;margin-bottom:2rem}
+.logo h1{font-size:2rem;font-weight:700;letter-spacing:-0.5px}
+.logo p{color:#888;margin-top:0.5rem;font-size:0.95rem}
+.card{background:#1a1a2e;border-radius:16px;padding:2rem;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
+.tabs{display:flex;gap:0;margin-bottom:1.5rem;background:#12121f;border-radius:10px;padding:4px}
+.tab{flex:1;padding:10px;text-align:center;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9rem;color:#888;transition:all 0.2s}
+.tab.active{background:#e94560;color:#fff}
+input{width:100%;padding:14px 16px;border:1px solid #2a2a3e;border-radius:10px;background:#12121f;color:#fff;font-size:1rem;margin-bottom:12px;outline:none;transition:border 0.2s}
+input:focus{border-color:#e94560}
+input::placeholder{color:#555}
+.btn{width:100%;padding:14px;border:none;border-radius:10px;background:#e94560;color:#fff;font-size:1rem;font-weight:600;cursor:pointer;transition:background 0.2s}
+.btn:hover{background:#d63851}
+.btn:disabled{opacity:0.5;cursor:not-allowed}
+.msg{text-align:center;padding:12px;border-radius:10px;margin-bottom:12px;font-size:0.9rem;display:none}
+.msg.error{display:block;background:#2d1520;color:#e94560;border:1px solid #3d1a2a}
+.msg.success{display:block;background:#152d1a;color:#0e8a16;border:1px solid #1a3d1e}
+.msg.info{display:block;background:#1a1a2e;color:#ccc;border:1px solid #2a2a3e}
+.footer{text-align:center;margin-top:2rem;color:#444;font-size:0.8rem}
+.verify-section{display:none}
+.welcome-section{display:none;text-align:center}
+.welcome-section h2{margin-bottom:1rem}
+.welcome-section p{color:#ccc;line-height:1.6}
+.check{font-size:3rem;margin-bottom:1rem}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <h1>OpenClaw</h1>
+    <p>Enterprise AI Assistant Platform</p>
+  </div>
+
+  <div class="card">
+    <!-- Auth form -->
+    <div id="auth-form">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('login')">Sign In</div>
+        <div class="tab" onclick="switchTab('signup')">Sign Up</div>
+      </div>
+      <div id="msg" class="msg"></div>
+      <form onsubmit="return handleSubmit(event)">
+        <input type="email" id="email" placeholder="Email" required>
+        <input type="password" id="password" placeholder="Password" required>
+        <button type="submit" class="btn" id="submit-btn">Sign In</button>
+      </form>
+    </div>
+
+    <!-- Verification code -->
+    <div id="verify-section" class="verify-section">
+      <div id="verify-msg" class="msg info">Check your email for a verification code.</div>
+      <form onsubmit="return handleVerify(event)">
+        <input type="text" id="code" placeholder="Verification code" required>
+        <button type="submit" class="btn">Verify</button>
+      </form>
+    </div>
+
+    <!-- Welcome (post-signup) -->
+    <div id="welcome-section" class="welcome-section">
+      <div class="check">✓</div>
+      <h2>Account Created</h2>
+      <p>Your account is pending admin approval. You will receive an email with your personal AI assistant URL once approved.</p>
+    </div>
+  </div>
+
+  <div class="footer">Powered by Amazon EKS + Bedrock</div>
+</div>
+
+<script>
+// Configuration — replace with your values or load from config endpoint
+const CONFIG = {
+  region: 'us-west-2',
+  userPoolId: '',    // Set by deploy script
+  clientId: '',      // Set by deploy script
+  domain: '',        // Set by deploy script
+};
+
+let currentTab = 'login';
+let pendingEmail = '';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'signup'));
+  });
+  document.getElementById('submit-btn').textContent = tab === 'login' ? 'Sign In' : 'Create Account';
+  document.getElementById('msg').className = 'msg';
+  document.getElementById('msg').textContent = '';
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = 'msg ' + type;
+}
+
+async function cognitoRequest(action, params) {
+  const res = await fetch(`https://cognito-idp.${CONFIG.region}.amazonaws.com/`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-amz-json-1.1',
+      'X-Amz-Target': `AWSCognitoIdentityProviderService.${action}`,
+    },
+    body: JSON.stringify(params),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || data.__type || 'Request failed');
+  return data;
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+
+  try {
+    if (currentTab === 'signup') {
+      await cognitoRequest('SignUp', {
+        ClientId: CONFIG.clientId,
+        Username: email,
+        Password: password,
+        UserAttributes: [{ Name: 'email', Value: email }],
+      });
+      pendingEmail = email;
+      document.getElementById('auth-form').style.display = 'none';
+      document.getElementById('verify-section').style.display = 'block';
+    } else {
+      const auth = await cognitoRequest('InitiateAuth', {
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: CONFIG.clientId,
+        AuthParameters: { USERNAME: email, PASSWORD: password },
+      });
+      // Login successful — redirect to tenant URL
+      const tenant = email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 20);
+      window.location.href = `https://${tenant}.${CONFIG.domain}`;
+    }
+  } catch (err) {
+    showMsg(err.message, 'error');
+  }
+  btn.disabled = false;
+}
+
+async function handleVerify(e) {
+  e.preventDefault();
+  const code = document.getElementById('code').value;
+  try {
+    await cognitoRequest('ConfirmSignUp', {
+      ClientId: CONFIG.clientId,
+      Username: pendingEmail,
+      ConfirmationCode: code,
+    });
+    document.getElementById('verify-section').style.display = 'none';
+    document.getElementById('welcome-section').style.display = 'block';
+  } catch (err) {
+    document.getElementById('verify-msg').textContent = err.message;
+    document.getElementById('verify-msg').className = 'msg error';
+  }
+}
+
+// Load config from meta tags or inline
+(function() {
+  const meta = document.querySelector('meta[name="config"]');
+  if (meta) Object.assign(CONFIG, JSON.parse(meta.content));
+})();
+</script>
+</body>
+</html>
