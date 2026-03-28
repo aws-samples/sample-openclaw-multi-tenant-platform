@@ -3,13 +3,13 @@
 
 ingress:
   enabled: true
-  host: "alice.claw.snese.net"
-  certificateArn: "arn:aws:acm:us-west-2:387671391109:certificate/9eba6ce2-9ebd-4b38-bd42-e7b92305b588"
+  host: "alice.<YOUR_DOMAIN>"
+  certificateArn: "arn:aws:acm:us-west-2:<AWS_ACCOUNT_ID>:certificate/<ACM_CERTIFICATE_ID>"
   cognito:
     enabled: true
-    userPoolArn: "arn:aws:cognito-idp:us-west-2:387671391109:userpool/us-west-2_yRqDzKF0t"
-    clientId: "103uif8rdrp29ak4eki7lc09ru"
-    domain: "claw-snese"
+    userPoolArn: "arn:aws:cognito-idp:us-west-2:<AWS_ACCOUNT_ID>:userpool/<COGNITO_POOL_ID>"
+    clientId: "<COGNITO_CLIENT_ID>"
+    domain: "<COGNITO_DOMAIN>"
 
 # Override resources per tenant if needed
 # resources:

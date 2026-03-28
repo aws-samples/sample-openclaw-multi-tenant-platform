@@ -188,10 +188,10 @@ createTenantSfn.grantStartExecution(postConfirm);
 ### 4. 掛載 Lambda Trigger 到 Cognito
 
 ```typescript
-const cfnUserPool = cognito.UserPool.fromUserPoolId(this, 'UserPool', 'us-west-2_yRqDzKF0t');
+const cfnUserPool = cognito.UserPool.fromUserPoolId(this, 'UserPool', '<COGNITO_POOL_ID>');
 
 // 因為是 imported User Pool，需用 CfnUserPool 或 AWS CLI 掛 trigger：
-// aws cognito-idp update-user-pool --user-pool-id us-west-2_yRqDzKF0t \
+// aws cognito-idp update-user-pool --user-pool-id <COGNITO_POOL_ID> \
 //   --lambda-config PreSignUp=<pre-signup-arn>,PostConfirmation=<post-confirm-arn>
 ```
 

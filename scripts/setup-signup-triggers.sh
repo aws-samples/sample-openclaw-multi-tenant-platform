@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REGION="${1:-us-west-2}"
-POOL_ID="${COGNITO_POOL_ID:-us-west-2_yRqDzKF0t}"
+POOL_ID="${COGNITO_POOL_ID:-<COGNITO_POOL_ID>}"
 STACK="OpenClawEksStack"
 
 get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }

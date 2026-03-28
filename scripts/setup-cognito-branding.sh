@@ -12,8 +12,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-COGNITO_POOL_ID="${COGNITO_POOL_ID:-us-west-2_yRqDzKF0t}"
-COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-103uif8rdrp29ak4eki7lc09ru}"
+COGNITO_POOL_ID="${COGNITO_POOL_ID:-<COGNITO_POOL_ID>}"
+COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID:-<COGNITO_CLIENT_ID>}"
 
 CSS=$(cat <<'EOF'
 .background-customizable { background-color: #1a1a2e; }
