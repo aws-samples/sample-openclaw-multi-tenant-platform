@@ -9,15 +9,16 @@
 ## 1. System Overview
 
 ```
-                          ┌─────────────────────────────────────────────────────────┐
-                          │                      AWS (us-west-2)                    │
-                          │                                                         │
-User ──► Browser ──► Cognito ──┬──► ALB (HTTPS, *.your-domain.com)                  │
-                          │    │                │                                    │
-                          │    │                ▼                                    │
-                          │    │          EKS Pod (OpenClaw Gateway, trusted-proxy)  │
-                          │    │                │                                    │
-                          │    │    ┌───────────┼─────────────────┐                  │
+                          ┌──────────────────────────────────────────────────────────┐
+                          │                      AWS                                 │
+                          │                                                          │
+User ──► Browser ──► CloudFront #1 ──► S3 (custom auth UI)                           │
+                     (your-domain.com)  (login/signup, Cognito SDK)                   │
+                          │                                                          │
+                     CloudFront #2 ──► VPC Origin ──► Internal ALB ──► EKS Pod       │
+                     (*.your-domain.com)               (WAF attached)                │
+                          │                                │                         │
+                          │                    ┌───────────┼─────────────────┐       │
                           │    │    ▼           ▼                 ▼                  │
                           │    │ Bedrock    Secrets Manager  AgentCore Browser       │
                           │    │(LLM, Pod  (exec SecretRef,  (web browsing)         │
