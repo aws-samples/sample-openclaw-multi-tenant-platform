@@ -60,8 +60,18 @@ spec:
                   CURRENT_TAG="${CURRENT##*:}"
                   echo "Current: $CURRENT_TAG"
                   
-                  # Check latest tag from registry (via crane or skopeo if available)
-                  # Fallback: just log current state
-                  echo "To update all tenants to a new tag:"
-                  echo "  kubectl set image deploy -l app.kubernetes.io/name=openclaw-helm \\"
-                  echo "    --all-namespaces main=${REPO}:<new-tag>"
+                  # Check latest tag from GHCR
+                  TOKEN=$(wget -qO- "https://ghcr.io/token?scope=repository:openclaw/openclaw:pull" | sed 's/.*"token":"\([^"]*\)".*/\1/')
+                  LATEST=$(wget -qO- --header="Authorization: Bearer $TOKEN" "https://ghcr.io/v2/openclaw/openclaw/tags/list" | sed 's/.*\[//;s/\].*//;s/"//g' | tr ',' '\n' | grep -E '^[0-9]{4}\.' | sort -V | tail -1)
+                  
+                  echo "Latest:  $LATEST"
+                  
+                  if [ "$CURRENT_TAG" = "$LATEST" ]; then
+                    echo "Already up to date"
+                    exit 0
+                  fi
+                  
+                  echo "Updating all tenants: $CURRENT_TAG -> $LATEST"
+                  kubectl set image deploy -l app.kubernetes.io/name=openclaw-helm \
+                    --all-namespaces "main=${REPO}:${LATEST}"
+                  echo "Done"

@@ -8,3 +8,5 @@ cdk-outputs.json
 research/
 .npm/
 /tmp/
+helm/tenants/values-*.yaml
+!helm/tenants/values-template.yaml

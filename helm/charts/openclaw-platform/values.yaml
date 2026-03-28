@@ -165,12 +165,6 @@ config:
       mode: idle
       idleMinutes: 60
   
-  logging:
-    level: info
-    consoleLevel: info
-    consoleStyle: compact
-    redactSensitive: tools
-
   secrets:
     providers:
       aws-sm:
