@@ -295,6 +295,7 @@ To migrate from v1 to v2, see [`docs/migration-guide.md`](docs/migration-guide.m
 | [architecture.md](docs/architecture.md) | Full architecture diagrams |
 | [user-journey.md](docs/user-journey.md) | End-user experience (signup → daily use → cold start) |
 | [admin-journey.md](docs/admin-journey.md) | Admin operations (deploy → approve → monitor → audit) |
+| [demo-cheat-sheet.md](docs/demo-cheat-sheet.md) | Demo script + objection handling + quick commands |
 | [scale-to-zero.md](docs/scale-to-zero.md) | KEDA scale-to-zero design |
 | [image-update.md](docs/image-update.md) | Auto image update strategy |
 | [self-service-signup.md](docs/self-service-signup.md) | Cognito signup + auto provisioning |
