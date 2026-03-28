@@ -34,6 +34,14 @@ input::placeholder{color:#555}
 .link{color:var(--primary);cursor:pointer;font-size:0.85rem;text-align:center;margin-top:12px}
 .link:hover{text-decoration:underline}
 .footer{text-align:center;margin-top:1.5rem;color:#555;font-size:0.75rem}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:42px}
+.pw-toggle{position:absolute;right:12px;top:12px;cursor:pointer;color:var(--muted);font-size:1.1rem;line-height:1;user-select:none}
+.pw-toggle:hover{color:var(--text)}
+.strength-bar{height:4px;border-radius:2px;transition:all 0.2s;margin:-6px 0 10px 0;display:none}
+.tos{color:var(--muted);font-size:0.75rem;text-align:center;margin-top:8px;display:none}
+.tos a{color:var(--primary);text-decoration:none}
+.tos a:hover{text-decoration:underline}
 .section{display:none}
 .section.active{display:block}
 .check{width:56px;height:56px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1rem}
@@ -46,7 +54,7 @@ input::placeholder{color:#555}
 <body>
 <div class="wrap">
   <div class="brand">
-    <h1>OpenClaw</h1>
+    <h1><svg width="36" height="36" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align:middle;margin-right:8px"><path d="M24 4c-2 0-4 2-4 5v7c0 1-1 2-3 2h-3c-3 0-5 2-5 5s2 5 5 5h3c2 0 3 1 3 2v7c0 3 2 5 4 5s4-2 4-5v-7c0-1 1-2 3-2h3c3 0 5-2 5-5s-2-5-5-5h-3c-2 0-3-1-3-2V9c0-3-2-5-4-5z" fill="#6366F1"/><circle cx="20" cy="20" r="2" fill="#0a0a12"/><circle cx="28" cy="20" r="2" fill="#0a0a12"/><path d="M8 12c-2-3-5-4-6-3s0 4 2 7M40 12c2-3 5-4 6-3s0 4-2 7" stroke="#6366F1" stroke-width="2" stroke-linecap="round"/></svg>OpenClaw</h1>
     <p>Enterprise AI Assistant</p>
   </div>
   <div class="card">
@@ -59,10 +67,15 @@ input::placeholder{color:#555}
       <div id="msg" class="msg"></div>
       <form onsubmit="return handleSubmit(event)">
         <input type="email" id="email" placeholder="Email" required autocomplete="email">
-        <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+        <div class="pw-wrap">
+          <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+          <span class="pw-toggle" onclick="togglePw('password',this)">👁</span>
+        </div>
+        <div class="strength-bar" id="strength-bar"></div>
         <p class="hint" id="pw-hint" style="display:none">Min 12 characters, uppercase, lowercase, and numbers</p>
         <div id="turnstile-container" style="display:none;margin-bottom:10px"></div>
         <button type="submit" class="btn" id="submit-btn">Sign In<span class="spinner"></span></button>
+        <p class="tos" id="tos">By signing up, you agree to the <a href="/terms">Terms of Service</a> and <a href="/privacy">Privacy Policy</a></p>
       </form>
       <p class="link" id="forgot-link" onclick="showSection('forgot-section')">Forgot password?</p>
     </div>
@@ -93,7 +106,10 @@ input::placeholder{color:#555}
       <div id="reset-msg" class="msg info">Enter the code sent to your email and your new password.</div>
       <form onsubmit="return handleReset(event)">
         <input type="text" id="reset-code" placeholder="Reset code" required>
-        <input type="password" id="new-password" placeholder="New password" required>
+        <div class="pw-wrap">
+          <input type="password" id="new-password" placeholder="New password" required>
+          <span class="pw-toggle" onclick="togglePw('new-password',this)">👁</span>
+        </div>
         <p class="hint">Min 12 characters, uppercase, lowercase, and numbers</p>
         <button type="submit" class="btn" id="reset-btn">Reset Password<span class="spinner"></span></button>
       </form>
@@ -115,8 +131,14 @@ input::placeholder{color:#555}
 const C={region:'us-west-2',userPoolId:'',clientId:'',domain:'',turnstileSiteKey:''};
 let tab='login',pendingEmail='',turnstileId=null;
 
+function togglePw(id,el){const i=document.getElementById(id);const v=i.type==='password';i.type=v?'text':'password';el.textContent=v?'🙈':'👁'}
+function updateStrength(){const pw=document.getElementById('password').value,bar=document.getElementById('strength-bar');if(tab!=='signup'){bar.style.display='none';return}bar.style.display='block';if(pw.length>=12&&/[a-z]/.test(pw)&&/[A-Z]/.test(pw)&&/[0-9]/.test(pw)){bar.style.width='100%';bar.style.background='var(--success)'}else if(pw.length>=8){bar.style.width='60%';bar.style.background='orange'}else{bar.style.width='30%';bar.style.background='var(--error)'}}
+document.getElementById('password').addEventListener('input',updateStrength);
+
+(function(){const saved=localStorage.getItem('openclaw_email');if(saved)document.getElementById('email').value=saved})();
+
 function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
-function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
+function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';document.getElementById('tos').style.display=t==='signup'?'block':'none';document.getElementById('strength-bar').style.display=t==='signup'?'block':'none';if(t==='signup')updateStrength();hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
 function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}
 function hideMsg(id){document.getElementById(id).className='msg'}
 function setLoading(btn,v){btn.disabled=v;btn.classList.toggle('loading',v)}
@@ -128,7 +150,7 @@ async function handleSubmit(e){
   setLoading(btn,true);
   try{
     if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});pendingEmail=email;showSection('verify-section')}
-    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${t}.${C.domain}`}
+    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${t}.${C.domain}`}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)
 }

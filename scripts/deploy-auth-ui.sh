@@ -23,10 +23,18 @@ echo "  Pool ID:   $POOL_ID"
 echo "  Client ID: $CLIENT_ID"
 echo "  Domain:    $DOMAIN"
 
-# Inject config into index.html
+# Inject config into HTML files
 TMPDIR=$(mktemp -d)
-sed "s|userPoolId: ''|userPoolId: '${POOL_ID}'|;s|clientId: ''|clientId: '${CLIENT_ID}'|;s|domain: ''|domain: '${DOMAIN}'|;s|turnstileSiteKey: ''|turnstileSiteKey: '${TURNSTILE_SITE_KEY}'|" \
+INJECT="s|userPoolId: ''|userPoolId: '${POOL_ID}'|;s|clientId: ''|clientId: '${CLIENT_ID}'|;s|domain: ''|domain: '${DOMAIN}'|"
+
+sed "${INJECT};s|turnstileSiteKey: ''|turnstileSiteKey: '${TURNSTILE_SITE_KEY}'|" \
   auth-ui/index.html > "${TMPDIR}/index.html"
+sed "${INJECT}" auth-ui/admin.html > "${TMPDIR}/admin.html"
+for f in auth-ui/*.html; do
+  name="$(basename "$f")"
+  [ "$name" = "index.html" ] || [ "$name" = "admin.html" ] && continue
+  cp "$f" "${TMPDIR}/"
+done
 
 # Upload
 aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --content-type "text/html" --region "$REGION"

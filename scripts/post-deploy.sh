@@ -47,7 +47,20 @@ if [ -z "$VPC_ORIGIN_ID" ]; then
 fi
 echo "  ✅ VPC Origin: $VPC_ORIGIN_ID"
 
-# 4. Create or find tenant CloudFront distribution (*.domain → VPC Origin → ALB)
+# 4. Upload error pages to S3 + create OAC for tenant CloudFront
+ERROR_BUCKET=$(get_output ErrorPagesBucketName)
+echo "  → Uploading error pages to s3://${ERROR_BUCKET}"
+aws s3 cp "$(dirname "$0")/../helm/charts/openclaw-platform/static/503.html" "s3://${ERROR_BUCKET}/503.html" --content-type "text/html; charset=utf-8" --region "$REGION"
+
+# Create OAC for error pages S3 origin
+OAC_NAME="openclaw-error-pages"
+OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id" --output text 2>/dev/null)
+if [ -z "$OAC_ID" ]; then
+  OAC_ID=$(aws cloudfront create-origin-access-control --origin-access-control-config "{\"Name\":\"${OAC_NAME}\",\"SigningProtocol\":\"sigv4\",\"SigningBehavior\":\"always\",\"OriginAccessControlOriginType\":\"s3\"}" --query 'OriginAccessControl.Id' --output text)
+fi
+echo "  ✅ Error pages ready (OAC: $OAC_ID)"
+
+# 5. Create or find tenant CloudFront distribution (*.domain → VPC Origin → ALB)
 TENANT_CF_ID=$(aws cloudfront list-distributions \
   --query "DistributionList.Items[?contains(to_string(Aliases.Items),'*.${DOMAIN}')].Id" --output text 2>/dev/null)
 
@@ -65,8 +78,16 @@ if [ -z "$TENANT_CF_ID" ]; then
   "CallerReference": "openclaw-tenants-$(date +%s)",
   "Aliases": {"Quantity": 1, "Items": ["*.${DOMAIN}"]},
   "DefaultRootObject": "",
-  "Origins": {"Quantity": 1, "Items": [{"Id": "alb", "DomainName": "${ALB_DNS}", "VpcOriginConfig": {"VpcOriginId": "${VPC_ORIGIN_ID}", "OriginKeepaliveTimeout": 5, "OriginReadTimeout": 60}, "CustomHeaders": {"Quantity": 0}, "OriginShield": {"Enabled": false}, "ConnectionAttempts": 3, "ConnectionTimeout": 10}]},
+  "Origins": {"Quantity": 2, "Items": [
+    {"Id": "alb", "DomainName": "${ALB_DNS}", "VpcOriginConfig": {"VpcOriginId": "${VPC_ORIGIN_ID}", "OriginKeepaliveTimeout": 5, "OriginReadTimeout": 60}, "CustomHeaders": {"Quantity": 0}, "OriginShield": {"Enabled": false}, "ConnectionAttempts": 3, "ConnectionTimeout": 10},
+    {"Id": "error-pages", "DomainName": "${ERROR_BUCKET}.s3.${REGION}.amazonaws.com", "S3OriginConfig": {"OriginAccessIdentity": ""}, "CustomHeaders": {"Quantity": 0}, "OriginShield": {"Enabled": false}, "ConnectionAttempts": 3, "ConnectionTimeout": 10, "OriginAccessControlId": "${OAC_ID}"}
+  ]},
   "DefaultCacheBehavior": {"TargetOriginId": "alb", "ViewerProtocolPolicy": "redirect-to-https", "AllowedMethods": {"Quantity": 7, "Items": ["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"], "CachedMethods": {"Quantity": 2, "Items": ["GET","HEAD"]}}, "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad", "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3", "Compress": true},
+  "CacheBehaviors": {"Quantity": 1, "Items": [{"PathPattern": "/error/*", "TargetOriginId": "error-pages", "ViewerProtocolPolicy": "redirect-to-https", "AllowedMethods": {"Quantity": 2, "Items": ["GET","HEAD"], "CachedMethods": {"Quantity": 2, "Items": ["GET","HEAD"]}}, "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6", "Compress": true}]},
+  "CustomErrorResponses": {"Quantity": 2, "Items": [
+    {"ErrorCode": 502, "ResponsePagePath": "/error/503.html", "ResponseCode": "503", "ErrorCachingMinTTL": 5},
+    {"ErrorCode": 503, "ResponsePagePath": "/error/503.html", "ResponseCode": "503", "ErrorCachingMinTTL": 5}
+  ]},
   "Comment": "OpenClaw tenants (*.${DOMAIN} → internal ALB)",
   "Enabled": true,
   "ViewerCertificate": {"ACMCertificateArn": "${CF_CERT}", "SSLSupportMethod": "sni-only", "MinimumProtocolVersion": "TLSv1.2_2021"},
@@ -81,7 +102,20 @@ else
 fi
 echo "  ✅ Tenant CloudFront: $TENANT_CF_ID ($TENANT_CF_DOMAIN)"
 
-# 5. Update Route53 wildcard → tenant CloudFront
+# Set bucket policy for CloudFront OAC access to error pages
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+aws s3api put-bucket-policy --bucket "$ERROR_BUCKET" --policy "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [{
+    \"Effect\": \"Allow\",
+    \"Principal\": {\"Service\": \"cloudfront.amazonaws.com\"},
+    \"Action\": \"s3:GetObject\",
+    \"Resource\": \"arn:aws:s3:::${ERROR_BUCKET}/*\",
+    \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${TENANT_CF_ID}\"}}
+  }]
+}" --region "$REGION"
+
+# 6. Update Route53 wildcard → tenant CloudFront
 ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
 echo "  → Updating Route53 *.${DOMAIN} → $TENANT_CF_DOMAIN"
 aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
