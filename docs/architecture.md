@@ -332,3 +332,48 @@ sequenceDiagram
 │              │ • Read-only root filesystem where possible                   │
 └──────────────┴──────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## 9. Known Issues & Workarounds
+
+### @smithy/credential-provider-imds Pod Identity Bug
+
+OpenClaw image bundles `@smithy/credential-provider-imds` 4.2.12 which has a hardcoded
+`GREENGRASS_HOSTS` allowlist containing only `localhost` and `127.0.0.1`. EKS Pod Identity
+Agent uses `169.254.170.23`, which is rejected by `fromContainerMetadata`.
+
+The SDK credential chain is: `fromHttp` → `fromContainerMetadata` → `fromInstanceMetadata`.
+While `fromHttp` supports Pod Identity, installing `@aws-sdk/client-secrets-manager` to the
+workspace brings its own `@smithy/credential-provider-imds` which shadows `/app`'s version
+via `NODE_PATH`, breaking the entire credential chain.
+
+**Fix**: `init-tools` patches both `/app` and workspace copies of `@smithy/credential-provider-imds`
+via `sed` to add `169.254.170.23` to `GREENGRASS_HOSTS`.
+
+Reference: [aws-sdk-js-v3#5709](https://github.com/aws/aws-sdk-js-v3/issues/5709)
+
+### NetworkPolicy Egress Whitelist
+
+```
+Egress rules (per tenant namespace):
+  ┌──────────────────────────────────────────────────────┐
+  │ Allow DNS          → any namespace, UDP/TCP 53       │
+  │ Allow Pod Identity → 169.254.170.23/32, TCP 80       │
+  │ Allow IMDS         → 169.254.169.254/32, TCP 80      │
+  │ Allow HTTPS        → 0.0.0.0/0 except 10.0.0.0/8,   │
+  │                      TCP 443 (Bedrock, SM, registry)  │
+  │ Allow same-ns      → podSelector: {}                  │
+  │ Deny everything else (implicit)                       │
+  └──────────────────────────────────────────────────────┘
+```
+
+The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over port 443,
+while allowing external AWS service endpoints.
+
+### Karpenter Subnet Selection
+
+EC2NodeClass `subnetSelectorTerms` must include both `kubernetes.io/role/internal-elb: 1`
+AND `kubernetes.io/cluster/{cluster-name}: owned` tags. Without the cluster tag, Karpenter
+may select subnets from other VPCs (e.g., default VPC) that have the `internal-elb` tag,
+causing "Security group and subnet belong to different networks" errors.
