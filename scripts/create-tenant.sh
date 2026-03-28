@@ -7,12 +7,15 @@ usage() {
 }
 
 TENANT="" VALUES_FILE="" CLUSTER="openclaw-cluster" REGION="us-west-2"
+DISPLAY_NAME="OpenClaw" EMOJI="🦞"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --values) VALUES_FILE="$2"; shift 2 ;;
     --cluster) CLUSTER="$2"; shift 2 ;;
     --region) REGION="$2"; shift 2 ;;
+    --display-name) DISPLAY_NAME="$2"; shift 2 ;;
+    --emoji) EMOJI="$2"; shift 2 ;;
     --help|-h) usage ;;
     -*) echo "Unknown option: $1"; usage ;;
     *) TENANT="$1"; shift ;;
@@ -35,7 +38,10 @@ echo "==> Creating tenant: ${TENANT}"
 # 0. Generate tenant values from template
 if [[ -z "$VALUES_FILE" ]]; then
   echo "  → Generating ${TENANT_VALUES} from template"
-  sed "s/{{TENANT}}/${TENANT}/g" "${TEMPLATE}" > "${TENANT_VALUES}"
+  sed -e "s/{{TENANT}}/${TENANT}/g" \
+      -e "s/{{TENANT_DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
+      -e "s/{{TENANT_EMOJI}}/${EMOJI}/g" \
+      "${TEMPLATE}" > "${TENANT_VALUES}"
   VALUES_FILE="${TENANT_VALUES}"
 fi
 

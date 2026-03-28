@@ -14,6 +14,7 @@ metadata:
     alb.ingress.kubernetes.io/auth-idp-cognito: '{"userPoolARN":"{{ .Values.ingress.cognito.userPoolArn }}","userPoolClientID":"{{ .Values.ingress.cognito.clientId }}","userPoolDomain":"{{ .Values.ingress.cognito.domain }}"}'
     alb.ingress.kubernetes.io/auth-scope: openid email profile
     alb.ingress.kubernetes.io/auth-on-unauthenticated-request: authenticate
+    alb.ingress.kubernetes.io/auth-session-timeout: '{{ .Values.ingress.cognito.sessionTimeout | default "604800" }}'
     {{- end }}
     {{- if .Values.ingress.certificateArn }}
     alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}

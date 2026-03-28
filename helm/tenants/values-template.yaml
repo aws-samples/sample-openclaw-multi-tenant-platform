@@ -16,6 +16,15 @@ ingress:
     clientId: "103uif8rdrp29ak4eki7lc09ru"
     domain: "claw-snese"
 
+config:
+  agents:
+    list:
+      - id: main
+        default: true
+        identity:
+          name: "{{TENANT_DISPLAY_NAME}}"
+          emoji: "{{TENANT_EMOJI}}"
+
 # --- Override per tenant as needed ---
 # resources:
 #   limits:

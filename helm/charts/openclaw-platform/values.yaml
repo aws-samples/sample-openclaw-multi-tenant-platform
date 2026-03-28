@@ -39,6 +39,7 @@ ingress:
     userPoolArn: ""
     clientId: ""
     domain: ""
+    sessionTimeout: "604800"
 
 networkPolicy:
   enabled: true
