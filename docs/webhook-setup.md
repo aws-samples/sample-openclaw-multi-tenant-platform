@@ -1,8 +1,8 @@
-# Webhook 設定指南
+# Webhook Setup Guide
 
-## 架構
+## Architecture
 
-CloudFront #2 已將 `*.your-domain.com` 路由到 internal ALB，所有 tenant subdomain 的 `/webhook/*` path 自動通過 ALB → Ingress → tenant pod，不需額外設定 DNS 或 Ingress rule。
+CloudFront #2 routes `*.your-domain.com` to the internal ALB. All tenant subdomain `/webhook/*` paths automatically go through ALB → Ingress → tenant pod — no extra DNS or Ingress rule needed.
 
 ```
 Slack/Discord → https://alice.your-domain.com/webhook/slack
@@ -12,15 +12,15 @@ Slack/Discord → https://alice.your-domain.com/webhook/slack
                   Internal ALB → tenant pod
 ```
 
-## Slack Webhook 設定
+## Slack Webhook Setup
 
-1. 到 [Slack API](https://api.slack.com/apps) 建立 App
-2. 啟用 **Incoming Webhooks** 或 **Event Subscriptions**
-3. Event Subscriptions Request URL 填：
+1. Go to [Slack API](https://api.slack.com/apps) and create an App
+2. Enable **Incoming Webhooks** or **Event Subscriptions**
+3. Set the Event Subscriptions Request URL to:
    ```
    https://alice.your-domain.com/webhook/slack
    ```
-4. 在 OpenClaw config 加入 webhook channel：
+4. Add the webhook channel in OpenClaw config:
 
 ```json
 {
@@ -34,11 +34,11 @@ Slack/Discord → https://alice.your-domain.com/webhook/slack
 }
 ```
 
-## Discord Webhook 設定
+## Discord Webhook Setup
 
 1. Discord Server Settings → Integrations → Webhooks → New Webhook
-2. 複製 Webhook URL（用於 outgoing）
-3. 在 OpenClaw config 加入：
+2. Copy the Webhook URL (for outgoing)
+3. Add to OpenClaw config:
 
 ```json
 {
@@ -51,9 +51,9 @@ Slack/Discord → https://alice.your-domain.com/webhook/slack
 }
 ```
 
-## Helm values 設定
+## Helm Values Configuration
 
-在 tenant values 裡啟用 webhook：
+Enable webhooks in tenant values:
 
 ```yaml
 config:
@@ -65,9 +65,9 @@ config:
       webhookPath: /webhook/discord
 ```
 
-## 驗證
+## Verification
 
 ```bash
-# 測試 webhook endpoint 是否可達
+# Test whether the webhook endpoint is reachable
 curl -s -o /dev/null -w "%{http_code}" https://alice.your-domain.com/webhook/slack
 ```

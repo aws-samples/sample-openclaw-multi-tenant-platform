@@ -435,7 +435,7 @@ Setup script: `scripts/setup-signup-triggers.sh`
 
 ### Bedrock Latency Monitoring
 
-Metric Filter 從 Container Insights application log 擷取 Bedrock response time，推送到自訂 metric `OpenClaw/Bedrock/BedrockResponseTimeMs`。CloudWatch Alarm 在 P95 > 10s（連續 2 個 5 分鐘週期）時觸發 SNS。
+A Metric Filter extracts Bedrock response time from Container Insights application logs and pushes it to a custom metric `OpenClaw/Bedrock/BedrockResponseTimeMs`. A CloudWatch Alarm fires to SNS when P95 > 10s for 2 consecutive 5-minute periods.
 
 ```
 scripts/setup-bedrock-latency.sh
@@ -445,7 +445,7 @@ scripts/setup-bedrock-latency.sh
 
 ### Cold Start Alarm
 
-Metric Filter 從 Container Insights performance log 擷取 `pod_startup_duration_seconds`。Alarm 在任一 pod 啟動時間 > 60s 時觸發 SNS，用於偵測 KEDA scale-from-zero 或 image pull 過慢。
+A Metric Filter extracts `pod_startup_duration_seconds` from Container Insights performance logs. The alarm fires to SNS when any pod startup exceeds 60s, detecting slow KEDA scale-from-zero or image pull issues.
 
 ```
 scripts/setup-coldstart-alarm.sh
@@ -455,7 +455,7 @@ scripts/setup-coldstart-alarm.sh
 
 ### Health Check
 
-`scripts/health-check.sh` 檢查所有 component 狀態，輸出 JSON：
+`scripts/health-check.sh` checks all component statuses and outputs JSON:
 
 | Check | Method |
 |-------|--------|
@@ -465,7 +465,7 @@ scripts/setup-coldstart-alarm.sh
 | CloudFront | `aws cloudfront get-distribution` — status Deployed |
 | WAF | `aws wafv2 list-web-acls` — exists |
 
-輸出格式：`{"status": "healthy|unhealthy", "components": {...}}`
+Output format: `{"status": "healthy|unhealthy", "components": {...}}`
 
 ---
 

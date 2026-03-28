@@ -1,78 +1,78 @@
-# Migration Guide: v1 → v2 (VPC 重建)
+# Migration Guide: v1 → v2 (VPC Rebuild)
 
-v2 變更：
-- NAT Gateway 從 1 → 2（HA，每個 AZ 一個）
-- Managed nodegroup 從 `system` (t3.medium/amd64) → `system-graviton` (t4g.medium/arm64)
-- Karpenter NodePool 從 amd64 → arm64
+v2 changes:
+- NAT Gateway from 1 → 2 (HA, one per AZ)
+- Managed nodegroup from `system` (t3.medium/amd64) → `system-graviton` (t4g.medium/arm64)
+- Karpenter NodePool from amd64 → arm64
 
-這些變更需要 VPC 重建，無法 in-place 套用。
+These changes require a VPC rebuild and cannot be applied in-place.
 
-## 影響範圍
+## Impact
 
-- VPC 重建 → EKS cluster 重建 → 所有 tenant pod 中斷
-- EBS PVC 資料需要手動遷移（snapshot → restore）
-- ALB、Route53、CloudFront 需要重新設定
-- 預估停機時間：30-60 分鐘
+- VPC rebuild → EKS cluster rebuild → all tenant pods disrupted
+- EBS PVC data requires manual migration (snapshot → restore)
+- ALB, Route53, and CloudFront need reconfiguration
+- Estimated downtime: 30-60 minutes
 
-## 遷移步驟
+## Migration Steps
 
-### 1. 備份
+### 1. Backup
 
 ```bash
-# 備份所有 tenant PVC
+# Backup all tenant PVCs
 for ns in $(kubectl get ns -l openclaw.dev/tenant -o name); do
   ns=${ns#namespace/}
   kubectl -n "$ns" get pvc -o json > "backup-${ns}-pvc.json"
 done
 
-# 對所有 EBS volume 建 snapshot
+# Snapshot all EBS volumes
 ./scripts/setup-pvc-backup.sh --now
 
-# 匯出 tenant 清單
+# Export tenant list
 kubectl get ns -l openclaw.dev/tenant -o jsonpath='{.items[*].metadata.labels.openclaw\.dev/tenant}' > tenants.txt
 
-# 備份 Cognito user pool（透過 AWS Console 或 CLI export）
+# Backup Cognito user pool (via AWS Console or CLI export)
 ```
 
-### 2. 記錄現有設定
+### 2. Record Current Settings
 
 ```bash
-# 記錄 CDK context
+# Record CDK context
 cat cdk/cdk.json
 
-# 記錄 CloudFront distribution ID
+# Record CloudFront distribution IDs
 aws cloudfront list-distributions --query 'DistributionList.Items[*].[Id,Origins.Items[0].DomainName]'
 
-# 記錄 Route53 records
+# Record Route53 records
 aws route53 list-resource-record-sets --hosted-zone-id <zone-id>
 ```
 
-### 3. 刪除舊 stack
+### 3. Delete Old Stack
 
 ```bash
-# 先刪除 Kubernetes 資源（避免 orphan）
+# Delete Kubernetes resources first (avoid orphans)
 kubectl delete ingress --all -A
-# 等 ALB 被 LB Controller 清除
+# Wait for ALB to be cleaned up by LB Controller
 sleep 60
 
-# 手動清除 VPC Origin + CloudFront #2（CDK 不管理）
+# Manually clean up VPC Origin + CloudFront #2 (not managed by CDK)
 ./scripts/cleanup-post-deploy.sh
 
 cd cdk && npx cdk destroy
 ```
 
-### 4. 部署新 stack
+### 4. Deploy New Stack
 
 ```bash
 npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
-新 stack 會自動建立：
+The new stack automatically creates:
 - VPC with 2 NAT Gateways
 - EKS cluster with `system-graviton` nodegroup (t4g.medium/arm64)
 - Karpenter with arm64 NodePool
 
-### 5. 還原 Kubernetes 設定
+### 5. Restore Kubernetes Configuration
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
@@ -84,41 +84,41 @@ aws eks update-kubeconfig --region <region> --name openclaw-cluster
 ./scripts/setup-usage-tracking.sh
 ```
 
-### 6. 還原 tenant
+### 6. Restore Tenants
 
 ```bash
-# 從 snapshot 還原 EBS volume 並重建 PVC
-# 每個 tenant 需要：
+# Restore EBS volumes from snapshots and rebuild PVCs
+# For each tenant:
 for tenant in $(cat tenants.txt); do
   ./scripts/create-tenant.sh "$tenant"
-  # 手動 restore PVC from snapshot（參考 AWS 文件）
+  # Manually restore PVC from snapshot (see AWS docs)
 done
 ```
 
-### 7. 重建 ALB 相關資源
+### 7. Rebuild ALB-Related Resources
 
 ```bash
-# 等第一個 tenant 的 ALB 建立完成
+# Wait for the first tenant's ALB to be created
 kubectl get ingress -A -w
 
-# 重建 VPC Origin + CloudFront #2 + Route53 + WAF
+# Rebuild VPC Origin + CloudFront #2 + Route53 + WAF
 ./scripts/post-deploy.sh
 ./scripts/deploy-auth-ui.sh
 ```
 
-### 8. 驗證
+### 8. Verify
 
 ```bash
 ./scripts/check-all-tenants.sh
-# 確認每個 tenant 可以透過 https://<tenant>.your-domain.com 存取
+# Confirm each tenant is accessible at https://<tenant>.your-domain.com
 ```
 
-## 成本影響
+## Cost Impact
 
-| 項目 | v1 | v2 |
+| Item | v1 | v2 |
 |------|----|----|
 | NAT Gateway | ~$32/mo (1x) | ~$64/mo (2x) |
-| EC2 nodegroup | t3.medium | t4g.medium（Graviton，便宜 ~20%） |
-| Karpenter spot | amd64 | arm64（Graviton spot，通常更便宜） |
+| EC2 nodegroup | t3.medium | t4g.medium (Graviton, ~20% cheaper) |
+| Karpenter spot | amd64 | arm64 (Graviton spot, usually cheaper) |
 
-NAT 多一個約 +$32/mo，但 Graviton 省的錢大致抵消。
+The extra NAT adds ~$32/mo, but Graviton savings roughly offset it.

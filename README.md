@@ -205,13 +205,13 @@ Users register via custom auth UI → Cognito SDK → email verification → adm
 
 OpenClaw's bundled `@smithy/credential-provider-imds` rejects EKS Pod Identity Agent IP. The `init-tools` container patches this at startup. See [aws-sdk-js-v3#5709](https://github.com/aws/aws-sdk-js-v3/issues/5709).
 
-### NAT Gateway HA 和 Nodegroup 變更需要 VPC 重建
+### NAT Gateway HA and Nodegroup Changes Require VPC Rebuild
 
-CDK 已更新為 `natGateways: 2`（HA）和 `system-graviton` nodegroup（t4g.medium/arm64），但這些變更無法 in-place 套用到現有 stack — CloudFormation 會要求重建 VPC，導致 EKS cluster 中斷。
+CDK has been updated to `natGateways: 2` (HA) and `system-graviton` nodegroup (t4g.medium/arm64), but these changes cannot be applied in-place to an existing stack — CloudFormation requires a VPC rebuild, which disrupts the EKS cluster.
 
-現有環境維持 `natGateways: 1` + 手動建立的 `system-graviton` nodegroup。新部署會自動套用新設定。
+Existing environments keep `natGateways: 1` + a manually created `system-graviton` nodegroup. New deployments automatically use the new settings.
 
-從 v1 遷移到 v2 請參考 [`docs/migration-guide.md`](docs/migration-guide.md)。
+To migrate from v1 to v2, see [`docs/migration-guide.md`](docs/migration-guide.md).
 
 ## Cost Estimate
 
