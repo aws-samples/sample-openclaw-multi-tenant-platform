@@ -17,10 +17,16 @@ TENANTS=(alice bob carol)
 echo "📊 建立 metric filters..."
 aws logs put-metric-filter --region "$REGION" \
   --log-group-name "$LOG_GROUP" \
-  --filter-name openclaw-token-usage \
+  --filter-name openclaw-input-tokens \
   --filter-pattern '{ $.input_tokens = * }' \
   --metric-transformations \
-    "metricName=BedrockInputTokens,metricNamespace=$NAMESPACE,metricValue=\$.input_tokens" \
+    "metricName=BedrockInputTokens,metricNamespace=$NAMESPACE,metricValue=\$.input_tokens"
+
+aws logs put-metric-filter --region "$REGION" \
+  --log-group-name "$LOG_GROUP" \
+  --filter-name openclaw-output-tokens \
+  --filter-pattern '{ $.output_tokens = * }' \
+  --metric-transformations \
     "metricName=BedrockOutputTokens,metricNamespace=$NAMESPACE,metricValue=\$.output_tokens"
 echo "✅ Metric filters 建立完成"
 

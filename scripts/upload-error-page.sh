@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 STATIC_DIR="${SCRIPT_DIR}/../helm/charts/openclaw-platform/static"
 
 # Auto-detect bucket from CDK output if not provided
-BUCKET="${1:-$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`ErrorPagesBucket`].OutputValue' --output text 2>/dev/null || echo "")}"
+BUCKET="${1:-$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`ErrorPagesBucketName`].OutputValue' --output text 2>/dev/null || echo "")}"
 
 if [ -z "$BUCKET" ]; then
   echo "Usage: $0 [s3-bucket-name] [region]"

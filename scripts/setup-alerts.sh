@@ -8,7 +8,7 @@ fi
 
 EMAIL="$1"
 TOPIC_ARN=$(aws cloudformation describe-stacks \
-  --stack-name EksClusterStack \
+  --stack-name OpenClawEksStack \
   --query "Stacks[0].Outputs[?OutputKey=='AlertsTopicArn'].OutputValue" \
   --output text)
 
