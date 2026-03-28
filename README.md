@@ -169,7 +169,26 @@ This creates: VPC Origin → internal ALB, CloudFront #2 (`*.your-domain.com`), 
 ./scripts/setup-usage-tracking.sh              # CloudWatch usage dashboard
 ./scripts/setup-waf.sh                         # WAF → ALB (also done by post-deploy.sh)
 ./scripts/usage-report.sh [--month YYYY-MM]    # Monthly cost report
+./scripts/setup-argocd-apps.sh                 # ArgoCD Applications + ApplicationSets
 ```
+
+### ArgoCD (GitOps)
+
+ArgoCD manages platform components and tenant deployments via GitOps:
+
+```bash
+# Apply all ArgoCD resources
+./scripts/setup-argocd-apps.sh
+
+# Check status
+kubectl get applications -n argocd
+kubectl get applicationsets -n argocd
+```
+
+- `argocd/applications/platform.yaml` — KEDA + HTTP Add-on (replaces manual `setup-keda.sh`)
+- `argocd/applicationsets/tenants.yaml` — Auto-discovers `helm/tenants/values-*.yaml`, creates one Application per tenant
+
+> Replace `<YOUR_GITHUB_ORG>` in `argocd/applicationsets/tenants.yaml` with your GitHub org/user before applying.
 
 ## Scale-to-Zero
 
@@ -214,6 +233,11 @@ CDK 已更新為 `natGateways: 2`（HA）和 `system-graviton` nodegroup（t4g.m
 ## Project Structure
 
 ```
+├── argocd/                           # ArgoCD GitOps manifests
+│   ├── applications/
+│   │   └── platform.yaml             # KEDA + HTTP Add-on
+│   └── applicationsets/
+│       └── tenants.yaml              # Auto-discover tenants from helm/tenants/
 ├── auth-ui/                          # Custom login/signup page (S3 + CloudFront)
 │   └── index.html                    # AI-Native design, Cognito SDK
 ├── cdk/                              # CDK stack
@@ -236,12 +260,13 @@ CDK 已更新為 `natGateways: 2`（HA）和 `system-graviton` nodegroup（t4g.m
 │   │   └── static/                   # Error pages
 │   └── tenants/
 │       └── values-template.yaml      # Per-tenant config template
-├── scripts/                          # 14 operations scripts
+├── scripts/                          # 15 operations scripts
 │   ├── post-deploy.sh                # VPC Origin + CloudFront #2 + Route53 + WAF
 │   ├── deploy-auth-ui.sh             # Upload auth UI to S3
 │   ├── create-tenant.sh              # Create tenant
 │   ├── setup-cognito.sh              # Cognito configuration
 │   ├── setup-keda.sh                 # KEDA installation
+│   ├── setup-argocd-apps.sh          # ArgoCD Applications + ApplicationSets
 │   └── ...
 └── README.md
 ```

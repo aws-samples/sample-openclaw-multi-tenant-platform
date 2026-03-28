@@ -35,6 +35,7 @@ for f in auth-ui/*.html; do
   [ "$name" = "index.html" ] || [ "$name" = "admin.html" ] && continue
   cp "$f" "${TMPDIR}/"
 done
+cp auth-ui/manifest.json "${TMPDIR}/"
 
 # Upload
 aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --content-type "text/html" --region "$REGION"
