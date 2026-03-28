@@ -6,7 +6,7 @@
 <title>OpenClaw Platform</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a12;--card:#111119;--border:#1e1e2e;--primary:#6366F1;--primary-hover:#5558e6;--text:#f0f0f5;--muted:#888;--success:#22c55e;--error:#ef4444;--input-bg:#0d0d15}
+:root{--bg:#0a0a12;--card:#111119;--border:#1e1e2e;--primary:#6366F1;--primary-hover:#5558e6;--text:#f0f0f5;--muted:#9ca3af;--success:#22c55e;--error:#ef4444;--input-bg:#0d0d15}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
 .wrap{width:100%;max-width:400px;padding:1.5rem}
 .brand{text-align:center;margin-bottom:2rem}
@@ -19,19 +19,28 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,system-ui,
 input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--input-bg);color:var(--text);font-size:0.95rem;margin-bottom:10px;outline:none;transition:border 0.15s}
 input:focus{border-color:var(--primary)}
 input::placeholder{color:#555}
-.btn{width:100%;padding:12px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:0.95rem;font-weight:600;cursor:pointer;transition:background 0.15s;margin-top:4px}
+.btn{width:100%;padding:12px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-size:0.95rem;font-weight:600;cursor:pointer;transition:background 0.15s;margin-top:4px;position:relative}
 .btn:hover{background:var(--primary-hover)}
 .btn:disabled{opacity:0.4;cursor:not-allowed}
+.btn .spinner{display:none;width:18px;height:18px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.6s linear infinite;position:absolute;right:16px;top:50%;margin-top:-9px}
+.btn.loading .spinner{display:inline-block}
+.btn.loading{color:transparent}
+@keyframes spin{to{transform:rotate(360deg)}}
 .msg{padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:0.85rem;display:none}
 .msg.error{display:block;background:rgba(239,68,68,0.1);color:var(--error);border:1px solid rgba(239,68,68,0.2)}
 .msg.success{display:block;background:rgba(34,197,94,0.1);color:var(--success);border:1px solid rgba(34,197,94,0.2)}
 .msg.info{display:block;background:rgba(99,102,241,0.1);color:var(--primary);border:1px solid rgba(99,102,241,0.2)}
-.footer{text-align:center;margin-top:1.5rem;color:#444;font-size:0.75rem}
-#verify-section,#welcome-section{display:none}
-#welcome-section{text-align:center}
+.hint{color:var(--muted);font-size:0.75rem;margin:-6px 0 10px 2px}
+.link{color:var(--primary);cursor:pointer;font-size:0.85rem;text-align:center;margin-top:12px}
+.link:hover{text-decoration:underline}
+.footer{text-align:center;margin-top:1.5rem;color:#555;font-size:0.75rem}
+.section{display:none}
+.section.active{display:block}
 .check{width:56px;height:56px;border-radius:50%;background:rgba(34,197,94,0.1);display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1rem}
+#welcome-section{text-align:center}
 #welcome-section h2{font-size:1.25rem;margin-bottom:0.75rem}
 #welcome-section p{color:var(--muted);line-height:1.6;font-size:0.9rem}
+#forgot-section{text-align:left}
 </style>
 </head>
 <body>
@@ -41,7 +50,8 @@ input::placeholder{color:#555}
     <p>Enterprise AI Assistant</p>
   </div>
   <div class="card">
-    <div id="auth-form">
+    <!-- Auth form -->
+    <div id="auth-section" class="section active">
       <div class="tabs">
         <div class="tab active" onclick="switchTab('login')">Sign In</div>
         <div class="tab" onclick="switchTab('signup')">Sign Up</div>
@@ -50,33 +60,102 @@ input::placeholder{color:#555}
       <form onsubmit="return handleSubmit(event)">
         <input type="email" id="email" placeholder="Email" required autocomplete="email">
         <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
-        <button type="submit" class="btn" id="submit-btn">Sign In</button>
+        <p class="hint" id="pw-hint" style="display:none">Min 12 characters, uppercase, lowercase, and numbers</p>
+        <button type="submit" class="btn" id="submit-btn">Sign In<span class="spinner"></span></button>
       </form>
+      <p class="link" id="forgot-link" onclick="showSection('forgot-section')">Forgot password?</p>
     </div>
-    <div id="verify-section">
+
+    <!-- Verify code -->
+    <div id="verify-section" class="section">
       <div id="verify-msg" class="msg info">Check your email for a verification code.</div>
       <form onsubmit="return handleVerify(event)">
         <input type="text" id="code" placeholder="Verification code" required autocomplete="one-time-code">
-        <button type="submit" class="btn">Verify</button>
+        <button type="submit" class="btn" id="verify-btn">Verify<span class="spinner"></span></button>
       </form>
+      <p class="link" onclick="resendCode()">Resend code</p>
+      <p class="link" onclick="showSection('auth-section')">Back to sign in</p>
     </div>
-    <div id="welcome-section">
+
+    <!-- Forgot password -->
+    <div id="forgot-section" class="section">
+      <div id="forgot-msg" class="msg"></div>
+      <form onsubmit="return handleForgot(event)">
+        <input type="email" id="forgot-email" placeholder="Email" required>
+        <button type="submit" class="btn" id="forgot-btn">Send Reset Code<span class="spinner"></span></button>
+      </form>
+      <p class="link" onclick="showSection('auth-section')">Back to sign in</p>
+    </div>
+
+    <!-- Reset password -->
+    <div id="reset-section" class="section">
+      <div id="reset-msg" class="msg info">Enter the code sent to your email and your new password.</div>
+      <form onsubmit="return handleReset(event)">
+        <input type="text" id="reset-code" placeholder="Reset code" required>
+        <input type="password" id="new-password" placeholder="New password" required>
+        <p class="hint">Min 12 characters, uppercase, lowercase, and numbers</p>
+        <button type="submit" class="btn" id="reset-btn">Reset Password<span class="spinner"></span></button>
+      </form>
+      <p class="link" onclick="showSection('auth-section')">Back to sign in</p>
+    </div>
+
+    <!-- Welcome -->
+    <div id="welcome-section" class="section">
       <div class="check">✓</div>
       <h2>Account Created</h2>
       <p>Your account is pending admin approval. You will receive an email with your personal AI assistant URL once approved.</p>
+      <p class="link" onclick="showSection('auth-section')" style="margin-top:1.5rem">Back to sign in</p>
     </div>
   </div>
   <div class="footer">Powered by Amazon EKS + Bedrock</div>
 </div>
 <script>
-const CONFIG={region:'us-west-2',userPoolId:'',clientId:'',domain:''};
-let currentTab='login',pendingEmail='';
-function switchTab(t){currentTab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').textContent=t==='login'?'Sign In':'Create Account';hideMsg()}
-function showMsg(t,c){const e=document.getElementById('msg');e.textContent=t;e.className='msg '+c}
-function hideMsg(){document.getElementById('msg').className='msg'}
-async function api(action,params){const r=await fetch(`https://cognito-idp.${CONFIG.region}.amazonaws.com/`,{method:'POST',headers:{'Content-Type':'application/x-amz-json-1.1','X-Amz-Target':`AWSCognitoIdentityProviderService.${action}`},body:JSON.stringify(params)});const d=await r.json();if(!r.ok)throw new Error(d.message||d.__type||'Request failed');return d}
-async function handleSubmit(e){e.preventDefault();const email=document.getElementById('email').value,pw=document.getElementById('password').value,btn=document.getElementById('submit-btn');btn.disabled=true;try{if(currentTab==='signup'){await api('SignUp',{ClientId:CONFIG.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}]});pendingEmail=email;document.getElementById('auth-form').style.display='none';document.getElementById('verify-section').style.display='block'}else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:CONFIG.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const tenant=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${tenant}.${CONFIG.domain}`}}catch(err){showMsg(err.message,'error')}btn.disabled=false}
-async function handleVerify(e){e.preventDefault();try{await api('ConfirmSignUp',{ClientId:CONFIG.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});document.getElementById('verify-section').style.display='none';document.getElementById('welcome-section').style.display='block'}catch(err){document.getElementById('verify-msg').textContent=err.message;document.getElementById('verify-msg').className='msg error'}}
+const C={region:'us-west-2',userPoolId:'',clientId:'',domain:''};
+let tab='login',pendingEmail='';
+
+function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';hideMsg('msg')}
+function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}
+function hideMsg(id){document.getElementById(id).className='msg'}
+function setLoading(btn,v){btn.disabled=v;btn.classList.toggle('loading',v)}
+
+async function api(action,params){const r=await fetch(`https://cognito-idp.${C.region}.amazonaws.com/`,{method:'POST',headers:{'Content-Type':'application/x-amz-json-1.1','X-Amz-Target':`AWSCognitoIdentityProviderService.${action}`},body:JSON.stringify(params)});const d=await r.json();if(!r.ok)throw new Error(d.message||d.__type||'Request failed');return d}
+
+async function handleSubmit(e){
+  e.preventDefault();const email=document.getElementById('email').value,pw=document.getElementById('password').value,btn=document.getElementById('submit-btn');
+  setLoading(btn,true);
+  try{
+    if(tab==='signup'){await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}]});pendingEmail=email;showSection('verify-section')}
+    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${t}.${C.domain}`}
+  }catch(err){showMsg('msg',err.message,'error')}
+  setLoading(btn,false)
+}
+
+async function handleVerify(e){
+  e.preventDefault();const btn=document.getElementById('verify-btn');setLoading(btn,true);
+  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showSection('welcome-section')}
+  catch(err){showMsg('verify-msg',err.message,'error')}
+  setLoading(btn,false)
+}
+
+async function resendCode(){
+  try{await api('ResendConfirmationCode',{ClientId:C.clientId,Username:pendingEmail});showMsg('verify-msg','New code sent. Check your email.','success')}
+  catch(err){showMsg('verify-msg',err.message,'error')}
+}
+
+async function handleForgot(e){
+  e.preventDefault();const email=document.getElementById('forgot-email').value,btn=document.getElementById('forgot-btn');setLoading(btn,true);
+  try{await api('ForgotPassword',{ClientId:C.clientId,Username:email});pendingEmail=email;showSection('reset-section')}
+  catch(err){showMsg('forgot-msg',err.message,'error')}
+  setLoading(btn,false)
+}
+
+async function handleReset(e){
+  e.preventDefault();const btn=document.getElementById('reset-btn');setLoading(btn,true);
+  try{await api('ConfirmForgotPassword',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('reset-code').value,Password:document.getElementById('new-password').value});showMsg('msg','Password reset successful. Sign in with your new password.','success');showSection('auth-section')}
+  catch(err){showMsg('reset-msg',err.message,'error')}
+  setLoading(btn,false)
+}
 </script>
 </body>
 </html>
