@@ -1,0 +1,8 @@
+node_modules/
+cdk.out/
+cdk.out.*/
+cdk.json
+cdk.context.json
+*.js
+!jest.config.js
+*.d.ts
