@@ -1,6 +1,44 @@
-# OpenClaw Multi-Tenant Platform on EKS
+<p align="center">
+  <img src="https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazon-eks&logoColor=white" alt="EKS">
+  <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
+  <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
+  <img src="https://img.shields.io/badge/ArgoCD-GitOps-EF7B4D?logo=argo&logoColor=white" alt="ArgoCD">
+  <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
+  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
+</p>
 
-Deploy isolated OpenClaw AI assistant instances on Amazon EKS — one per user, fully separated. All traffic flows through CloudFront with WAF protection. The ALB is internal (not internet-facing).
+# OpenClaw Platform
+
+> Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated, private AI workspace powered by Amazon Bedrock — zero API keys, zero shared data.
+
+Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Tenant Management](#tenant-management)
+- [Operations](#operations)
+- [Security](#security)
+- [Cost](#cost)
+- [Documentation](#documentation)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Features
+
+- **One tenant per user** — isolated namespace, PVC, network policy, IAM role
+- **Zero API keys** — LLM access via Amazon Bedrock + Pod Identity
+- **Scale to zero** — KEDA scales idle pods to 0; cold start in 15-30s
+- **Internal ALB** — not internet-facing; all traffic through CloudFront + WAF
+- **Custom auth UI** — branded login/signup on your domain (no Cognito Hosted UI)
+- **Self-service signup** — Cognito + Lambda auto-provisions tenants on admin approval
+- **GitOps** — ArgoCD (EKS Capability) manages tenants via ApplicationSet
+- **Cost control** — per-tenant monthly budget with per-model pricing alerts
+- **Graviton ARM64** — 20% cheaper compute with t4g instances
+- **14 design docs** — architecture, scale-to-zero, ArgoCD, multi-region, and more
 
 ## Architecture
 
@@ -8,328 +46,242 @@ Deploy isolated OpenClaw AI assistant instances on Amazon EKS — one per user, 
 Internet
   │
   ├─ your-domain.com ──► CloudFront #1 ──► S3 (custom auth UI)
-  │                       (login/signup page, Cognito SDK)
   │
   ├─ *.your-domain.com ──► CloudFront #2 ──► VPC Origin ──► Internal ALB ──► EKS Pod
-  │                         (tenant traffic)                  (WAF attached)
+  │                                                          (WAF attached)
   │
-  └─ Outbound only: EKS Pod ──► NAT Gateway ──► Internet
-                    (Telegram long-polling, Bedrock API, etc.)
+  └─ Outbound only: EKS Pod ──► NAT Gateway (HA) ──► Internet
 ```
 
 ```
-EKS Cluster (CDK)
-│  Managed Node Group (Graviton ARM64) + Karpenter (spot)
-│  Add-ons: ALB Controller, EBS CSI, Pod Identity Agent, CloudWatch Container Insights
-│  KEDA HTTP Add-on (scale-to-zero)
-│  ArgoCD (EKS Capability — fully managed by AWS)
+EKS Cluster
+│  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
+│  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
+│  ArgoCD (EKS Capability) + KEDA HTTP Add-on
 │
 ├── namespace: openclaw-{tenant}
-│   ├── ServiceAccount + Pod Identity → shared IAM Role (ABAC)
-│   ├── Deployment (OpenClaw Gateway)
-│   ├── PVC (gp3, 10Gi — persists across scale-to-zero)
-│   ├── Ingress (ALB IngressGroup, internal scheme, Cognito auth)
-│   ├── HTTPScaledObject (KEDA, idle 15min → scale to 0)
-│   ├── NetworkPolicy (egress whitelist, cross-tenant blocked)
-│   └── ResourceQuota (4 CPU, 8Gi mem)
+│   ├── Deployment + PVC (persists across scale-to-zero)
+│   ├── Ingress (internal ALB, Cognito auth)
+│   ├── HTTPScaledObject (KEDA, 15min idle → 0)
+│   ├── NetworkPolicy (cross-tenant blocked)
+│   └── ResourceQuota
 ```
 
-Full diagrams: [`docs/architecture.md`](docs/architecture.md)
+## Getting Started
 
-## Security Design
-
-| Layer | Control |
-|-------|---------|
-| Edge | CloudFront + WAF (AWS Common Rules + rate limit 2000/IP) |
-| Signup | Cloudflare Turnstile CAPTCHA (optional) + email domain restriction + admin approval |
-| Cost | Per-tenant monthly budget enforcement (Lambda + EventBridge, per-model pricing) |
-| Network | ALB is **internal** — not accessible from internet |
-| Auth | Cognito + ALB trusted-proxy (`x-amzn-oidc-identity` header) |
-| Signup | Pre-signup Lambda restricts email domain; admin approval required |
-| IAM | Pod Identity ABAC — shared role, per-tenant secret isolation |
-| Tenant | NetworkPolicy blocks cross-namespace traffic |
-| OpenClaw | Tool deny (gateway, cron, sessions), exec=deny, fs=workspaceOnly |
-| Container | UID 1000, fsGroup 1000, ResourceQuota |
-| Secrets | exec SecretRef — fetched on-demand, never persisted |
-| LLM | Bedrock via Pod Identity — zero API keys |
-| Data | PVC persists across scale-to-zero; daily EBS snapshot backup |
-
-## Prerequisites
+### Prerequisites
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`)
 - kubectl + Helm 3
 - Node.js 22+
-- A Route53 hosted zone for your domain
-- ACM certificates:
-  - One in your deployment region (for ALB)
-  - One in us-east-1 (for CloudFront)
-  - Both covering `your-domain.com` + `*.your-domain.com`
-- Cognito User Pool + App Client
+- Route53 hosted zone + ACM certificates (deployment region + us-east-1)
+- Cognito User Pool + App Client (**no client secret** — public client for SPA)
+- AWS Identity Center (for ArgoCD EKS Capability)
 
-## Quick Start
+### 1. Configure
 
-### 1. Configure CDK
-
-Copy `cdk/cdk.json.example` to `cdk/cdk.json` and fill in your values:
-
-```json
-{
-  "context": {
-    "hostedZoneId": "Z0123...",
-    "zoneName": "your-domain.com",
-    "certificateArn": "arn:aws:acm:us-west-2:...",
-    "cloudfrontCertificateArn": "arn:aws:acm:us-east-1:...",
-    "cognitoPoolId": "us-west-2_...",
-    "cognitoClientId": "...",
-    "cognitoDomain": "your-app",
-    "allowedEmailDomains": "your-company.com",
-    "githubOwner": "your-org"
-  }
-}
+```bash
+cp cdk/cdk.json.example cdk/cdk.json
+# Edit cdk/cdk.json — fill in all 11 context values
 ```
 
-### 2. Deploy Infrastructure (~15-20 min)
+<details>
+<summary>Context values reference</summary>
+
+| Key | Description |
+|-----|-------------|
+| `hostedZoneId` | Route53 hosted zone ID |
+| `zoneName` | Your domain (e.g., `platform.company.com`) |
+| `certificateArn` | ACM cert in deployment region (`domain` + `*.domain`) |
+| `cloudfrontCertificateArn` | ACM cert in us-east-1 (`domain` + `*.domain`) |
+| `cognitoPoolId` | Cognito User Pool ID |
+| `cognitoClientId` | Cognito App Client ID (**no secret**) |
+| `cognitoDomain` | Cognito domain prefix |
+| `allowedEmailDomains` | Comma-separated allowed email domains |
+| `githubOwner` | GitHub org/user for CodeBuild source |
+| `githubRepo` | Repository name (default: `openclaw-platform`) |
+| `ssoRoleArn` | IAM SSO role ARN for kubectl access |
+
+</details>
+
+### 2. Deploy Infrastructure
 
 ```bash
 cd cdk && npm install
 npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
-This creates: EKS cluster, VPC, IAM roles, Lambda functions, S3 buckets, CloudFront #1 (auth UI), WAF, CloudWatch monitoring, SNS alerts, CodeBuild project.
+Creates: EKS cluster, VPC (2 NAT Gateways), IAM roles, Lambda functions, S3 buckets, CloudFront, WAF, CloudWatch, SNS, CodeBuild. Takes ~15-20 minutes.
 
-### 3. Post-Deploy: Kubernetes Setup
+### 3. Post-Deploy Setup
 
 ```bash
 # Configure kubectl
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
 
-# Install KEDA (scale-to-zero)
-./scripts/setup-keda.sh
+# Core setup
+./scripts/setup-keda.sh                    # Scale-to-zero
+./scripts/setup-cognito.sh                 # Auth configuration
+./scripts/setup-argocd.sh                  # ArgoCD EKS Capability status
 
-# Configure Cognito (auth flows, triggers, branding)
-./scripts/setup-cognito.sh
-
-# Install backup and auto-update CronJobs
-./scripts/setup-pvc-backup.sh
-./scripts/setup-image-update.sh
-
-# Set up usage tracking dashboard
-./scripts/setup-usage-tracking.sh
+# Monitoring
+./scripts/setup-pvc-backup.sh              # Daily PVC backups
+./scripts/setup-image-update.sh            # Auto image updates
+./scripts/setup-usage-tracking.sh          # Usage dashboard
+./scripts/setup-bedrock-latency.sh         # Latency alarms
+./scripts/setup-coldstart-alarm.sh         # Cold start alarms
+./scripts/setup-audit-logging.sh           # CloudTrail + Athena
+./scripts/setup-alerts.sh <email>          # SNS email alerts
 ```
 
 ### 4. Create First Tenant
 
 ```bash
-# Set the tenant IAM role ARN (from CDK output TenantRoleArn)
 export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
-  --stack-name OpenClawEksStack --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
+  --stack-name OpenClawEksStack \
+  --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
 
 ./scripts/create-tenant.sh alice --display-name "Alice" --emoji "🤖"
 ```
 
-### 5. Post-Deploy: ALB-Dependent Resources
-
-After the first tenant creates the internal ALB:
+### 5. Finalize
 
 ```bash
-./scripts/post-deploy.sh
+./scripts/post-deploy.sh          # VPC Origin + CloudFront #2 + Route53 + WAF→ALB
+./scripts/deploy-auth-ui.sh       # Upload auth UI to S3
+./scripts/setup-argocd-apps.sh    # ArgoCD Applications + ApplicationSets
 ```
 
-This creates: VPC Origin → internal ALB, CloudFront #2 (`*.your-domain.com`), Route53 records, WAF → ALB association.
+### 6. Access
 
-### 6. Deploy Auth UI
-
-```bash
-./scripts/deploy-auth-ui.sh
-```
-
-### 7. Access
-
-- Landing page: `https://your-domain.com` (custom auth UI)
-- Tenant: `https://alice.your-domain.com` → Cognito auth → OpenClaw
+| URL | Purpose |
+|-----|---------|
+| `https://your-domain.com` | Landing page (custom auth UI) |
+| `https://alice.your-domain.com` | Tenant AI assistant |
+| `https://your-domain.com/admin.html` | Admin dashboard |
 
 ## Tenant Management
 
 ```bash
-./scripts/create-tenant.sh <name>              # Create (--display-name --emoji --skills)
-./scripts/delete-tenant.sh <name>              # Delete
+./scripts/create-tenant.sh <name> [options]    # Create (--display-name --emoji --skills --budget)
+./scripts/delete-tenant.sh <name>              # Delete (with confirmation)
 ./scripts/verify-tenant.sh <name>              # Health check
 ./scripts/check-all-tenants.sh                 # Check all tenants
+./scripts/backup-tenant.sh <name> <bucket>     # Backup to S3
+./scripts/restore-tenant.sh <name> <s3-path>   # Restore from S3
+./scripts/admin-list-tenants.sh                # List tenants + cost
 ```
 
 ## Operations
 
-```bash
-./scripts/post-deploy.sh                       # VPC Origin + CloudFront #2 + Route53 + WAF
-./scripts/deploy-auth-ui.sh                    # Upload auth UI to S3 + invalidate CloudFront
-./scripts/setup-cognito.sh                     # Cognito config (auth flows, triggers, branding)
-./scripts/setup-cognito-branding.sh            # Cognito hosted UI branding (fallback)
-./scripts/setup-keda.sh                        # Install KEDA for scale-to-zero
-./scripts/setup-argocd.sh                      # Check ArgoCD EKS Capability status
-./scripts/setup-argocd-apps.sh                 # Apply ArgoCD Applications + ApplicationSets
-./scripts/setup-alerts.sh <email>              # Subscribe to CloudWatch alerts
-./scripts/setup-pvc-backup.sh                  # Daily PVC backup CronJob
-./scripts/setup-image-update.sh                # Image auto-update CronJob
-./scripts/setup-usage-tracking.sh              # CloudWatch usage dashboard
-./scripts/setup-bedrock-latency.sh             # Bedrock latency alarm (P95 > 10s)
-./scripts/setup-coldstart-alarm.sh             # KEDA cold start alarm (> 60s)
-./scripts/setup-audit-logging.sh               # CloudTrail + S3 + Athena for audit
-./scripts/setup-waf.sh                         # WAF → ALB (also done by post-deploy.sh)
-./scripts/health-check.sh                      # Platform health check (JSON output)
-./scripts/admin-list-tenants.sh                # List all tenants + status + cost
-./scripts/backup-tenant.sh <name> <bucket>     # Backup tenant workspace to S3
-./scripts/restore-tenant.sh <name> <s3-path>   # Restore tenant workspace from S3
-./scripts/usage-report.sh [--month YYYY-MM]    # Monthly cost report
-./scripts/setup-argocd-apps.sh                 # ArgoCD Applications + ApplicationSets
-./scripts/setup-audit-logging.sh [region]      # CloudTrail + S3 + Athena for Bedrock audit
-```
+| Script | Purpose |
+|--------|---------|
+| `post-deploy.sh` | VPC Origin + CloudFront #2 + Route53 + WAF |
+| `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
+| `setup-cognito.sh` | Cognito config (auth flows, triggers) |
+| `setup-keda.sh` | Install KEDA for scale-to-zero |
+| `setup-argocd.sh` | ArgoCD EKS Capability status |
+| `setup-argocd-apps.sh` | Apply ArgoCD Applications |
+| `health-check.sh` | Platform health (JSON output) |
+| `usage-report.sh --month YYYY-MM` | Monthly per-tenant cost report |
 
-### ArgoCD (GitOps)
+## Security
 
-ArgoCD manages platform components and tenant deployments via GitOps:
+| Layer | Control |
+|-------|---------|
+| Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
+| Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
+| Network | ALB is **internal** — not accessible from internet |
+| Auth | Cognito + ALB trusted-proxy |
+| Tenant | Namespace isolation + NetworkPolicy + ABAC |
+| Secrets | exec SecretRef — fetched on-demand, never persisted |
+| LLM | Bedrock via Pod Identity — zero API keys |
+| Cost | Per-tenant monthly budget with per-model pricing |
+| Data | PVC persists across scale-to-zero; daily EBS snapshots |
+| Audit | CloudTrail + S3 + Athena |
 
-```bash
-# Apply all ArgoCD resources
-./scripts/setup-argocd-apps.sh
-
-# Check status
-kubectl get applications -n argocd
-kubectl get applicationsets -n argocd
-```
-
-- `argocd/applications/platform.yaml` — KEDA + HTTP Add-on (replaces manual `setup-keda.sh`)
-- `argocd/applicationsets/tenants.yaml` — Auto-discovers `helm/tenants/values-*.yaml`, creates one Application per tenant
-
-> Replace `<YOUR_GITHUB_ORG>` in `argocd/applicationsets/tenants.yaml` with your GitHub org/user before applying.
-
-## Scale-to-Zero
-
-KEDA scales idle tenant pods to 0 after 15 minutes. PVC (EBS) persists — no data loss. Cold start: 15-30 seconds. See [`docs/scale-to-zero.md`](docs/scale-to-zero.md).
-
-## Self-Service Signup
-
-Users register via custom auth UI → Cognito SDK → email verification → admin approval → Lambda auto-provisions tenant. See [`docs/self-service-signup.md`](docs/self-service-signup.md).
-
-## Known Issues
-
-### @smithy/credential-provider-imds Pod Identity Bug
-
-OpenClaw's bundled `@smithy/credential-provider-imds` rejects EKS Pod Identity Agent IP. The `init-tools` container patches this at startup. See [aws-sdk-js-v3#5709](https://github.com/aws/aws-sdk-js-v3/issues/5709).
-
-### NAT Gateway HA and Nodegroup Changes Require VPC Rebuild
-
-CDK has been updated to `natGateways: 2` (HA) and `system-graviton` nodegroup (t4g.medium/arm64), but these changes cannot be applied in-place to an existing stack — CloudFormation requires a VPC rebuild, which disrupts the EKS cluster.
-
-Existing environments keep `natGateways: 1` + a manually created `system-graviton` nodegroup. New deployments automatically use the new settings.
-
-To migrate from v1 to v2, see [`docs/migration-guide.md`](docs/migration-guide.md).
-
-## Cost Estimate
+## Cost
 
 | Resource | 3 tenants | 100 tenants |
 |----------|-----------|-------------|
 | EKS control plane | ~$73 | ~$73 |
-| EC2 (Graviton t4g.medium + Karpenter spot) | ~$48 | ~$48-150 |
-| EBS (gp3 10Gi per tenant) | ~$2.40 | ~$80 |
-| ALB (internal) | ~$16 | ~$16 |
-| NAT Gateway | ~$32 | ~$32 |
-| CloudFront (2 distributions) | ~$1 | ~$5-20 |
-| CloudWatch | ~$10-15 | ~$15-30 |
-| WAF | ~$5 | ~$5-10 |
-| Lambda + S3 + CodeBuild | ~$0 | ~$1 |
-| Bedrock (usage-based) | varies | varies |
-| **Total (infra)** | **~$188-193/mo** | **~$275-417/mo** |
+| EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
+| EBS (10Gi per tenant) | ~$2 | ~$80 |
+| ALB + NAT (x2) + CloudFront + WAF | ~$60 | ~$65 |
+| CloudWatch + Lambda + S3 | ~$15 | ~$20 |
+| Bedrock | varies | varies |
+| **Total (infra)** | **~$198/mo** | **~$286-388/mo** |
 
 > KEDA scale-to-zero active. EC2 scales with concurrent usage, not total tenants.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | Full diagrams (Mermaid + ASCII) |
+| [User Journey](docs/user-journey.md) | End-user experience (10 steps) |
+| [Admin Journey](docs/admin-journey.md) | Admin operations guide |
+| [Demo Cheat Sheet](docs/demo-cheat-sheet.md) | 15-min demo script + objection handling |
+| [Scale to Zero](docs/scale-to-zero.md) | KEDA HTTP Add-on design |
+| [Self-Service Signup](docs/self-service-signup.md) | Cognito + Lambda auto-provisioning |
+| [ArgoCD](docs/argocd.md) | EKS Capability GitOps setup |
+| [Webhook Setup](docs/webhook-setup.md) | Slack/Discord integration |
+| [Usage Tracking](docs/usage-tracking.md) | Per-tenant cost tracking |
+| [Image Update](docs/image-update.md) | Auto image update strategy |
+| [Migration Guide](docs/migration-guide.md) | v1 → v2 migration |
+| [Tenant CRD](docs/tenant-crd.md) | Kubernetes Operator design (future) |
+| [Multi-Region](docs/multi-region.md) | DR architecture design (future) |
+| [Terraform](docs/terraform.md) | Terraform alternative design (future) |
 
 ## Project Structure
 
 ```
-├── argocd/                           # ArgoCD GitOps manifests
-│   ├── applications/
-│   │   └── platform.yaml             # KEDA + HTTP Add-on
-│   └── applicationsets/
-│       └── tenants.yaml              # Auto-discover tenants from helm/tenants/
-├── auth-ui/                          # Custom login/signup page (S3 + CloudFront)
-│   ├── index.html                    # AI-Native design, Cognito SDK, Turnstile CAPTCHA
-│   ├── admin.html                    # Admin dashboard (tenant list, health, AWS Console links)
-│   ├── terms.html                    # Terms of service (placeholder)
-│   ├── privacy.html                  # Privacy policy (placeholder)
-│   └── manifest.json                 # PWA manifest
-├── cdk/                              # CDK stack
-│   ├── lambda/
-│   │   ├── pre-signup/               # Email domain restriction
-│   │   └── post-confirmation/        # Auto tenant provisioning
-│   ├── lib/
-│   │   └── eks-cluster-stack.ts      # Main stack
-│   ├── cdk.json.example              # Config template (fill in your values)
-│   └── cdk.json                      # Your config (gitignored)
-├── docs/
-│   ├── architecture.md               # Full architecture diagrams
-│   ├── scale-to-zero.md              # KEDA design
-│   ├── image-update.md               # Auto image update
-│   ├── self-service-signup.md        # Cognito signup flow
-│   └── usage-tracking.md             # Per-tenant cost tracking
-├── helm/
-│   ├── charts/openclaw-platform/     # Helm chart (15 templates)
-│   │   ├── templates/                # Deployment, Ingress (internal), NetworkPolicy, KEDA, etc.
-│   │   └── static/                   # Error pages
-│   └── tenants/
-│       └── values-template.yaml      # Per-tenant config template
-├── scripts/                          # 15 operations scripts
-│   ├── post-deploy.sh                # VPC Origin + CloudFront #2 + Route53 + WAF
-│   ├── deploy-auth-ui.sh             # Upload auth UI to S3
-│   ├── create-tenant.sh              # Create tenant
-│   ├── setup-cognito.sh              # Cognito configuration
-│   ├── setup-keda.sh                 # KEDA installation
-│   ├── setup-argocd-apps.sh          # ArgoCD Applications + ApplicationSets
-│   └── ...
-└── README.md
+├── auth-ui/                    # Custom login/signup (S3 + CloudFront)
+│   ├── index.html              # Auth UI (Cognito SDK, CAPTCHA, PWA)
+│   ├── admin.html              # Admin dashboard
+│   └── terms.html, privacy.html, manifest.json
+├── cdk/                        # AWS CDK infrastructure
+│   ├── lib/eks-cluster-stack.ts
+│   ├── lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
+│   └── cdk.json.example        # Config template (11 context values)
+├── helm/                       # Helm chart + tenant templates
+│   ├── charts/openclaw-platform/
+│   └── tenants/values-template.yaml
+├── argocd/                     # ArgoCD Applications + ApplicationSets
+├── docs/                       # 14 design documents
+├── scripts/                    # 20 operations scripts
+├── .github/workflows/ci.yml   # CI pipeline
+└── LICENSE                     # MIT
 ```
 
-## Design Docs
-
-| Document | Description |
-|----------|-------------|
-| [architecture.md](docs/architecture.md) | Full architecture diagrams |
-| [user-journey.md](docs/user-journey.md) | End-user experience (signup → daily use → cold start) |
-| [admin-journey.md](docs/admin-journey.md) | Admin operations (deploy → approve → monitor → audit) |
-| [demo-cheat-sheet.md](docs/demo-cheat-sheet.md) | Demo script + objection handling + quick commands |
-| [scale-to-zero.md](docs/scale-to-zero.md) | KEDA scale-to-zero design |
-| [image-update.md](docs/image-update.md) | Auto image update strategy |
-| [self-service-signup.md](docs/self-service-signup.md) | Cognito signup + auto provisioning |
-| [usage-tracking.md](docs/usage-tracking.md) | Per-tenant cost tracking |
-| [argocd.md](docs/argocd.md) | ArgoCD EKS Capability setup |
-| [webhook-setup.md](docs/webhook-setup.md) | Slack/Discord webhook integration |
-| [migration-guide.md](docs/migration-guide.md) | v1 → v2 migration steps |
-| [tenant-crd.md](docs/tenant-crd.md) | Tenant CRD + Operator design (future) |
-| [multi-region.md](docs/multi-region.md) | Multi-region architecture design (future) |
-| [terraform.md](docs/terraform.md) | Terraform alternative design (future) |
-| [migration-guide.md](docs/migration-guide.md) | v1 → v2 migration (VPC rebuild) |
-
-## What CDK Manages vs Scripts
+<details>
+<summary>What CDK manages vs post-deploy scripts</summary>
 
 | CDK (`cdk deploy`) | Scripts (post-deploy) |
 |--------------------|-----------------------|
-| EKS cluster + VPC | KEDA installation |
-| IAM roles | Cognito configuration |
-| Lambda functions | VPC Origin |
-| S3 buckets | CloudFront #2 (tenant traffic) |
-| CloudFront #1 (auth UI) | Route53 records |
-| WAF WebACL | WAF → ALB association |
-| CloudWatch + SNS | CronJobs |
-| CodeBuild | Usage dashboard |
+| EKS + VPC + IAM | KEDA installation |
+| Lambda functions | Cognito configuration |
+| S3 buckets | VPC Origin |
+| CloudFront #1 (auth UI) | CloudFront #2 (tenants) |
+| WAF WebACL | Route53 records |
+| CloudWatch + SNS | WAF → ALB association |
+| CodeBuild | CronJobs + dashboards |
 
-Reason: ALB is created dynamically by Kubernetes LB Controller. CDK cannot reference it at deploy time.
+ALB is created dynamically by Kubernetes LB Controller — CDK cannot reference it at deploy time.
 
-## Customization
+</details>
 
-Fill in `cdk/cdk.json` with your values. All domain/account-specific config is read from CDK context. No hardcoded secrets in the repo.
+## Contributing
 
-## Based On
+Contributions welcome. Please open an issue first to discuss changes.
 
-- [thepagent/openclaw-helm](https://github.com/thepagent/openclaw-helm) — Slim Helm chart
-- [OpenClaw Gateway Security](https://openclaw.dev/docs/gateway/security) — Trusted-proxy mode
-- [AWS EKS Pod Identity ABAC](https://docs.aws.amazon.com/eks/latest/best-practices/identity-and-access-management.html)
-- [AWS CloudFront VPC Origins](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
+## License
+
+[MIT](LICENSE)
+
+---
+
+<p align="center">
+  Built with ❤️ on <a href="https://aws.amazon.com/eks/">Amazon EKS</a> + <a href="https://aws.amazon.com/bedrock/">Amazon Bedrock</a>
+</p>
