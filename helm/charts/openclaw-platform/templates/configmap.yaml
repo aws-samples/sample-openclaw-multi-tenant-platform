@@ -6,7 +6,12 @@ metadata:
     {{- include "openclaw-helm.labels" . | nindent 4 }}
 data:
   openclaw.json: |
-{{ .Values.config | toJson | indent 4 }}
+    {{- $config := deepCopy .Values.config }}
+    {{- if and .Values.ingress.enabled .Values.ingress.host }}
+    {{- $origin := printf "https://%s" .Values.ingress.host }}
+    {{- $_ := set $config.gateway.controlUi "allowedOrigins" (list $origin) }}
+    {{- end }}
+{{ $config | toJson | indent 4 }}
   bash_aliases: |
     alias openclaw='node /app/dist/index.js'
   fetch-secret.mjs: |
