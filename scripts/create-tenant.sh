@@ -2,12 +2,12 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <tenant-name> [--values <file>] [--cluster <name>] [--region <region>] [--skills <s1,s2,...>]"
+  echo "Usage: $0 <tenant-name> [--values <file>] [--cluster <name>] [--region <region>] [--skills <s1,s2,...>] [--budget <usd>]"
   exit 1
 }
 
 TENANT="" VALUES_FILE="" CLUSTER="openclaw-cluster" REGION="us-west-2"
-DISPLAY_NAME="OpenClaw" EMOJI="🦞" SKILLS="weather,gog"
+DISPLAY_NAME="OpenClaw" EMOJI="🦞" SKILLS="weather,gog" BUDGET="100"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,6 +17,7 @@ while [[ $# -gt 0 ]]; do
     --display-name) DISPLAY_NAME="$2"; shift 2 ;;
     --emoji) EMOJI="$2"; shift 2 ;;
     --skills) SKILLS="$2"; shift 2 ;;
+    --budget) BUDGET="$2"; shift 2 ;;
     --help|-h) usage ;;
     -*) echo "Unknown option: $1"; usage ;;
     *) TENANT="$1"; shift ;;
@@ -73,7 +74,7 @@ aws secretsmanager create-secret \
   --region "${REGION}" \
   --name "${SECRET_ID}" \
   --secret-string "${TOKEN}" \
-  --tags "Key=tenant-namespace,Value=${NAMESPACE}" \
+  --tags "Key=tenant-namespace,Value=${NAMESPACE}" "Key=budget-usd,Value=${BUDGET}" \
   --output text --query 'ARN'
 
 # 3. Create Pod Identity Association

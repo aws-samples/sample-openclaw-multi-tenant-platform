@@ -10,6 +10,7 @@ BUCKET=$(get_output AuthUiBucketName)
 POOL_ID=$(get_output CognitoPoolId)
 CLIENT_ID=$(get_output CognitoClientId)
 DOMAIN=$(get_output DomainName)
+TURNSTILE_SITE_KEY="${TURNSTILE_SITE_KEY:-}"
 
 if [ -z "$BUCKET" ]; then
   echo "Error: Could not find AuthUiBucketName in stack outputs. Run 'cdk deploy' first."
@@ -24,7 +25,7 @@ echo "  Domain:    $DOMAIN"
 
 # Inject config into index.html
 TMPDIR=$(mktemp -d)
-sed "s|userPoolId: ''|userPoolId: '${POOL_ID}'|;s|clientId: ''|clientId: '${CLIENT_ID}'|;s|domain: ''|domain: '${DOMAIN}'|" \
+sed "s|userPoolId: ''|userPoolId: '${POOL_ID}'|;s|clientId: ''|clientId: '${CLIENT_ID}'|;s|domain: ''|domain: '${DOMAIN}'|;s|turnstileSiteKey: ''|turnstileSiteKey: '${TURNSTILE_SITE_KEY}'|" \
   auth-ui/index.html > "${TMPDIR}/index.html"
 
 # Upload

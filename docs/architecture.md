@@ -422,7 +422,9 @@ Setup script: `scripts/setup-signup-triggers.sh`
 
 ---
 
-## 11. Monitoring
+## 11. Observability
+
+### Core Infrastructure
 
 | Component | Detail |
 |-----------|--------|
@@ -430,6 +432,40 @@ Setup script: `scripts/setup-signup-triggers.sh`
 | CloudWatch Alarm | Monitors pod restart count; triggers SNS notification when threshold exceeded |
 | SNS Topic | Receives alarms; can forward to email, Slack, or PagerDuty |
 | KEDA | Scale-to-zero support (optional, disabled by default) |
+
+### Bedrock Latency Monitoring
+
+Metric Filter 從 Container Insights application log 擷取 Bedrock response time，推送到自訂 metric `OpenClaw/Bedrock/BedrockResponseTimeMs`。CloudWatch Alarm 在 P95 > 10s（連續 2 個 5 分鐘週期）時觸發 SNS。
+
+```
+scripts/setup-bedrock-latency.sh
+  → aws logs put-metric-filter (BedrockResponseTime)
+  → aws cloudwatch put-metric-alarm (openclaw-bedrock-p95-latency)
+```
+
+### Cold Start Alarm
+
+Metric Filter 從 Container Insights performance log 擷取 `pod_startup_duration_seconds`。Alarm 在任一 pod 啟動時間 > 60s 時觸發 SNS，用於偵測 KEDA scale-from-zero 或 image pull 過慢。
+
+```
+scripts/setup-coldstart-alarm.sh
+  → aws logs put-metric-filter (PodStartupDuration)
+  → aws cloudwatch put-metric-alarm (openclaw-pod-coldstart-slow)
+```
+
+### Health Check
+
+`scripts/health-check.sh` 檢查所有 component 狀態，輸出 JSON：
+
+| Check | Method |
+|-------|--------|
+| KEDA pods | `kubectl get pods -n keda` — all Running |
+| PVC | `kubectl get pvc -A -l app.kubernetes.io/name=openclaw-helm` — all Bound |
+| ALB | `curl` internal ALB `/healthz` |
+| CloudFront | `aws cloudfront get-distribution` — status Deployed |
+| WAF | `aws wafv2 list-web-acls` — exists |
+
+輸出格式：`{"status": "healthy|unhealthy", "components": {...}}`
 
 ---
 

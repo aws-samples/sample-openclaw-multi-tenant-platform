@@ -61,6 +61,7 @@ input::placeholder{color:#555}
         <input type="email" id="email" placeholder="Email" required autocomplete="email">
         <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
         <p class="hint" id="pw-hint" style="display:none">Min 12 characters, uppercase, lowercase, and numbers</p>
+        <div id="turnstile-container" style="display:none;margin-bottom:10px"></div>
         <button type="submit" class="btn" id="submit-btn">Sign In<span class="spinner"></span></button>
       </form>
       <p class="link" id="forgot-link" onclick="showSection('forgot-section')">Forgot password?</p>
@@ -109,12 +110,13 @@ input::placeholder{color:#555}
   </div>
   <div class="footer">Powered by Amazon EKS + Bedrock</div>
 </div>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 <script>
-const C={region:'us-west-2',userPoolId:'',clientId:'',domain:''};
-let tab='login',pendingEmail='';
+const C={region:'us-west-2',userPoolId:'',clientId:'',domain:'',turnstileSiteKey:''};
+let tab='login',pendingEmail='',turnstileId=null;
 
 function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
-function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';hideMsg('msg')}
+function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
 function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}
 function hideMsg(id){document.getElementById(id).className='msg'}
 function setLoading(btn,v){btn.disabled=v;btn.classList.toggle('loading',v)}
@@ -125,7 +127,7 @@ async function handleSubmit(e){
   e.preventDefault();const email=document.getElementById('email').value,pw=document.getElementById('password').value,btn=document.getElementById('submit-btn');
   setLoading(btn,true);
   try{
-    if(tab==='signup'){await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}]});pendingEmail=email;showSection('verify-section')}
+    if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});pendingEmail=email;showSection('verify-section')}
     else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${t}.${C.domain}`}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)

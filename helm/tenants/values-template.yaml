@@ -30,6 +30,8 @@ skills:
 {{SKILLS_YAML}}
 
 # --- Override per tenant as needed ---
+# budget:
+#   monthlyUsd: {{BUDGET_USD}}
 # resources:
 #   limits:
 #     cpu: 4

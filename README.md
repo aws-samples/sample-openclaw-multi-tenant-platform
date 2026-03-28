@@ -185,9 +185,13 @@ Users register via custom auth UI → Cognito SDK → email verification → adm
 
 OpenClaw's bundled `@smithy/credential-provider-imds` rejects EKS Pod Identity Agent IP. The `init-tools` container patches this at startup. See [aws-sdk-js-v3#5709](https://github.com/aws/aws-sdk-js-v3/issues/5709).
 
-### CDK Nodegroup vs Actual
+### NAT Gateway HA 和 Nodegroup 變更需要 VPC 重建
 
-CDK references the original `system` nodegroup (t3.medium/amd64) for CloudFormation compatibility. The actual cluster runs `system-graviton` (t4g.medium/arm64), created via manual migration. This mismatch is documented and intentional.
+CDK 已更新為 `natGateways: 2`（HA）和 `system-graviton` nodegroup（t4g.medium/arm64），但這些變更無法 in-place 套用到現有 stack — CloudFormation 會要求重建 VPC，導致 EKS cluster 中斷。
+
+現有環境維持 `natGateways: 1` + 手動建立的 `system-graviton` nodegroup。新部署會自動套用新設定。
+
+從 v1 遷移到 v2 請參考 [`docs/migration-guide.md`](docs/migration-guide.md)。
 
 ## Cost Estimate
 
@@ -251,6 +255,7 @@ CDK references the original `system` nodegroup (t3.medium/amd64) for CloudFormat
 | [image-update.md](docs/image-update.md) | Auto image update strategy |
 | [self-service-signup.md](docs/self-service-signup.md) | Cognito signup + auto provisioning |
 | [usage-tracking.md](docs/usage-tracking.md) | Per-tenant cost tracking |
+| [migration-guide.md](docs/migration-guide.md) | v1 → v2 migration (VPC rebuild) |
 
 ## What CDK Manages vs Scripts
 
