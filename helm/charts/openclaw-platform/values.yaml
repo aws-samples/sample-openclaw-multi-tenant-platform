@@ -62,12 +62,29 @@ config:
       userTimezone: UTC
       timeoutSeconds: 600
       maxConcurrent: 1
+      model:
+        primary: amazon-bedrock/anthropic.claude-opus-4-6-v1
+        fallbacks:
+          - amazon-bedrock/anthropic.claude-sonnet-4-6
+          - amazon-bedrock/deepseek.v3.2
+      models:
+        amazon-bedrock/anthropic.claude-opus-4-6-v1: {}
+        amazon-bedrock/anthropic.claude-sonnet-4-6: {}
+        amazon-bedrock/openai.gpt-oss-120b-1:0: {}
+        amazon-bedrock/qwen.qwen3-coder-480b-a35b-v1:0: {}
+        amazon-bedrock/moonshot.kimi-k2-thinking: {}
+        amazon-bedrock/deepseek.v3.2: {}
     list:
       - id: main
         default: true
         identity:
           name: OpenClaw
           emoji: "🦞"
+
+  models:
+    bedrockDiscovery:
+      enabled: true
+      region: us-west-2
   
   session:
     scope: per-sender
