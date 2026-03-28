@@ -38,12 +38,25 @@ echo "==> Creating tenant: ${TENANT}"
 
 # 0. Generate tenant values from template
 if [[ -z "$VALUES_FILE" ]]; then
+  echo "  → Reading config from CDK stack outputs"
+  STACK="${OPENCLAW_STACK_NAME:-OpenClawEksStack}"
+  get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null; }
+  DOMAIN=$(get_output DomainName)
+  CERT_ARN=$(get_output CertificateArn)
+  COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:$(aws sts get-caller-identity --query Account --output text):userpool/$(get_output CognitoPoolId)"
+  COGNITO_CLIENT_ID=$(get_output CognitoClientId)
+  COGNITO_DOMAIN=$(get_output CognitoDomain)
+
   echo "  → Generating ${TENANT_VALUES} from template"
-  # Convert comma-separated skills to YAML list
   SKILLS_YAML=$(IFS=','; for s in ${SKILLS}; do echo "  - ${s}"; done)
   sed -e "s/{{TENANT}}/${TENANT}/g" \
       -e "s/{{TENANT_DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
       -e "s/{{TENANT_EMOJI}}/${EMOJI}/g" \
+      -e "s|{{DOMAIN}}|${DOMAIN}|g" \
+      -e "s|{{CERTIFICATE_ARN}}|${CERT_ARN}|g" \
+      -e "s|{{COGNITO_POOL_ARN}}|${COGNITO_POOL_ARN}|g" \
+      -e "s|{{COGNITO_CLIENT_ID}}|${COGNITO_CLIENT_ID}|g" \
+      -e "s|{{COGNITO_DOMAIN}}|${COGNITO_DOMAIN}|g" \
       "${TEMPLATE}" > "${TENANT_VALUES}"
   # Replace multiline placeholder with actual YAML list
   SKILLS_ESCAPED=$(echo "${SKILLS_YAML}" | sed 's/[&/\]/\\&/g; $!s/$/\\/')

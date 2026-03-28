@@ -90,7 +90,7 @@ Copy `cdk/cdk.json.example` to `cdk/cdk.json` and fill in your values:
 
 ```bash
 cd cdk && npm install
-npx cdk deploy
+npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
 This creates: EKS cluster, VPC, IAM roles, Lambda functions, S3 buckets, CloudFront #1 (auth UI), WAF, CloudWatch monitoring, SNS alerts, CodeBuild project.
@@ -118,6 +118,10 @@ aws eks update-kubeconfig --region <region> --name openclaw-cluster
 ### 4. Create First Tenant
 
 ```bash
+# Set the tenant IAM role ARN (from CDK output TenantRoleArn)
+export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
+  --stack-name OpenClawEksStack --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
+
 ./scripts/create-tenant.sh alice --display-name "Alice" --emoji "🤖"
 ```
 
