@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNiIgZmlsbD0iIzYzNjZGMSIvPjx0ZXh0IHg9IjE2IiB5PSIyMyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1zaXplPSIyMCIgZmlsbD0id2hpdGUiPuKaoTwvdGV4dD48L3N2Zz4=">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpenClaw Platform</title>
 <link rel="manifest" href="/manifest.json">
@@ -62,8 +63,8 @@ input::placeholder{color:#555}
     <!-- Auth form -->
     <div id="auth-section" class="section active">
       <div class="tabs">
-        <div class="tab active" onclick="switchTab('login')">Sign In</div>
-        <div class="tab" onclick="switchTab('signup')">Sign Up</div>
+        <div class="tab active" onclick="switchTab('login')" role="tab" aria-selected="true">Sign In</div>
+        <div class="tab" onclick="switchTab('signup')" role="tab" aria-selected="false">Sign Up</div>
       </div>
       <div id="msg" class="msg"></div>
       <form onsubmit="return handleSubmit(event)">
@@ -181,6 +182,27 @@ async function handleReset(e){
   catch(err){showMsg('reset-msg',err.message,'error')}
   setLoading(btn,false)
 }
+</script>
+<script>
+// Friendly error message mapper
+const _showMsg=showMsg;
+showMsg=function(id,msg,type){
+  if(type==='error'){
+    const map={
+      'Password did not conform with policy':'Password must be at least 12 characters with uppercase, lowercase, and numbers.',
+      'User already exists':'An account with this email already exists. Try signing in.',
+      'Incorrect username or password':'Incorrect email or password. Please try again.',
+      'User is not confirmed':'Your account is pending admin approval.',
+      'Invalid verification code':'Invalid code. Please check your email and try again.',
+      'Attempt limit exceeded':'Too many attempts. Please wait a few minutes.',
+      'Email domain not allowed':'Only company email addresses are allowed.',
+      'User does not exist':'No account found with this email.',
+      'ExpiredCodeException':'Code has expired. Click "Resend code" to get a new one.',
+    };
+    for(const[k,v]of Object.entries(map)){if(msg.includes(k)){msg=v;break}}
+  }
+  _showMsg(id,msg,type);
+};
 </script>
 </body>
 </html>
