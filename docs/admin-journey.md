@@ -107,9 +107,30 @@ ArgoCD EKS Capability provides a hosted UI with AWS Identity Center SSO. Access 
 
 ### OpenClaw Image Update
 
-- CronJob checks GHCR every 6 hours for new tags
-- If new version found: `kubectl set image` across all tenants
-- Manual: `helm upgrade` per tenant
+A CronJob (`openclaw-image-updater`) checks GHCR every 6 hours for new image tags. If a new version is found, it runs `kubectl set image` across all tenant deployments.
+
+| Detail | Value |
+|--------|-------|
+| Schedule | Every 6 hours (`0 */6 * * *`) |
+| Method | `kubectl set image` with label selector |
+| Manifest | `scripts/image-update-cronjob.yaml` |
+
+**Risks and mitigations:**
+
+| Risk | Mitigation |
+|------|-----------|
+| Breaking change | Filter to patch versions only |
+| Registry unreachable | CronJob retries next cycle |
+| Rollout failure | Kubernetes rollout strategy; `kubectl rollout undo` available |
+
+> Note: CronJob updates running deployments but does NOT update `values.yaml` in git. For full GitOps, use ArgoCD image updater.
+
+Manual upgrade:
+
+```bash
+helm upgrade openclaw-<name> helm/charts/openclaw-platform \
+  -n openclaw-<name> --set image.tag=<new-tag> --reuse-values
+```
 
 ### CDK Stack Update
 

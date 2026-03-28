@@ -228,7 +228,6 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | [ArgoCD](docs/argocd.md) | EKS Capability GitOps setup |
 | [Webhook Setup](docs/webhook-setup.md) | Slack/Discord integration |
 | [Usage Tracking](docs/usage-tracking.md) | Per-tenant cost tracking |
-| [Image Update](docs/image-update.md) | Auto image update strategy |
 | [Migration Guide](docs/migration-guide.md) | v1 → v2 migration |
 | [Tenant CRD](docs/tenant-crd.md) | Kubernetes Operator design (future) |
 | [Multi-Region](docs/multi-region.md) | DR architecture design (future) |
