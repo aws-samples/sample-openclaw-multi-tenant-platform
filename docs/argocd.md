@@ -1,53 +1,103 @@
-# ArgoCD
+# ArgoCD — EKS Managed Capability
 
-## 架構
+## Overview
 
-ArgoCD 透過 CDK Helm chart 安裝在 `argocd` namespace，使用 [argo-helm](https://github.com/argoproj/argo-helm) chart v7.8.0。
+ArgoCD is deployed as an [EKS Capability](https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html) — fully managed by AWS. This means:
 
-主要元件：
-- **argocd-server** — API server + Web UI（ClusterIP，透過 port-forward 存取）
-- **argocd-repo-server** — Git repo 同步
-- **argocd-application-controller** — 監控 desired state vs live state，執行 sync
+- No Helm chart to maintain
+- No pods running on your worker nodes
+- Hosted UI with AWS Identity Center SSO authentication
+- Automatic updates managed by AWS
 
-設定 `server.insecure: true` 讓 server 不做 TLS termination（由前端 LB/ingress 處理）。
+## Prerequisites
 
-## 存取 UI
+- AWS Identity Center (SSO) configured in your organization
+- IAM Capability Role with trust policy for `capabilities.eks.amazonaws.com`
+
+## Setup
 
 ```bash
-# 取得 admin 密碼
+# 1. Create IAM Capability Role (one-time)
+aws iam create-role --role-name EKSArgoCDCapabilityRole \
+  --assume-role-policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": {"Service": "capabilities.eks.amazonaws.com"},
+      "Action": ["sts:AssumeRole", "sts:TagSession"]
+    }]
+  }'
+
+# 2. Create ArgoCD capability
+aws eks create-capability \
+  --capability-name openclaw-argocd \
+  --cluster-name openclaw-cluster \
+  --type ARGOCD \
+  --role-arn arn:aws:iam::<ACCOUNT>:role/EKSArgoCDCapabilityRole \
+  --delete-propagation-policy RETAIN \
+  --configuration '{
+    "argoCd": {
+      "namespace": "argocd",
+      "awsIdc": {
+        "idcInstanceArn": "<IDENTITY_CENTER_ARN>",
+        "idcRegion": "<IDENTITY_CENTER_REGION>"
+      },
+      "rbacRoleMappings": [{
+        "role": "ADMIN",
+        "identities": [{"id": "<SSO_USER_ID>", "type": "SSO_USER"}]
+      }]
+    }
+  }' \
+  --region us-west-2
+
+# 3. Check status
 ./scripts/setup-argocd.sh
 
-# port-forward
-kubectl port-forward svc/argocd-server -n argocd 8080:443
-
-# 開啟 https://localhost:8080
+# 4. Apply ApplicationSets
+./scripts/setup-argocd-apps.sh
 ```
 
-## 部署 Application
+## Architecture
 
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: my-app
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/your-org/your-repo.git
-    targetRevision: main
-    path: k8s/
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: default
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+```
+EKS Capability (AWS-managed, runs in control plane)
+  │
+  ├── ArgoCD Server (hosted UI, SSO auth)
+  ├── ArgoCD Repo Server (Git sync)
+  └── ArgoCD Application Controller (reconciliation)
+        │
+        ├── Application: platform-keda (KEDA Helm chart)
+        ├── Application: platform-keda-http-addon
+        └── ApplicationSet: openclaw-tenants
+              ├── openclaw-alice (from helm/tenants/values-alice.yaml)
+              ├── openclaw-bob
+              └── openclaw-carol
 ```
 
-## 注意事項
+## Tenant Management with ArgoCD
 
-- 初始 admin 密碼存在 `argocd-initial-admin-secret`，首次登入後建議更換
-- Production 環境應設定 SSO（Cognito / OIDC）取代 admin 帳號
-- ArgoCD 的 server 設為 ClusterIP，不直接暴露；需要外部存取時透過 Ingress + ALB
+With ArgoCD ApplicationSet, adding a tenant is:
+
+1. Create `helm/tenants/values-<name>.yaml` (via `create-tenant.sh`)
+2. Git push
+3. ArgoCD auto-syncs → creates namespace + all resources
+
+Deleting a tenant:
+1. Remove `helm/tenants/values-<name>.yaml`
+2. Git push
+3. ArgoCD prunes resources (if `prune: true`)
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `argocd/applications/platform.yaml` | KEDA as ArgoCD Application |
+| `argocd/applicationsets/tenants.yaml` | Tenant ApplicationSet (Git file generator) |
+| `scripts/setup-argocd.sh` | Check capability status |
+| `scripts/setup-argocd-apps.sh` | Apply Applications + ApplicationSets |
+
+## References
+
+- [EKS Capabilities](https://docs.aws.amazon.com/eks/latest/userguide/capabilities.html)
+- [Create Argo CD Capability](https://docs.aws.amazon.com/eks/latest/userguide/create-argocd-capability.html)
+- [Capability IAM Role](https://docs.aws.amazon.com/eks/latest/userguide/capability-role.html)
