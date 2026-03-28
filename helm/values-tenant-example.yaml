@@ -1,0 +1,25 @@
+# Per-tenant values override example
+# Usage: ./scripts/create-tenant.sh alice --values helm/values-alice.yaml
+
+ingress:
+  enabled: true
+  host: "alice.claw.snese.net"
+  certificateArn: "arn:aws:acm:us-west-2:387671391109:certificate/9eba6ce2-9ebd-4b38-bd42-e7b92305b588"
+  cognito:
+    enabled: true
+    userPoolArn: "arn:aws:cognito-idp:us-west-2:387671391109:userpool/us-west-2_yRqDzKF0t"
+    clientId: "103uif8rdrp29ak4eki7lc09ru"
+    domain: "claw-snese"
+
+# Override resources per tenant if needed
+# resources:
+#   limits:
+#     cpu: 4
+#     memory: 4Gi
+
+# Override model config per tenant
+# config:
+#   agents:
+#     defaults:
+#       model:
+#         primary: amazon-bedrock/us.anthropic.claude-sonnet-4-6

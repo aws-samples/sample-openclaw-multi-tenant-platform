@@ -49,6 +49,22 @@ resourceQuota:
   memory: 8Gi
   pods: "10"
 
+pdb:
+  enabled: true
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilization: 70
+
+scaleToZero:
+  enabled: false
+  idleTimeout: 900
+  minReplicas: 0
+  maxReplicas: 1
+
 config:
   gateway:
     port: 18789

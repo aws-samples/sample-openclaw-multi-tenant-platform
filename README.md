@@ -18,7 +18,7 @@ User → Browser → Cognito Login → ALB (HTTPS, *.claw.snese.net)
 ```
 EKS Cluster (CDK, us-west-2)
 │  Managed Node Group + Karpenter
-│  Add-ons: ALB Controller, EBS CSI, Pod Identity Agent
+│  Add-ons: ALB Controller, EBS CSI, Pod Identity Agent, CloudWatch Container Insights
 │
 ├── namespace: openclaw-{tenant}
 │   ├── ServiceAccount + Pod Identity → shared IAM Role (ABAC)
@@ -111,7 +111,8 @@ OpenClaw's bundled `@smithy/credential-provider-imds` has `GREENGRASS_HOSTS` tha
 | ALB | ~$16 |
 | NAT Gateway | ~$32 |
 | Bedrock (usage-based) | varies |
-| **Total (infra only)** | **~$184/mo** |
+| CloudWatch (Container Insights) | ~$10-15 |
+| **Total (infra only)** | **~$194-199/mo** |
 
 ## Project Structure
 

@@ -22,6 +22,10 @@ User ──► Browser ──► Cognito Login ──► ALB (HTTPS, *.claw.snes
                      Bedrock       Secrets Manager    AgentCore Browser              │
                     (LLM, Pod     (exec SecretRef,    (web browsing)                │
                      Identity)     ABAC)                                            │
+                                                                                    │
+                          CloudWatch Container Insights ◄── EKS metrics/logs        │
+                                        │                                           │
+                                   SNS Topic ──► Alarm notifications                │
                           └─────────────────────────────────────────────────────────┘
 ```
 
@@ -58,13 +62,24 @@ graph TB
             PrivSub2[Private Subnet<br/>10.0.144.0/20]
         end
 
-        NAT[NAT Gateway]
+        NAT1[NAT Gateway<br/>AZ-a]
+        NAT2[NAT Gateway<br/>AZ-b]
         ALB[ALB<br/>shared IngressGroup<br/>Cognito Auth]
 
         subgraph EKS["EKS Cluster (openclaw-cluster)"]
-            MNG[Managed Node Group<br/>m7i.xlarge]
-            KarpenterNodes[Karpenter Nodes<br/>c7i / m7i spot]
+            MNG[Managed Node Group<br/>t4g.medium Graviton]
+            KarpenterNodes[Karpenter Nodes<br/>arm64 spot]
+            KEDA[KEDA<br/>scale-to-zero<br/>optional, disabled by default]
         end
+    end
+
+    subgraph CloudWatch
+        CWInsights[Container Insights<br/>metrics + logs]
+        CWAlarm[CloudWatch Alarm<br/>pod restart count]
+    end
+
+    subgraph SNS
+        SNSTopic[SNS Topic<br/>alarm notifications]
     end
 
     subgraph IAM["IAM Roles"]
@@ -95,13 +110,16 @@ graph TB
     ALB --> CUP
     CUP --> CUP_Client
     ALB --> EKS
-    PubSub1 --- NAT
-    NAT --- PrivSub1
-    NAT --- PrivSub2
+    PubSub1 --- NAT1
+    NAT1 --- PrivSub1
+    PubSub2 --- NAT2
+    NAT2 --- PrivSub2
     EKS --> TenantRole
     TenantRole --> SecretsManager
     TenantRole --> Bedrock
     EKS --> AB
+    EKS --> CWInsights
+    CWAlarm --> SNSTopic
     MNG --> PrivSub1
     KarpenterNodes --> PrivSub2
     KarpRole -.-> KarpenterNodes
@@ -122,6 +140,10 @@ graph TB
         CoreDNS[CoreDNS]
         KubeProxy[kube-proxy]
         VPCCNI[VPC CNI<br/>aws-node]
+    end
+
+    subgraph AmazonCW["amazon-cloudwatch namespace"]
+        CWAgent[CloudWatch Agent<br/>DaemonSet<br/>Container Insights]
     end
 
     subgraph KarpenterNS["karpenter namespace"]
@@ -335,7 +357,18 @@ sequenceDiagram
 
 ---
 
-## 9. Known Issues & Workarounds
+## 9. Monitoring
+
+| Component | Detail |
+|-----------|--------|
+| Container Insights | EKS addon `amazon-cloudwatch-observability`; CloudWatch Agent DaemonSet 收集 node/pod metrics + container logs |
+| CloudWatch Alarm | 監控 pod restart count，超過閾值觸發 SNS notification |
+| SNS Topic | 接收 alarm，可串接 email / Slack / PagerDuty |
+| KEDA | Scale-to-zero support（optional，預設 disabled） |
+
+---
+
+## 10. Known Issues & Workarounds
 
 ### @smithy/credential-provider-imds Pod Identity Bug
 

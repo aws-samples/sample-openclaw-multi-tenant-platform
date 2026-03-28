@@ -1,16 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TENANT="${1:?Usage: $0 <tenant-name> [cluster-name] [region]}"
-CLUSTER="${2:-openclaw-cluster}"
-REGION="${3:-us-west-2}"
+usage() {
+  echo "Usage: $0 <tenant-name> [--values <file>] [--cluster <name>] [--region <region>]"
+  exit 1
+}
+
+TENANT="" VALUES_FILE="" CLUSTER="openclaw-cluster" REGION="us-west-2"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --values) VALUES_FILE="$2"; shift 2 ;;
+    --cluster) CLUSTER="$2"; shift 2 ;;
+    --region) REGION="$2"; shift 2 ;;
+    --help|-h) usage ;;
+    -*) echo "Unknown option: $1"; usage ;;
+    *) TENANT="$1"; shift ;;
+  esac
+done
+
+[[ -z "$TENANT" ]] && usage
+
 NAMESPACE="openclaw-${TENANT}"
 RELEASE="openclaw-${TENANT}"
 SECRET_ID="openclaw/${TENANT}/gateway-token"
 ROLE_ARN="${OPENCLAW_TENANT_ROLE_ARN:?Set OPENCLAW_TENANT_ROLE_ARN env var}"
-CHART_DIR="$(cd "$(dirname "$0")/.." && pwd)/helm/charts/openclaw-platform"
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+CHART_DIR="${REPO_DIR}/helm/charts/openclaw-platform"
+TEMPLATE="${REPO_DIR}/helm/tenants/values-template.yaml"
+TENANT_VALUES="${REPO_DIR}/helm/tenants/values-${TENANT}.yaml"
 
 echo "==> Creating tenant: ${TENANT}"
+
+# 0. Generate tenant values from template
+if [[ -z "$VALUES_FILE" ]]; then
+  echo "  → Generating ${TENANT_VALUES} from template"
+  sed "s/{{TENANT}}/${TENANT}/g" "${TEMPLATE}" > "${TENANT_VALUES}"
+  VALUES_FILE="${TENANT_VALUES}"
+fi
 
 # 1. Generate random gateway token
 TOKEN=$(openssl rand -base64 32 | tr -dc 'a-zA-Z0-9' | head -c 32)
@@ -39,9 +66,7 @@ echo "  → Helm installing ${RELEASE}"
 helm install "${RELEASE}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
-  --set "tenant.name=${TENANT}" \
-  --set "ingress.host=${TENANT}.openclaw.example.com" \
-  --set "fullnameOverride=openclaw-${TENANT}" \
+  -f "${VALUES_FILE}" \
   --wait --timeout 120s
 
 # 5. Wait for pod Ready
@@ -60,5 +85,5 @@ echo "  Namespace:  ${NAMESPACE}"
 echo "  Release:    ${RELEASE}"
 echo "  Pod:        ${POD}"
 echo "  Secret:     ${SECRET_ID}"
-echo "  Ingress:    ${TENANT}.openclaw.example.com"
+echo "  Values:     ${VALUES_FILE}"
 echo "======================"

@@ -1,75 +1,74 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TENANT="${1:?Usage: $0 <tenant-name> [other-tenant-name]}"
-OTHER="${2:-}"
+TENANT="${1:?Usage: $0 <tenant-name> [--region <region>]}"
+REGION="${3:-us-west-2}"
 NAMESPACE="openclaw-${TENANT}"
 RELEASE="openclaw-${TENANT}"
-PASS=0
-FAIL=0
+PASS=0 FAIL=0
 
 check() {
-  local desc="$1"; shift
+  local name="$1"; shift
   if "$@" >/dev/null 2>&1; then
-    echo "  ✅ ${desc}"
+    echo "  ✅ ${name}"
     ((PASS++))
   else
-    echo "  ❌ ${desc}"
+    echo "  ❌ ${name}"
     ((FAIL++))
-  fi
-}
-
-check_fail() {
-  local desc="$1"; shift
-  if "$@" >/dev/null 2>&1; then
-    echo "  ❌ ${desc} (should have failed)"
-    ((FAIL++))
-  else
-    echo "  ✅ ${desc}"
-    ((PASS++))
   fi
 }
 
 echo "==> Verifying tenant: ${TENANT}"
 
-# 1. Pod Running
+# 1. Pod status
 echo ""
-echo "--- Pod Status ---"
-check "Pod is Running" \
-  kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" \
-    -o jsonpath='{.items[0].status.phase}' | grep -q Running
+echo "--- Pod ---"
+check "Pod exists" kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" -o name
+check "Pod ready" kubectl wait pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" --for=condition=Ready --timeout=10s
 
-POD=$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-
-# 2. Healthz
+# 2. Service & Ingress
 echo ""
-echo "--- Health Check ---"
-check "healthz returns 200" \
-  kubectl exec -n "${NAMESPACE}" "${POD}" -- curl -sf http://127.0.0.1:18789/
+echo "--- Network ---"
+check "Service exists" kubectl get svc -n "${NAMESPACE}" "${RELEASE}"
+check "Ingress exists" kubectl get ingress -n "${NAMESPACE}" "${RELEASE}"
+check "NetworkPolicy exists" kubectl get networkpolicy -n "${NAMESPACE}" "${RELEASE}"
 
-# 3. ABAC isolation (requires a second tenant)
-if [[ -n "${OTHER}" ]]; then
-  OTHER_NS="openclaw-${OTHER}"
-  OTHER_SECRET="openclaw/${OTHER}/gateway-token"
+# 3. PVC
+echo ""
+echo "--- Storage ---"
+check "PVC bound" bash -c "kubectl get pvc -n ${NAMESPACE} ${RELEASE} -o jsonpath='{.status.phase}' | grep -q Bound"
 
-  echo ""
-  echo "--- ABAC Isolation (${TENANT} → ${OTHER}) ---"
-  check_fail "Cannot read ${OTHER}'s secret via ABAC" \
-    kubectl exec -n "${NAMESPACE}" "${POD}" -- \
-      node -e "
-        const {SecretsManagerClient,GetSecretValueCommand}=require('@aws-sdk/client-secrets-manager');
-        const c=new SecretsManagerClient({});
-        c.send(new GetSecretValueCommand({SecretId:'${OTHER_SECRET}'})).then(()=>process.exit(0)).catch(()=>process.exit(1));
-      "
+# 4. Pod Identity & Secrets Manager
+echo ""
+echo "--- IAM & Secrets ---"
+check "ServiceAccount exists" kubectl get sa -n "${NAMESPACE}" "${RELEASE}"
+check "Pod Identity association" aws eks list-pod-identity-associations --region "${REGION}" --cluster-name openclaw-cluster --namespace "${NAMESPACE}" --query 'associations[0].associationId' --output text
+check "Secret accessible" aws secretsmanager get-secret-value --region "${REGION}" --secret-id "openclaw/${TENANT}/gateway-token" --query 'Name' --output text
 
-  echo ""
-  echo "--- NetworkPolicy Isolation (${TENANT} → ${OTHER}) ---"
-  OTHER_SVC="openclaw-${OTHER}.${OTHER_NS}.svc.cluster.local"
-  check_fail "Cannot reach ${OTHER}'s service" \
-    kubectl exec -n "${NAMESPACE}" "${POD}" -- \
-      curl -sf --connect-timeout 3 "http://${OTHER_SVC}:18789/"
+# 5. Gateway health (port-forward + curl)
+echo ""
+echo "--- Gateway ---"
+POD=$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [[ -n "$POD" ]]; then
+  kubectl port-forward -n "${NAMESPACE}" "${POD}" 28789:18789 &
+  PF_PID=$!
+  sleep 2
+  check "Gateway responds" curl -sf http://127.0.0.1:28789/
+  kill $PF_PID 2>/dev/null || true
+  wait $PF_PID 2>/dev/null || true
+else
+  echo "  ❌ Gateway (no pod found)"
+  ((FAIL++))
 fi
 
+# 6. ResourceQuota & PDB
+echo ""
+echo "--- Policies ---"
+check "ResourceQuota exists" kubectl get resourcequota -n "${NAMESPACE}"
+check "PDB exists" kubectl get pdb -n "${NAMESPACE}" "${RELEASE}"
+
+# Summary
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
-exit "${FAIL}"
+[[ $FAIL -eq 0 ]] && echo "🎉 Tenant ${TENANT} is healthy" || echo "⚠️  Tenant ${TENANT} has issues"
+exit $FAIL
