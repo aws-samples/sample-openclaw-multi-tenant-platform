@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-updater
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: image-updater
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: image-updater
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: image-updater
+subjects:
+  - kind: ServiceAccount
+    name: image-updater
+    namespace: kube-system
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openclaw-image-updater
+  namespace: kube-system
+spec:
+  schedule: "0 */6 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: image-updater
+          restartPolicy: Never
+          containers:
+            - name: updater
+              image: bitnami/kubectl:latest
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -e
+                  REPO="ghcr.io/openclaw/openclaw"
+                  
+                  # Get current image from any openclaw deployment
+                  CURRENT=$(kubectl get deploy -A -l app.kubernetes.io/name=openclaw-helm \
+                    -o jsonpath='{.items[0].spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+                  
+                  if [ -z "$CURRENT" ]; then
+                    echo "No openclaw deployments found"
+                    exit 0
+                  fi
+                  
+                  CURRENT_TAG="${CURRENT##*:}"
+                  echo "Current: $CURRENT_TAG"
+                  
+                  # Check latest tag from registry (via crane or skopeo if available)
+                  # Fallback: just log current state
+                  echo "To update all tenants to a new tag:"
+                  echo "  kubectl set image deploy -l app.kubernetes.io/name=openclaw-helm \\"
+                  echo "    --all-namespaces main=${REPO}:<new-tag>"

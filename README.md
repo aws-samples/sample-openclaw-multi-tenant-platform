@@ -17,8 +17,9 @@ User → Browser → Cognito Login → ALB (HTTPS, *.claw.snese.net)
 
 ```
 EKS Cluster (CDK, us-west-2)
-│  Managed Node Group + Karpenter
+│  Managed Node Group (t4g.medium Graviton) + Karpenter (arm64 spot)
 │  Add-ons: ALB Controller, EBS CSI, Pod Identity Agent, CloudWatch Container Insights
+│  Optional: KEDA HTTP Add-on (scale-to-zero)
 │
 ├── namespace: openclaw-{tenant}
 │   ├── ServiceAccount + Pod Identity → shared IAM Role (ABAC)
@@ -90,9 +91,20 @@ aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster --profile <
 ## Tenant Management
 
 ```bash
-./scripts/create-tenant.sh <name>    # Create tenant
-./scripts/delete-tenant.sh <name>    # Delete tenant
-./scripts/verify-tenant.sh <name>    # Verify health + credentials
+./scripts/create-tenant.sh <name>              # Create tenant (supports --display-name --emoji)
+./scripts/delete-tenant.sh <name>              # Delete tenant
+./scripts/verify-tenant.sh <name>              # Verify health + credentials
+./scripts/check-all-tenants.sh                 # Health check all tenants
+```
+
+## Operations
+
+```bash
+./scripts/setup-cognito-branding.sh            # Cognito hosted UI branding (CSS + logo)
+./scripts/setup-alerts.sh <email>              # Subscribe to CloudWatch alerts via SNS
+./scripts/setup-keda.sh                        # Install KEDA for scale-to-zero
+./scripts/setup-image-update.sh                # Install image auto-update CronJob
+./scripts/upload-error-page.sh <s3-bucket>     # Upload custom 503 page for scale-to-zero
 ```
 
 ## Known Issues
@@ -106,33 +118,61 @@ OpenClaw's bundled `@smithy/credential-provider-imds` has `GREENGRASS_HOSTS` tha
 | Resource | Monthly Cost |
 |----------|-------------|
 | EKS control plane | ~$73 |
-| EC2 (2x t3.medium) | ~$60 |
+| EC2 (2x t4g.medium Graviton) | ~$48 |
 | EBS (3x 10Gi gp3) | ~$2.40 |
 | ALB | ~$16 |
-| NAT Gateway | ~$32 |
+| NAT Gateway (x2 HA) | ~$64 |
 | Bedrock (usage-based) | varies |
 | CloudWatch (Container Insights) | ~$10-15 |
-| **Total (infra only)** | **~$194-199/mo** |
+| **Total (infra only)** | **~$214-219/mo** |
+
+> With KEDA scale-to-zero enabled and ~70% idle time, EC2 cost drops to ~$15, saving ~$33/mo.
 
 ## Project Structure
 
 ```
-├── cdk/                          # CDK stack (EKS + IAM + Cognito/ACM/Route53 imports)
-├── docs/architecture.md          # Full architecture diagrams (Mermaid + ASCII)
-├── helm/charts/openclaw-platform # Extended OpenClaw Helm chart
-│   ├── templates/
-│   │   ├── deployment.yaml       # Pod spec with init containers + smithy patch
-│   │   ├── configmap.yaml        # openclaw.json (dynamic allowedOrigins) + fetch-secret.mjs
-│   │   ├── ingress.yaml          # ALB + Cognito auth annotations
-│   │   ├── networkpolicy.yaml    # Egress whitelist + cross-tenant deny
-│   │   └── resourcequota.yaml
-│   └── values.yaml               # Models, security hardening, tool policy
+├── cdk/                          # CDK stacks (VPC + EKS + IAM + Cognito/ACM/Route53)
+├── docs/
+│   ├── architecture.md           # Full architecture diagrams (Mermaid + ASCII)
+│   ├── scale-to-zero.md          # KEDA HTTP Add-on design
+│   ├── image-update.md           # Auto image update strategy
+│   ├── self-service-signup.md    # Cognito self-service signup design
+│   └── usage-tracking.md         # Per-tenant Bedrock usage tracking
+├── helm/
+│   ├── charts/openclaw-platform/ # Extended OpenClaw Helm chart
+│   │   ├── templates/
+│   │   │   ├── deployment.yaml       # Pod spec with init containers + smithy patch
+│   │   │   ├── configmap.yaml        # openclaw.json + fetch-secret.mjs
+│   │   │   ├── ingress.yaml          # ALB + Cognito auth + session timeout
+│   │   │   ├── networkpolicy.yaml    # Egress whitelist + cross-tenant deny
+│   │   │   ├── httpscaledobject.yaml # KEDA scale-to-zero (disabled by default)
+│   │   │   └── resourcequota.yaml
+│   │   ├── static/503.html           # Custom error page for scale-to-zero
+│   │   └── values.yaml               # Models, security, tool policy
+│   └── tenants/
+│       └── values-template.yaml      # Per-tenant values template
 ├── scripts/
 │   ├── create-tenant.sh          # SM secret + Pod Identity + helm install
-│   ├── delete-tenant.sh
-│   └── verify-tenant.sh
+│   ├── delete-tenant.sh          # Remove tenant
+│   ├── verify-tenant.sh          # Verify health + credentials
+│   ├── check-all-tenants.sh      # Batch health check
+│   ├── setup-cognito-branding.sh # Cognito UI branding
+│   ├── setup-alerts.sh           # SNS alert subscription
+│   ├── setup-keda.sh             # KEDA installation
+│   ├── setup-image-update.sh     # Image update CronJob
+│   └── upload-error-page.sh      # S3 error page upload
 └── README.md
 ```
+
+## Design Docs
+
+| Document | Description |
+|----------|-------------|
+| [docs/architecture.md](docs/architecture.md) | Full architecture diagrams (Mermaid + ASCII) |
+| [docs/scale-to-zero.md](docs/scale-to-zero.md) | KEDA HTTP Add-on scale-to-zero design |
+| [docs/image-update.md](docs/image-update.md) | Auto image update strategy comparison |
+| [docs/self-service-signup.md](docs/self-service-signup.md) | Cognito self-service signup + HC approval |
+| [docs/usage-tracking.md](docs/usage-tracking.md) | Per-tenant Bedrock usage tracking + cost split |
 
 ## Based On
 
