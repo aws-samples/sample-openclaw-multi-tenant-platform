@@ -78,7 +78,7 @@ config:
     fs:
       workspaceOnly: true
     exec:
-      security: ask
+      security: deny
     elevated:
       enabled: false
     web:
@@ -153,14 +153,6 @@ config:
     consoleLevel: info
     consoleStyle: compact
     redactSensitive: tools
-  
-  tools:
-    profile: full
-    web:
-      search:
-        enabled: false
-      fetch:
-        enabled: true
 
   secrets:
     providers:
@@ -194,7 +186,7 @@ fetchSecret: |
   #!/usr/bin/env node
   import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
   const input = JSON.parse(await new Response(process.stdin).text());
-  const sm = new SecretsManagerClient({});
+  const sm = new SecretsManagerClient({ region: process.env.AWS_REGION });
   const ns = process.env.TENANT_NAMESPACE;
   const result = {};
   for (const id of input.ids) {

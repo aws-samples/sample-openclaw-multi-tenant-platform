@@ -9,11 +9,50 @@ spec:
   podSelector: {}
   policyTypes:
     - Ingress
+    - Egress
   ingress:
+    # Same namespace
     - from:
         - podSelector: {}
+    # kube-system (ALB health checks)
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # EKS Pod Identity Agent (link-local)
+    - to:
+        - ipBlock:
+            cidr: 169.254.170.23/32
+      ports:
+        - protocol: TCP
+          port: 80
+    # IMDS (EC2 metadata — needed by some SDK operations)
+    - to:
+        - ipBlock:
+            cidr: 169.254.169.254/32
+      ports:
+        - protocol: TCP
+          port: 80
+    # HTTPS outbound (Bedrock, Secrets Manager, container registry, npm)
+    # Block cross-tenant pod traffic via 10.0.0.0/8 except
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 443
+    # Same namespace
+    - to:
+        - podSelector: {}
 {{- end }}

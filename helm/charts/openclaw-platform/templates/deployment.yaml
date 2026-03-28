@@ -88,8 +88,18 @@ spec:
           - |
             mkdir -p /home/node/.openclaw/workspace/bin
             if [ ! -f /home/node/.openclaw/workspace/node_modules/@aws-sdk/client-secrets-manager/dist-cjs/index.js ]; then
-              cd /home/node/.openclaw/workspace && npm install --save=false @aws-sdk/client-secrets-manager 2>/dev/null
+              cd /home/node/.openclaw/workspace && npm install --no-save @aws-sdk/client-secrets-manager 2>/dev/null
             fi
+            # Patch @smithy/credential-provider-imds: add EKS Pod Identity Agent IP (169.254.170.23)
+            # to GREENGRASS_HOSTS. Without this, fromContainerMetadata rejects the Pod Identity endpoint.
+            # Applied to both workspace (for fetch-secret.mjs) and /app (for OpenClaw's Bedrock client).
+            for IMDS_FILE in \
+              /home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js \
+              /app/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js; do
+              if [ -f "$IMDS_FILE" ] && ! grep -q "169.254.170.23" "$IMDS_FILE"; then
+                sed -i 's/"127.0.0.1": true,/"127.0.0.1": true, "169.254.170.23": true,/' "$IMDS_FILE"
+              fi
+            done
             cp /config/fetch-secret.mjs /home/node/.openclaw/workspace/bin/fetch-secret.mjs
             chmod 700 /home/node/.openclaw/workspace/bin/fetch-secret.mjs
         volumeMounts:
