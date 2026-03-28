@@ -72,6 +72,9 @@ aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster --profile <
 
 # 4. Access via browser
 # https://alice.claw.snese.net → Cognito login → OpenClaw Control UI
+
+# 5. (Optional) Enable self-service signup
+./scripts/setup-signup-triggers.sh
 ```
 
 ## CDK Stack Outputs
@@ -87,11 +90,15 @@ aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster --profile <
 | CognitoClientId | Cognito App Client ID |
 | CognitoDomain | Cognito hosted UI domain |
 | KubeconfigCommand | `aws eks update-kubeconfig ...` |
+| ErrorPagesBucket | S3 bucket for custom error pages |
+| PreSignupFnArn | Pre-signup Lambda ARN |
+| PostConfirmFnArn | Post-confirmation Lambda ARN |
+| EbsSnapshotRoleArn | IAM role for PVC backup |
 
 ## Tenant Management
 
 ```bash
-./scripts/create-tenant.sh <name>              # Create tenant (supports --display-name --emoji)
+./scripts/create-tenant.sh <name>              # Create tenant (supports --display-name --emoji --skills)
 ./scripts/delete-tenant.sh <name>              # Delete tenant
 ./scripts/verify-tenant.sh <name>              # Verify health + credentials
 ./scripts/check-all-tenants.sh                 # Health check all tenants
@@ -105,6 +112,10 @@ aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster --profile <
 ./scripts/setup-keda.sh                        # Install KEDA for scale-to-zero
 ./scripts/setup-image-update.sh                # Install image auto-update CronJob
 ./scripts/upload-error-page.sh <s3-bucket>     # Upload custom 503 page for scale-to-zero
+./scripts/setup-signup-triggers.sh             # Attach Cognito Lambda triggers
+./scripts/setup-pvc-backup.sh                  # Install daily PVC backup CronJob
+./scripts/setup-usage-tracking.sh              # CloudWatch usage metrics + dashboard
+./scripts/usage-report.sh                      # Monthly per-tenant cost report
 ```
 
 ## Known Issues
@@ -132,6 +143,7 @@ OpenClaw's bundled `@smithy/credential-provider-imds` has `GREENGRASS_HOSTS` tha
 
 ```
 ├── cdk/                          # CDK stacks (VPC + EKS + IAM + Cognito/ACM/Route53)
+│   └── lambda/                   # Cognito trigger Lambda functions
 ├── docs/
 │   ├── architecture.md           # Full architecture diagrams (Mermaid + ASCII)
 │   ├── scale-to-zero.md          # KEDA HTTP Add-on design
@@ -160,7 +172,11 @@ OpenClaw's bundled `@smithy/credential-provider-imds` has `GREENGRASS_HOSTS` tha
 │   ├── setup-alerts.sh           # SNS alert subscription
 │   ├── setup-keda.sh             # KEDA installation
 │   ├── setup-image-update.sh     # Image update CronJob
-│   └── upload-error-page.sh      # S3 error page upload
+│   ├── upload-error-page.sh      # S3 error page upload
+│   ├── setup-signup-triggers.sh  # Cognito Lambda triggers
+│   ├── setup-pvc-backup.sh       # Daily PVC backup CronJob
+│   ├── setup-usage-tracking.sh   # CloudWatch usage metrics + dashboard
+│   └── usage-report.sh           # Monthly per-tenant cost report
 └── README.md
 ```
 

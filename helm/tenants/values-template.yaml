@@ -25,6 +25,9 @@ config:
           name: "{{TENANT_DISPLAY_NAME}}"
           emoji: "{{TENANT_EMOJI}}"
 
+skills:
+{{SKILLS_YAML}}
+
 # --- Override per tenant as needed ---
 # resources:
 #   limits:

@@ -12,20 +12,26 @@
                           ┌─────────────────────────────────────────────────────────┐
                           │                      AWS (us-west-2)                    │
                           │                                                         │
-User ──► Browser ──► Cognito Login ──► ALB (HTTPS, *.claw.snese.net)               │
-                                        │                                           │
-                                        ▼                                           │
-                                  EKS Pod (OpenClaw Gateway, trusted-proxy mode)    │
-                                        │                                           │
-                          ┌─────────────┼─────────────────┐                         │
-                          ▼             ▼                  ▼                         │
-                     Bedrock       Secrets Manager    AgentCore Browser              │
-                    (LLM, Pod     (exec SecretRef,    (web browsing)                │
-                     Identity)     ABAC)                                            │
-                                                                                    │
-                          CloudWatch Container Insights ◄── EKS metrics/logs        │
-                                        │                                           │
-                                   SNS Topic ──► Alarm notifications                │
+User ──► Browser ──► Cognito ──┬──► ALB (HTTPS, *.claw.snese.net)                  │
+                          │    │                │                                    │
+                          │    │                ▼                                    │
+                          │    │          EKS Pod (OpenClaw Gateway, trusted-proxy)  │
+                          │    │                │                                    │
+                          │    │    ┌───────────┼─────────────────┐                  │
+                          │    │    ▼           ▼                 ▼                  │
+                          │    │ Bedrock    Secrets Manager  AgentCore Browser       │
+                          │    │(LLM, Pod  (exec SecretRef,  (web browsing)         │
+                          │    │ Identity)  ABAC)                                   │
+                          │    │                ▲                                    │
+                          │    │  Lambda Triggers                                   │
+                          │    ├──► Pre-signup ──► validate email domain             │
+                          │    └──► Post-confirmation ──► SM + Pod Identity + Helm  │
+                          │                                                         │
+                          │    S3 ErrorPagesBucket ──► signup error pages            │
+                          │                                                         │
+                          │    CloudWatch Container Insights ◄── EKS metrics/logs   │
+                          │                    │                                     │
+                          │               SNS Topic ──► Alarm notifications          │
                           └─────────────────────────────────────────────────────────┘
 ```
 
@@ -50,6 +56,15 @@ graph TB
     subgraph Cognito
         CUP[Cognito User Pool<br/>openclaw-users]
         CUP_Client[App Client<br/>ALB Integration]
+    end
+
+    subgraph LambdaTriggers["Lambda Triggers"]
+        PreSignupFn[Pre-signup Lambda<br/>email domain validation]
+        PostConfirmFn[Post-confirmation Lambda<br/>tenant provisioning]
+    end
+
+    subgraph S3
+        ErrorPages[S3 ErrorPagesBucket<br/>signup error pages]
     end
 
     subgraph VPC["VPC (10.0.0.0/16)"]
@@ -87,6 +102,7 @@ graph TB
         EBSCSI[EBS CSI Driver Role]
         KarpRole[Karpenter Role]
         LBCRole[LB Controller Role]
+        EBSSnapRole[EBS Snapshot Role<br/>PVC backup CronJob]
     end
 
     subgraph SecretsManager["Secrets Manager"]
@@ -109,6 +125,10 @@ graph TB
     Cert -.-> ALB
     ALB --> CUP
     CUP --> CUP_Client
+    CUP --> PreSignupFn
+    CUP --> PostConfirmFn
+    PostConfirmFn --> SecretsManager
+    PostConfirmFn --> EKS
     ALB --> EKS
     PubSub1 --- NAT1
     NAT1 --- PrivSub1
@@ -322,7 +342,51 @@ sequenceDiagram
 
 ---
 
-## 8. Security Layers
+## 8. Self-Service Signup Flow
+
+```
+User ──► Cognito Hosted UI ──► Pre-signup Lambda
+                                    │
+                          ┌─────────┴─────────┐
+                          ▼                    ▼
+                    Email domain OK       Domain rejected
+                    (auto-confirm)        (→ S3 error page)
+                          │
+                          ▼
+                    HC approves user
+                    (Cognito confirm)
+                          │
+                          ▼
+                    Post-confirmation Lambda
+                          │
+                    ┌─────┼──────────────┐
+                    ▼     ▼              ▼
+                SM secret  Pod Identity   Helm install
+                (tenant)   association    (openclaw-<tenant>)
+                          │
+                          ▼
+                    Tenant ready at
+                    <tenant>.claw.snese.net
+```
+
+Lambda source: `cdk/lambda/pre-signup/index.py`, `cdk/lambda/post-confirmation/index.py`
+Setup script: `scripts/setup-signup-triggers.sh`
+
+---
+
+## 9. PVC Backup
+
+| Item | Detail |
+|------|--------|
+| Mechanism | CronJob creates EBS snapshots via AWS API |
+| Schedule | Daily |
+| Retention | 7 days (older snapshots auto-deleted) |
+| IAM | `EBSSnapshotRole` with Pod Identity |
+| Config | `scripts/pvc-backup-cronjob.yaml`, `scripts/setup-pvc-backup.sh` |
+
+---
+
+## 10. Security Layers
 
 ```
 ┌──────────────┬──────────────────────────────────────────────────────────────┐
@@ -357,7 +421,7 @@ sequenceDiagram
 
 ---
 
-## 9. Monitoring
+## 11. Monitoring
 
 | Component | Detail |
 |-----------|--------|
@@ -368,7 +432,7 @@ sequenceDiagram
 
 ---
 
-## 10. Known Issues & Workarounds
+## 12. Known Issues & Workarounds
 
 ### @smithy/credential-provider-imds Pod Identity Bug
 

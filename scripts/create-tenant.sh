@@ -2,12 +2,12 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <tenant-name> [--values <file>] [--cluster <name>] [--region <region>]"
+  echo "Usage: $0 <tenant-name> [--values <file>] [--cluster <name>] [--region <region>] [--skills <s1,s2,...>]"
   exit 1
 }
 
 TENANT="" VALUES_FILE="" CLUSTER="openclaw-cluster" REGION="us-west-2"
-DISPLAY_NAME="OpenClaw" EMOJI="🦞"
+DISPLAY_NAME="OpenClaw" EMOJI="🦞" SKILLS="weather,gog"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -16,6 +16,7 @@ while [[ $# -gt 0 ]]; do
     --region) REGION="$2"; shift 2 ;;
     --display-name) DISPLAY_NAME="$2"; shift 2 ;;
     --emoji) EMOJI="$2"; shift 2 ;;
+    --skills) SKILLS="$2"; shift 2 ;;
     --help|-h) usage ;;
     -*) echo "Unknown option: $1"; usage ;;
     *) TENANT="$1"; shift ;;
@@ -38,10 +39,15 @@ echo "==> Creating tenant: ${TENANT}"
 # 0. Generate tenant values from template
 if [[ -z "$VALUES_FILE" ]]; then
   echo "  → Generating ${TENANT_VALUES} from template"
+  # Convert comma-separated skills to YAML list
+  SKILLS_YAML=$(IFS=','; for s in ${SKILLS}; do echo "  - ${s}"; done)
   sed -e "s/{{TENANT}}/${TENANT}/g" \
       -e "s/{{TENANT_DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
       -e "s/{{TENANT_EMOJI}}/${EMOJI}/g" \
       "${TEMPLATE}" > "${TENANT_VALUES}"
+  # Replace multiline placeholder with actual YAML list
+  SKILLS_ESCAPED=$(echo "${SKILLS_YAML}" | sed 's/[&/\]/\\&/g; $!s/$/\\/')
+  sed -i "s/{{SKILLS_YAML}}/${SKILLS_ESCAPED}/" "${TENANT_VALUES}"
   VALUES_FILE="${TENANT_VALUES}"
 fi
 
