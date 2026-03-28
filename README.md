@@ -64,29 +64,93 @@ Full architecture diagrams: [`docs/architecture.md`](docs/architecture.md)
 
 ## Quick Start
 
+### 1. Prerequisites Setup
+
+Before deploying, you need:
+- An AWS account with SSO configured
+- A Route53 hosted zone for your domain
+- An ACM certificate covering both `your-domain.com` and `*.your-domain.com`
+- A Cognito User Pool with an App Client (OAuth 2.0 code grant, openid/email/profile scopes)
+
+### 2. Configure CDK Context
+
+Edit `cdk/cdk.json` and fill in your values:
+
+```json
+{
+  "context": {
+    "hostedZoneId": "Z0123456789ABCDEFGHIJ",
+    "zoneName": "your-domain.com",
+    "certificateArn": "arn:aws:acm:us-west-2:123456789012:certificate/abc-123",
+    "cognitoPoolId": "us-west-2_AbCdEfGhI",
+    "cognitoClientId": "1234567890abcdef",
+    "cognitoDomain": "your-app-name",
+    "allowedEmailDomains": "your-company.com",
+    "githubOwner": "your-org",
+    "githubRepo": "openclaw-platform",
+    "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role"
+  }
+}
+```
+
+### 3. Deploy Infrastructure
+
 ```bash
-# 1. Deploy EKS cluster + infra (~15-20 min)
 cd cdk && npm install
-npx cdk deploy -c ssoRoleArn=<your-sso-role-arn> --profile <profile>
+npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
+```
 
-# 2. Configure kubectl
-aws eks update-kubeconfig --region <region> --name openclaw-cluster --profile <profile>
+This creates: EKS cluster, VPC, IAM roles, Lambda functions, S3 bucket, CloudWatch monitoring, SNS alerts, and CodeBuild project. Takes ~15-20 minutes.
 
-# 3. Install KEDA (scale-to-zero)
+### 4. Post-Deploy Setup
+
+```bash
+# Configure kubectl
+aws eks update-kubeconfig --region us-west-2 --name openclaw-cluster
+
+# Install KEDA (scale-to-zero)
 ./scripts/setup-keda.sh
 
-# 4. Create a tenant
-./scripts/create-tenant.sh alice
-
-# 5. (Optional) Enable self-service signup
-./scripts/setup-signup-triggers.sh
-
-# 6. (Optional) Brand the Cognito login page
+# Brand the Cognito login page
 ./scripts/setup-cognito-branding.sh
 
-# 7. Access via browser
-# https://alice.your-domain.com → Cognito login → OpenClaw Control UI
+# Attach Cognito Lambda triggers (self-service signup)
+./scripts/setup-signup-triggers.sh
+
+# Subscribe to alerts
+./scripts/setup-alerts.sh your-email@company.com
+
+# Install backup and auto-update CronJobs
+./scripts/setup-pvc-backup.sh
+./scripts/setup-image-update.sh
+
+# Set up usage tracking dashboard
+./scripts/setup-usage-tracking.sh
 ```
+
+### 5. Create Your First Tenant
+
+```bash
+./scripts/create-tenant.sh alice --display-name "Alice" --emoji "🤖"
+```
+
+### 6. Deploy Landing Page
+
+Create an Ingress for your root domain. See `scripts/landing-ingress.yaml` as a template — replace placeholders with your actual domain, certificate ARN, and Cognito URLs.
+
+```bash
+# Edit the template with your values, then:
+kubectl apply -f scripts/landing-ingress.yaml
+```
+
+### 7. Add Cognito Callback URL
+
+Add `https://your-domain.com/oauth2/idpresponse` to your Cognito App Client's callback URLs. Each tenant also needs `https://<tenant>.your-domain.com/oauth2/idpresponse`.
+
+### 8. Access
+
+- Landing page: `https://your-domain.com`
+- Tenant: `https://alice.your-domain.com` → Cognito login → OpenClaw Control UI
 
 ## CDK Stack Outputs
 
