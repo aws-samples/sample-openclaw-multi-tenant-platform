@@ -18,6 +18,13 @@ spec:
       initContainers:
       - name: init-config
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        resources:
+          limits:
+            cpu: 500m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
         command:
         - sh
         - -c
@@ -34,6 +41,13 @@ spec:
       
       - name: init-skills
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 200m
+            memory: 256Mi
         command:
         - sh
         - -c
@@ -58,6 +72,13 @@ spec:
 
       - name: init-tools
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 200m
+            memory: 256Mi
         command: ["sh", "-c"]
         args:
           - |

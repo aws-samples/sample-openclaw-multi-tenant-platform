@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TENANT="${1:?Usage: $0 <tenant-name> [cluster-name] [region]}"
-CLUSTER="${2:-openclaw-platform}"
+CLUSTER="${2:-openclaw-cluster}"
 REGION="${3:-us-west-2}"
 NAMESPACE="openclaw-${TENANT}"
 RELEASE="openclaw-${TENANT}"
