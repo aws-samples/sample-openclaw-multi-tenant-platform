@@ -17,7 +17,7 @@ END=$(date -d "${MONTH}-01 +1 month" +%s 2>/dev/null || date -v+1m -jf "%Y-%m-%d
 
 QUERY='stats sum(input_tokens) as input_tok, sum(output_tokens) as output_tok by kubernetes.namespace_name as ns'
 
-echo "🔍 查詢 $MONTH usage（${LOG_GROUP}）..."
+echo "🔍 Querying $MONTH usage (${LOG_GROUP})..."
 QID=$(aws logs start-query --region "$REGION" \
   --log-group-name "$LOG_GROUP" \
   --start-time "$START" --end-time "$END" \

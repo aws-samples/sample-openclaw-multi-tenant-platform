@@ -1,108 +1,93 @@
-# Scale to Zero：KEDA HTTP Add-on
+# Scale to Zero: KEDA HTTP Add-on
 
-## 目標
+## Goal
 
-Idle tenant pod 自動 scale to 0，有 HTTP request 進來時 30 秒內 scale to 1。
-降低多租戶環境中閒置 pod 的運算成本。
+Automatically scale idle tenant pods to 0 replicas. When an HTTP request arrives, scale back to 1 within 15-30 seconds. This reduces compute cost for multi-tenant environments where most users are not active 24/7.
 
-## 方案
+## How It Works
 
-使用 [KEDA HTTP Add-on](https://github.com/kedacore/http-add-on)（不是 KEDA core 的 HTTP scaler）。
+[KEDA HTTP Add-on](https://github.com/kedacore/http-add-on) provides an interceptor proxy that sits between the ALB and the tenant pod. When the pod is scaled to 0, the interceptor holds incoming requests, triggers a scale-up, and forwards the request once the pod is ready.
 
-HTTP Add-on 提供獨立的 interceptor proxy，能在 pod 數量為 0 時攔截並暫存 request，
-等 pod 啟動後再轉發，實現真正的 scale-to-zero。
+**This is different from KEDA core's HTTP scaler.** The HTTP Add-on includes its own interceptor proxy that can buffer requests while pods are starting.
 
-## 架構
+## Architecture
 
 ```
                     ┌─────────────────────────────────────────────┐
                     │                  Kubernetes                  │
                     │                                             │
   Client ──► ALB ──┼──► KEDA HTTP Interceptor Proxy ──► Pod      │
-             (host │       (攔截 request，觸發 scale)    (0 or 1) │
+             (host │       (holds request, triggers scale)  (0→1) │
              based │                                     │        │
              route)│                                     ▼        │
                     │                                   PVC       │
                     │                                  (gp3 10Gi) │
                     └─────────────────────────────────────────────┘
 
-流程：
-1. Pod running   → Interceptor 直接 proxy 到 Pod
-2. Pod scaled to 0 → Interceptor 暫存 request，通知 KEDA scale to 1
-3. Pod ready      → Interceptor 轉發暫存的 request
+Flow:
+1. Pod running   → Interceptor proxies directly to Pod
+2. Pod scaled to 0 → Interceptor holds request → triggers scale to 1
+3. Pod starts (~15-30s) → Interceptor forwards buffered request
+4. Pod idle 15min → KEDA scales back to 0
 ```
 
-## 安裝步驟
+## Data Persistence
+
+**PVC (EBS volume) is NOT deleted when the pod scales to 0.** KEDA only changes the Deployment replica count. The PersistentVolumeClaim remains bound to the EBS volume. When the pod scales back up, it mounts the same PVC with all data intact.
+
+## Installation
 
 ```bash
-# 1. 安裝 KEDA core
-helm repo add kedacore https://kedacore.github.io/charts
-helm repo update
+# Install KEDA + HTTP Add-on
+./scripts/setup-keda.sh
 
-helm install keda kedacore/keda \
-  --namespace keda-system \
-  --create-namespace
-
-# 2. 安裝 HTTP Add-on
-helm install keda-http-add-on kedacore/keda-add-ons-http \
-  --namespace keda-system
+# Enable scale-to-zero for a tenant
+helm upgrade openclaw-<name> helm/charts/openclaw-platform \
+  -n openclaw-<name> --set scaleToZero.enabled=true --reuse-values
 ```
 
-## Helm Template
-
-新增 `templates/httpscaledobject.yaml`，預設 disabled。
-
-啟用方式：在 tenant 的 values override 中設定：
+## Helm Configuration
 
 ```yaml
 scaleToZero:
-  enabled: true
-```
-
-完整可調參數（values.yaml 預設值）：
-
-```yaml
-scaleToZero:
-  enabled: false
-  idleTimeout: 900    # 15 分鐘無 request 後 scale to 0
+  enabled: false    # Set to true to enable
+  idleTimeout: 900  # 15 minutes (seconds)
   minReplicas: 0
   maxReplicas: 1
 ```
 
-啟用 `scaleToZero` 時，Deployment 的 `replicas` 由 KEDA 接管，
-需確保 `autoscaling.enabled` 為 false（兩者互斥）。
+The `httpscaledobject.yaml` template creates a KEDA `HTTPScaledObject` CRD when enabled.
 
-## 設定參數
+## Cold Start Time
 
-| 參數 | 預設值 | 說明 |
-|------|--------|------|
-| `scaleToZero.enabled` | `false` | 啟用 HTTPScaledObject |
-| `scaleToZero.idleTimeout` | `900` | 無流量後幾秒 scale to 0（15 min） |
-| `scaleToZero.minReplicas` | `0` | 最小 replica 數 |
-| `scaleToZero.maxReplicas` | `1` | 最大 replica 數 |
+When a pod scales from 0 to 1, the startup time includes:
 
-## 注意事項
+| Phase | Duration |
+|-------|----------|
+| Pod scheduling | ~2s |
+| Image pull (if not cached) | ~5-15s |
+| init-config container | ~2s |
+| init-skills container | ~5-10s |
+| init-tools container | ~3-5s |
+| OpenClaw gateway startup | ~3-5s |
+| **Total** | **~15-40s** |
 
-- **PVC**：使用 ReadWriteOnce（gp3），scale to 0 時 PVC 不會被刪除，資料保留。
-  但 RWO 限制 PVC 只能 attach 到一個 node，maxReplicas 不應超過 1。
-- **Cold start 時間**：取決於 image pull（首次或 node 無 cache 時）+ 3 個 init containers
-  （init-config、init-skills、init-tools）。預估 15-30 秒（image 已 cache）到 60 秒以上（首次 pull）。
-- **Interceptor timeout**：如果 cold start 超過 interceptor 預設 timeout，
-  client 會收到 502。可調整 HTTP Add-on 的 `--wait-timeout` 參數。
-- **ALB health check**：Pod 為 0 時 ALB target 會變 unhealthy。
-  需確認 ALB Ingress 的 routing 指向 interceptor service 而非直接指向 pod service。
-- **HPA 互斥**：`scaleToZero.enabled` 和 `autoscaling.enabled` 不應同時啟用。
+After the first cold start, the image is cached on the node, reducing subsequent starts to ~15-20s.
 
-## 成本影響估算
+## Cost Impact
 
-假設 3 個 tenant，每個 pod request `cpu: 200m, memory: 512Mi`：
+With 3 tenants idle 70% of the time:
+- Without KEDA: 3 pods always running → ~$48/mo EC2
+- With KEDA: ~0.9 pods average → ~$15/mo EC2
+- **Savings: ~$33/mo (69%)**
 
-| 情境 | 平均 running pods | 月 EC2 成本（相對） |
-|------|-------------------|---------------------|
-| 無 scale-to-zero | 3 pods × 24h | 100% |
-| 平均 idle 70% | 3 × 0.3 = ~0.9 pods | **~40-50% 節省** |
+At 100 tenants with 20% concurrency:
+- Without KEDA: 100 pods → significant EC2 cost
+- With KEDA: ~20 pods peak → 80% reduction
 
-實際節省取決於：
-- 各 tenant 的使用時段分佈
-- Node 是否能因 pod 減少而被 Cluster Autoscaler 回收
-- Spot instance 使用比例
+## Notes
+
+- ALB health checks: KEDA interceptor responds to health checks even when the pod is at 0 replicas
+- PVC is `ReadWriteOnce` — only one pod can mount it at a time (maxReplicas should stay at 1)
+- HPA and HTTPScaledObject are mutually exclusive — do not enable both
+- Custom 503 error page (`static/503.html`) can be served during cold start via ALB configuration

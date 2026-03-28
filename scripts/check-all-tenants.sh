@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# 列出所有 openclaw-* namespace
+# List all openclaw-* namespaces
 NAMESPACES=$(kubectl get ns -l app.kubernetes.io/managed-by=Helm -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | grep '^openclaw-' || true)
 
 if [[ -z "$NAMESPACES" ]]; then
@@ -9,7 +9,7 @@ if [[ -z "$NAMESPACES" ]]; then
   exit 0
 fi
 
-# 表頭
+# Header
 printf "%-20s %-12s %-10s %-12s %s\n" "TENANT" "POD STATUS" "RESTARTS" "PVC USED%" "RECENT EVENT"
 printf "%-20s %-12s %-10s %-12s %s\n" "------" "----------" "--------" "---------" "------------"
 
@@ -35,13 +35,13 @@ while read -r NS; do
     PVC_USED=$(kubectl exec -n "$NS" "$POD_NAME" -- df -h /home/node/.openclaw 2>/dev/null | awk 'NR==2{print $5}' || echo "-")
   fi
 
-  # 最近 event（取最後一筆 warning，沒有就取最後一筆）
+  # Recent event (last warning, or last event if no warning)
   EVENT=$(kubectl get events -n "$NS" --sort-by='.lastTimestamp' -o custom-columns=TYPE:.type,REASON:.reason,MSG:.message --no-headers 2>/dev/null | awk '/Warning/{last=$0} END{if(last) print last}')
   if [[ -z "$EVENT" ]]; then
     EVENT=$(kubectl get events -n "$NS" --sort-by='.lastTimestamp' -o custom-columns=MSG:.message --no-headers 2>/dev/null | tail -1)
   fi
   EVENT="${EVENT:--}"
-  # 截斷過長 event
+  # Truncate long events
   [[ ${#EVENT} -gt 60 ]] && EVENT="${EVENT:0:57}..."
 
   printf "%-20s %-12s %-10s %-12s %s\n" "$TENANT" "$STATUS" "$RESTARTS" "$PVC_USED" "$EVENT"

@@ -17,4 +17,4 @@ aws sns subscribe \
   --protocol email \
   --notification-endpoint "$EMAIL"
 
-echo "✅ 已送出訂閱請求到 $EMAIL，請去信箱確認。"
+echo "✅ Subscription request sent to $EMAIL. Check your inbox to confirm."

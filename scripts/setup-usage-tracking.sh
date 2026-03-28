@@ -14,7 +14,7 @@ NAMESPACE="OpenClaw/Usage"
 TENANTS=(alice bob carol)
 
 # Step 1: Metric Filters
-echo "📊 建立 metric filters..."
+echo "📊 Creating metric filters..."
 aws logs put-metric-filter --region "$REGION" \
   --log-group-name "$LOG_GROUP" \
   --filter-name openclaw-input-tokens \
@@ -28,10 +28,10 @@ aws logs put-metric-filter --region "$REGION" \
   --filter-pattern '{ $.output_tokens = * }' \
   --metric-transformations \
     "metricName=BedrockOutputTokens,metricNamespace=$NAMESPACE,metricValue=\$.output_tokens"
-echo "✅ Metric filters 建立完成"
+echo "✅ Metric filters created"
 
 # Step 2: Dashboard
-echo "📈 建立 dashboard..."
+echo "📈 Creating dashboard..."
 WIDGETS=""
 Y=0
 for T in "${TENANTS[@]}"; do
@@ -46,4 +46,4 @@ done
 aws cloudwatch put-dashboard --region "$REGION" \
   --dashboard-name OpenClaw-Usage \
   --dashboard-body "{\"widgets\":[${WIDGETS}]}"
-echo "✅ Dashboard OpenClaw-Usage 建立完成"
+echo "✅ Dashboard OpenClaw-Usage created"

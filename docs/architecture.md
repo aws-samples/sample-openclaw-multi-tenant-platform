@@ -353,7 +353,7 @@ User ──► Cognito Hosted UI ──► Pre-signup Lambda
                     (auto-confirm)        (→ S3 error page)
                           │
                           ▼
-                    HC approves user
+                    Admin approves user
                     (Cognito confirm)
                           │
                           ▼
@@ -425,10 +425,10 @@ Setup script: `scripts/setup-signup-triggers.sh`
 
 | Component | Detail |
 |-----------|--------|
-| Container Insights | EKS addon `amazon-cloudwatch-observability`; CloudWatch Agent DaemonSet 收集 node/pod metrics + container logs |
-| CloudWatch Alarm | 監控 pod restart count，超過閾值觸發 SNS notification |
-| SNS Topic | 接收 alarm，可串接 email / Slack / PagerDuty |
-| KEDA | Scale-to-zero support（optional，預設 disabled） |
+| Container Insights | EKS addon `amazon-cloudwatch-observability`; CloudWatch Agent DaemonSet collects node and pod metrics |
+| CloudWatch Alarm | Monitors pod restart count; triggers SNS notification when threshold exceeded |
+| SNS Topic | Receives alarms; can forward to email, Slack, or PagerDuty |
+| KEDA | Scale-to-zero support (optional, disabled by default) |
 
 ---
 

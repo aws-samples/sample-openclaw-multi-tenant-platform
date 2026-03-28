@@ -1,30 +1,26 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>OpenClaw Platform</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#1a1a2e;color:#eee;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{background:#16213e;border-radius:16px;padding:3rem 2.5rem;max-width:480px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
-.emoji{font-size:4rem;margin-bottom:1rem}
-h1{font-size:1.8rem;margin-bottom:.4rem}
-.sub{color:#a0a0b8;font-size:1.1rem;margin-bottom:1.2rem}
-.desc{color:#8888a0;font-size:.95rem;line-height:1.6;margin-bottom:2rem}
-.btn{display:inline-block;background:#e94560;color:#fff;text-decoration:none;padding:.8rem 2.4rem;border-radius:8px;font-size:1.05rem;font-weight:600;transition:background .2s}
-.btn:hover{background:#d63050}
-.footer{margin-top:2rem;color:#555;font-size:.75rem}
+body{background:#1a1a2e;color:#fff;font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.c{text-align:center;max-width:520px;padding:2rem}
+h1{font-size:2.5rem;margin-bottom:.5rem}
+.sub{color:#ccc;font-size:1.1rem;line-height:1.6;margin:1.5rem 0}
+.btn{display:inline-block;background:#e94560;color:#fff;padding:14px 36px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:1.1rem;margin-top:1rem}
+.btn:hover{background:#c73652}
+.foot{color:#666;margin-top:2.5rem;font-size:.85rem}
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="emoji">🦞</div>
+<div class="c">
   <h1>OpenClaw Platform</h1>
-  <p class="sub">Your Personal AI Assistant</p>
-  <p class="desc">Enterprise AI assistant platform. Each user gets an isolated, private AI workspace powered by Amazon Bedrock.</p>
-  <a class="btn" href="https://claw-snese.auth.us-west-2.amazoncognito.com/login?client_id=103uif8rdrp29ak4eki7lc09ru&response_type=code&scope=openid+email+profile&redirect_uri=https://claw.snese.net/oauth2/idpresponse">Get Started</a>
-  <p class="footer">Powered by Amazon EKS + Bedrock</p>
+  <p class="sub">Enterprise AI assistant platform.<br>Each user gets an isolated, private AI workspace powered by Amazon Bedrock.</p>
+  <p><a class="btn" href="javascript:void(0)" onclick="alert('Configure Cognito signup URL in this file')">Get Started</a></p>
+  <p class="foot">Powered by Amazon EKS + Bedrock</p>
 </div>
 </body>
 </html>
