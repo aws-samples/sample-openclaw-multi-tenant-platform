@@ -111,6 +111,8 @@ spec:
         - gateway
         - --port
         - "18789"
+        - --bind
+        - lan
         ports:
         - containerPort: 18789
           protocol: TCP

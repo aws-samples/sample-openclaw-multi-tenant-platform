@@ -29,10 +29,16 @@ ingress:
   enabled: false
   className: alb
   host: ""
+  certificateArn: ""
   annotations:
     alb.ingress.kubernetes.io/group.name: openclaw-shared
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
+  cognito:
+    enabled: false
+    userPoolArn: ""
+    clientId: ""
+    domain: ""
 
 networkPolicy:
   enabled: true
@@ -47,14 +53,45 @@ config:
   gateway:
     port: 18789
     mode: local
+    bind: lan
+    auth:
+      mode: trusted-proxy
+      trustedProxy:
+        userHeader: x-amzn-oidc-identity
+        requiredHeaders:
+          - x-amzn-oidc-data
     controlUi:
-      allowedOrigins:
-        - "*"
+      allowedOrigins: []
     trustedProxies:
-      - "10.0.0.1"
+      - "10.0.0.0/8"
   
   browser:
     enabled: false
+
+  tools:
+    profile: full
+    deny:
+      - gateway
+      - cron
+      - sessions_spawn
+      - sessions_send
+    fs:
+      workspaceOnly: true
+    exec:
+      security: ask
+    elevated:
+      enabled: false
+    web:
+      search:
+        enabled: false
+      fetch:
+        enabled: true
+
+  logging:
+    level: info
+    consoleLevel: info
+    consoleStyle: compact
+    redactSensitive: tools
   
   agents:
     defaults:

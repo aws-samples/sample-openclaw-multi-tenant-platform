@@ -9,6 +9,17 @@ metadata:
     {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
     {{- end }}
+    {{- if .Values.ingress.cognito.enabled }}
+    alb.ingress.kubernetes.io/auth-type: cognito
+    alb.ingress.kubernetes.io/auth-idp-cognito: '{"userPoolARN":"{{ .Values.ingress.cognito.userPoolArn }}","userPoolClientID":"{{ .Values.ingress.cognito.clientId }}","userPoolDomain":"{{ .Values.ingress.cognito.domain }}"}'
+    alb.ingress.kubernetes.io/auth-scope: openid email profile
+    alb.ingress.kubernetes.io/auth-on-unauthenticated-request: authenticate
+    {{- end }}
+    {{- if .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.certificateArn }}
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
