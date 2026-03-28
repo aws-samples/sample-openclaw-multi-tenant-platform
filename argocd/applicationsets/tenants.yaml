@@ -1,5 +1,5 @@
 # ArgoCD ApplicationSet — auto-discover tenants from helm/tenants/values-*.yaml
-# Replace <YOUR_GITHUB_ORG> with your GitHub org/user (e.g. snese)
+# Replace <YOUR_GITHUB_ORG> with your GitHub org/user (e.g. your-org)
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

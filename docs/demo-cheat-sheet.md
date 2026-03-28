@@ -2,8 +2,8 @@
 
 ## Before the Demo
 
-- [ ] Verify `https://claw.snese.net` loads (auth UI)
-- [ ] Verify `https://alice.claw.snese.net` responds (302 = OK, pod scaled to 0)
+- [ ] Verify `https://your-domain.com` loads (auth UI)
+- [ ] Verify `https://alice.your-domain.com` responds (302 = OK, pod scaled to 0)
 - [ ] Have AWS Console open: EKS, CloudWatch, Cognito, CloudFront
 - [ ] Have a test email ready for live signup demo
 
@@ -22,7 +22,7 @@
 
 ### Act 2: The Landing Page (1 min)
 
-**Open `https://claw.snese.net`**
+**Open `https://your-domain.com`**
 
 > "This is the employee-facing portal. Custom branded, on your domain. No AWS URLs visible."
 
@@ -54,7 +54,7 @@ Point out:
 
 ### Act 4: The AI Assistant (3 min)
 
-**Open `https://alice.claw.snese.net` → login**
+**Open `https://alice.your-domain.com` → login**
 
 > "Each user gets their own isolated instance. Their own data, their own conversation history, their own skills."
 
@@ -180,6 +180,6 @@ aws wafv2 list-web-acls --scope REGIONAL --region us-west-2 --query "WebACLs[].N
 
 ## After the Demo
 
-- Share the repo: `https://github.com/snese/openclaw-platform`
+- Share the repo: `https://github.com/<YOUR_GITHUB_ORG>/openclaw-platform`
 - Offer a 30-minute hands-on session to deploy in their account
 - Key differentiator: **"Your data, your cloud, your rules. Deploy in 20 minutes."**
