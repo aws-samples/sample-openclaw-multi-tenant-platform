@@ -72,15 +72,9 @@ config:
     mode: local
     bind: lan
     auth:
-      mode: trusted-proxy
-      trustedProxy:
-        userHeader: x-amzn-oidc-identity
-        requiredHeaders:
-          - x-amzn-oidc-data
+      mode: token
     controlUi:
       allowedOrigins: []
-    trustedProxies:
-      - "10.0.0.0/8"
   
   browser:
     enabled: false

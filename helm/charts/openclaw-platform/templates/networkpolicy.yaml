@@ -11,14 +11,13 @@ spec:
     - Ingress
     - Egress
   ingress:
+    # ALB health checks and traffic (IP target type — traffic comes from VPC CIDR)
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
     # Same namespace
     - from:
         - podSelector: {}
-    # kube-system (ALB health checks)
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
   egress:
     # DNS
     - to:
