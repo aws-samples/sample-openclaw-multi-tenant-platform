@@ -23,9 +23,7 @@ def handler(event, context):
         if not resp.get('success'):
             raise Exception('CAPTCHA verification failed.')
 
-    # Let Cognito handle verification code flow naturally.
-    # User receives code → ConfirmSignUp → CONFIRMED → Post-confirmation fires.
-    event['response']['autoConfirmUser'] = False
-    event['response']['autoVerifyEmail'] = False
+    event['response']['autoConfirmUser'] = True
+    event['response']['autoVerifyEmail'] = True
 
     return event

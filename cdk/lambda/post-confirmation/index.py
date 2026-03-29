@@ -1,19 +1,86 @@
 import os
 import re
 import secrets
+import json
+import urllib.request
 import boto3
 from botocore.exceptions import ClientError
 
 sm = boto3.client('secretsmanager')
 eks_client = boto3.client('eks')
 sns = boto3.client('sns')
-cb = boto3.client('codebuild')
+sts = boto3.client('sts')
 
 TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
 CLUSTER_NAME = os.environ['CLUSTER_NAME']
 TENANT_ROLE_ARN = os.environ['TENANT_ROLE_ARN']
 DOMAIN = os.environ.get('DOMAIN', 'example.com')
-CODEBUILD_PROJECT = os.environ.get('CODEBUILD_PROJECT', 'openclaw-tenant-builder')
+REGION = os.environ.get('AWS_REGION', 'us-west-2')
+
+
+def get_eks_token():
+    """Generate EKS bearer token using STS presigned URL."""
+    import base64
+    from botocore.signers import RequestSigner
+    session = boto3.session.Session()
+    client = session.client('sts', region_name=REGION)
+    service_id = client.meta.service_model.service_id
+    signer = RequestSigner(service_id, REGION, 'sts', 'v4', session.get_credentials(), session.events)
+    params = {
+        'method': 'GET',
+        'url': f'https://sts.{REGION}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15',
+        'body': {},
+        'headers': {'x-k8s-aws-id': CLUSTER_NAME},
+        'context': {},
+    }
+    signed_url = signer.generate_presigned_url(params, region_name=REGION, expires_in=60, operation_name='')
+    return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
+
+
+def create_tenant_cr(tenant, email, token):
+    """Create a Tenant CR via K8s API."""
+    import base64
+    cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
+    endpoint = cluster['endpoint']
+    ca_data = cluster['certificateAuthority']['data']
+
+    tenant_cr = json.dumps({
+        "apiVersion": "openclaw.io/v1alpha1",
+        "kind": "Tenant",
+        "metadata": {"name": tenant, "namespace": "openclaw-system"},
+        "spec": {
+            "email": email,
+            "displayName": "OpenClaw",
+            "emoji": "",
+            "skills": ["weather", "gog"],
+            "budget": {"monthlyUSD": 100},
+            "enabled": True,
+        }
+    }).encode()
+
+    import ssl, tempfile
+    ca_file = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
+    ca_file.write(base64.b64decode(ca_data))
+    ca_file.close()
+    ctx = ssl.create_default_context(cafile=ca_file.name)
+
+    url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{tenant}"
+    bearer = get_eks_token()
+
+    # Try PUT (update), fall back to POST (create)
+    for method in ['PUT', 'POST']:
+        req_url = url if method == 'PUT' else f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants"
+        req = urllib.request.Request(req_url, data=tenant_cr, method=method,
+            headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
+        try:
+            urllib.request.urlopen(req, context=ctx)
+            return
+        except urllib.error.HTTPError as e:
+            if method == 'PUT' and e.code == 404:
+                continue  # Not found, try POST
+            if e.code == 409:
+                return  # Already exists
+            raise
 
 
 def handler(event, context):
@@ -44,27 +111,19 @@ def handler(event, context):
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
-            serviceAccount=f'openclaw-{tenant}', roleArn=TENANT_ROLE_ARN,
+            serviceAccount=tenant, roleArn=TENANT_ROLE_ARN,
         )
     except ClientError as e:
         if 'already exists' not in str(e).lower():
             raise
 
-    # 3. Trigger CodeBuild for Helm install
-    try:
-        cb.start_build(
-            projectName=CODEBUILD_PROJECT,
-            environmentVariablesOverride=[
-                {'name': 'TENANT_NAME', 'value': tenant, 'type': 'PLAINTEXT'},
-            ],
-        )
-    except ClientError:
-        pass
+    # 3. Create Tenant CR → Operator handles the rest
+    create_tenant_cr(tenant, email, token)
 
-    # 5. Notify admin
+    # 4. Notify admin
     sns.publish(
         TopicArn=TOPIC_ARN, Subject='New Tenant Created',
-        Message=f'Tenant: {tenant} ({email})\nURL: https://{tenant}.{DOMAIN}',
+        Message=f'Tenant: {tenant} ({email})\nURL: https://{DOMAIN}/t/{tenant}',
     )
 
     return event
