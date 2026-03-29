@@ -1,9 +1,12 @@
-.PHONY: lint check-cdk check-helm check-python check-rust check-sensitive check-cjk check-shell
+.PHONY: lint check-cdk check-helm check-python check-rust check-sensitive check-cjk check-shell check-deny check-cdk-test
 
-lint: check-cdk check-helm check-python check-rust check-shell check-sensitive check-cjk
+lint: check-cdk check-cdk-test check-helm check-python check-rust check-deny check-shell check-sensitive check-cjk
 
 check-cdk:
 	cd cdk && npm ci && npx tsc --noEmit
+
+check-cdk-test:
+	cd cdk && npx jest --passWithNoTests
 
 check-helm:
 	helm lint helm/charts/openclaw-platform
@@ -11,9 +14,13 @@ check-helm:
 check-python:
 	python3 -m py_compile cdk/lambda/pre-signup/index.py
 	python3 -m py_compile cdk/lambda/post-confirmation/index.py
+	python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 
 check-rust:
-	cd operator && cargo check
+	cd operator && cargo clippy --all-targets --all-features -- -D warnings
+
+check-deny:
+	cd operator && cargo deny check 2>/dev/null || echo "Install cargo-deny: cargo install cargo-deny"
 
 check-shell:
 	-shellcheck scripts/*.sh

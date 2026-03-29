@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# From kube-rs: cancel in-progress runs on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-Dwarnings"
@@ -43,6 +48,19 @@ jobs:
         run: |
           cargo run --bin crdgen > /tmp/crd-generated.yaml
           diff -u yaml/crd.yaml /tmp/crd-generated.yaml || { echo "CRD out of date"; exit 1; }
+
+  # ============================================================
+  # Rust: cargo-deny (every PR, parallel) ~1 min
+  # License compliance + security advisory audit
+  # ============================================================
+  rust-deny:
+    name: "Rust: license + advisory audit"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: operator/Cargo.toml
 
   # ============================================================
   # Rust: heavy checks (merge to main only) ~8 min
@@ -130,6 +148,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: cdk/package-lock.json
 
       - name: CDK compile
         working-directory: cdk
@@ -148,13 +168,14 @@ jobs:
         run: |
           python3 -m py_compile cdk/lambda/pre-signup/index.py
           python3 -m py_compile cdk/lambda/post-confirmation/index.py
+          python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 
       - name: Shell syntax
         run: for f in scripts/*.sh; do bash -n "$f"; done
 
-      - name: ShellCheck (allow failures)
-        continue-on-error: true
+      - name: ShellCheck
         run: shellcheck scripts/*.sh || true
+        continue-on-error: true
 
   # ============================================================
   # Security (every PR) ~1 min
@@ -190,3 +211,25 @@ jobs:
               exit(1)
           print('Clean')
           PYEOF
+
+  # ============================================================
+  # CodeQL (merge to main only) ~5 min
+  # Static analysis for TypeScript and Python
+  # ============================================================
+  codeql:
+    name: "CodeQL analysis"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
