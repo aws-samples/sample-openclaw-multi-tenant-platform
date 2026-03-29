@@ -109,6 +109,10 @@
     "githubOwner": "your-org",
     "githubRepo": "openclaw-platform",
     "cloudfrontCertificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/xxx",
-    "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role"
+    "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role",
+    "selfSignupEnabled": true,
+    "defaultTenantBudgetUsd": 100,
+    "defaultTenantSkills": "weather,gog",
+    "sesFromEmail": "noreply@your-domain.com"
   }
 }

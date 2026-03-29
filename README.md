@@ -102,6 +102,10 @@ cp cdk/cdk.json.example cdk/cdk.json
 | `githubOwner` | GitHub org/user for CodeBuild source |
 | `githubRepo` | Repository name (default: `openclaw-platform`) |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
+| `selfSignupEnabled` | Allow users to self-register (default: `true`) |
+| `defaultTenantBudgetUsd` | Monthly Bedrock budget per tenant in USD (default: `100`) |
+| `defaultTenantSkills` | Default skills for new tenants (default: `weather,gog`) |
+| `sesFromEmail` | SES sender email for welcome emails (default: `noreply@<domain>`) |
 
 </details>
 

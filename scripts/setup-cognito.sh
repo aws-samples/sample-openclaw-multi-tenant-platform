@@ -4,7 +4,7 @@ set -euo pipefail
 REGION="${1:-us-west-2}"
 STACK="OpenClawEksStack"
 
-get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null; }
 
 POOL_ID=$(get_output CognitoPoolId)
 CLIENT_ID=$(get_output CognitoClientId)
@@ -17,15 +17,15 @@ echo "  Pool:   $POOL_ID"
 echo "  Client: $CLIENT_ID"
 echo "  Domain: $DOMAIN"
 
-# 1. Enable email auto-verification
-echo "  → Setting AutoVerifiedAttributes: email"
+# 1. User pool settings: self-signup + email auto-verify
+echo "  → Setting user pool config"
 aws cognito-idp update-user-pool \
   --user-pool-id "$POOL_ID" \
   --auto-verified-attributes email \
   --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
   --region "$REGION"
 
-# 2. Update client: auth flows + callback URLs
+# 2. Client: auth flows + callback URLs
 echo "  → Updating client auth flows + callback URLs"
 aws cognito-idp update-user-pool-client \
   --user-pool-id "$POOL_ID" \
@@ -38,7 +38,7 @@ aws cognito-idp update-user-pool-client \
   --supported-identity-providers COGNITO \
   --region "$REGION" > /dev/null
 
-# 3. Attach Lambda triggers
+# 3. Lambda triggers
 echo "  → Attaching Lambda triggers"
 aws cognito-idp update-user-pool \
   --user-pool-id "$POOL_ID" \
@@ -47,7 +47,7 @@ aws cognito-idp update-user-pool \
   --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
   --region "$REGION"
 
-# 4. Grant Cognito permission to invoke Lambdas
+# 4. Lambda invoke permissions
 for ARN in "$PRE_ARN" "$POST_ARN"; do
   FN_NAME=$(echo "$ARN" | awk -F: '{print $NF}')
   aws lambda add-permission \
@@ -60,3 +60,7 @@ for ARN in "$PRE_ARN" "$POST_ARN"; do
 done
 
 echo "✅ Cognito configured"
+echo "  Self-signup: enabled"
+echo "  Auto-verify: email"
+echo "  Auth flows: USER_PASSWORD_AUTH + SRP + REFRESH"
+echo "  Lambda triggers: PreSignUp + PostConfirmation"

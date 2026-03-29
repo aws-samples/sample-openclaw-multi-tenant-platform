@@ -87,7 +87,25 @@ aws eks create-pod-identity-association \
   --role-arn "${ROLE_ARN}" \
   --output text --query 'association.associationId'
 
-# 4. Helm install
+# 4. Add Cognito callback URL for this tenant
+echo "  → Adding Cognito callback URL"
+POOL_ID=$(get_output CognitoPoolId)
+CLIENT_ID_COGNITO=$(get_output CognitoClientId)
+EXISTING_CALLBACKS=$(aws cognito-idp describe-user-pool-client --user-pool-id "$POOL_ID" --client-id "$CLIENT_ID_COGNITO" --region "$REGION" --query 'UserPoolClient.CallbackURLs' --output json)
+NEW_CALLBACK="https://${TENANT}.${DOMAIN}/oauth2/idpresponse"
+UPDATED_CALLBACKS=$(echo "$EXISTING_CALLBACKS" | python3 -c "import json,sys; urls=json.load(sys.stdin); urls.append('$NEW_CALLBACK') if '$NEW_CALLBACK' not in urls else None; print(' '.join(urls))")
+aws cognito-idp update-user-pool-client \
+  --user-pool-id "$POOL_ID" \
+  --client-id "$CLIENT_ID_COGNITO" \
+  --callback-urls $UPDATED_CALLBACKS \
+  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH ALLOW_USER_SRP_AUTH \
+  --allowed-o-auth-flows code \
+  --allowed-o-auth-scopes openid email profile \
+  --allowed-o-auth-flows-user-pool-client \
+  --supported-identity-providers COGNITO \
+  --region "$REGION" > /dev/null
+
+# 5. Helm install
 echo "  → Helm installing ${RELEASE}"
 helm install "${RELEASE}" "${CHART_DIR}" \
   --namespace "${NAMESPACE}" \
