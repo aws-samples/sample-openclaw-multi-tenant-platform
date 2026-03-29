@@ -118,17 +118,20 @@ input::placeholder{color:#555}
       <p class="link" onclick="showSection('auth-section')">Back to sign in</p>
     </div>
 
-    <!-- Welcome -->
+    <!-- Loading / provisioning -->
     <div id="loading-section" class="section" style="text-align:center">
       <div class="spinner" style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem"></div>
-      <h2>Opening your workspace...</h2>
+      <h2 id="loading-title">Opening your workspace...</h2>
       <p id="loading-msg" style="color:var(--muted);margin-top:0.75rem;font-size:0.9rem">This may take up to 30 seconds if your workspace was idle.</p>
-    </div>
-    <div id="welcome-section" class="section">
-      <div class="check">✓</div>
-      <h2>Account Created</h2>
-      <p>Your workspace is being set up. This usually takes about 2 minutes. You will receive an email when it is ready.</p>
-      <p class="link" onclick="showSection('auth-section')" style="margin-top:1.5rem">Back to sign in</p>
+      <div id="loading-progress" style="margin-top:1.5rem;display:none">
+        <div style="background:var(--border);border-radius:8px;height:6px;width:100%;max-width:300px;margin:0 auto">
+          <div id="progress-bar" style="background:var(--primary);height:6px;border-radius:8px;width:0%;transition:width 1s ease"></div>
+        </div>
+        <p id="progress-text" style="color:var(--muted);margin-top:0.5rem;font-size:0.8rem"></p>
+      </div>
+      <p id="loading-fallback" style="display:none;margin-top:1.5rem">
+        <span class="link" onclick="showSection('auth-section')">Back to sign in</span>
+      </p>
     </div>
   </div>
   <div class="footer">Powered by Amazon EKS + Bedrock</div>
@@ -145,6 +148,48 @@ document.getElementById('password').addEventListener('input',updateStrength);
 (function(){const saved=localStorage.getItem('openclaw_email');if(saved)document.getElementById('email').value=saved})();
 
 function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
+
+function pollWorkspace(url,isNewSignup){
+  const title=document.getElementById('loading-title');
+  const msg=document.getElementById('loading-msg');
+  const progress=document.getElementById('loading-progress');
+  const bar=document.getElementById('progress-bar');
+  const ptext=document.getElementById('progress-text');
+  const fallback=document.getElementById('loading-fallback');
+  if(isNewSignup){
+    title.textContent='Creating your workspace...';
+    msg.textContent='This takes about 2 minutes. Please don\u2019t close this page.';
+    progress.style.display='block';
+    const steps=['Setting up your account...','Configuring your AI assistant...','Deploying your workspace...','Almost ready...'];
+    let si=0;
+    const stepInterval=setInterval(()=>{if(si<steps.length){ptext.textContent=steps[si];bar.style.width=Math.min(20+si*22,90)+'%';si++}},25000);
+    bar.style.width='10%';ptext.textContent=steps[0];
+    (async()=>{
+      for(let i=0;i<60;i++){
+        try{await fetch(url,{mode:'no-cors',cache:'no-store'});clearInterval(stepInterval);bar.style.width='100%';ptext.textContent='Ready!';title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},800);return}catch(e){}
+        await new Promise(r=>setTimeout(r,3000))
+      }
+      clearInterval(stepInterval);
+      title.textContent='Still setting up...';
+      msg.textContent='Your workspace is taking longer than expected. Please try signing in again in a few minutes.';
+      bar.style.width='90%';ptext.textContent='';fallback.style.display='block';
+    })()
+  }else{
+    title.textContent='Opening your workspace...';
+    msg.textContent='This may take up to 30 seconds if your workspace was idle.';
+    progress.style.display='none';
+    (async()=>{
+      for(let i=0;i<20;i++){
+        try{await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}
+        await new Promise(r=>setTimeout(r,3000))
+      }
+      title.textContent='Workspace not responding';
+      msg.textContent='Your workspace may still be starting up. Please try again in a moment.';
+      fallback.style.display='block';
+    })()
+  }
+  showSection('loading-section')
+}
 function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';document.getElementById('tos').style.display=t==='signup'?'block':'none';document.getElementById('strength-bar').style.display=t==='signup'?'block':'none';if(t==='signup')updateStrength();hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
 function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}
 function hideMsg(id){document.getElementById(id).className='msg'}
@@ -157,14 +202,14 @@ async function handleSubmit(e){
   setLoading(btn,true);
   try{
     if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});pendingEmail=email;pendingPw=pw;showSection('verify-section')}
-    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;showSection('loading-section');(async()=>{for(let i=0;i<20;i++){try{const r=await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}await new Promise(r=>setTimeout(r,3000))}document.getElementById('loading-msg').textContent='Your workspace is still being set up. Please wait a moment and try again.'})()}
+    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;pollWorkspace(url,false)}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)
 }
 
 async function handleVerify(e){
   e.preventDefault();const btn=document.getElementById('verify-btn');setLoading(btn,true);
-  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;showSection('loading-section');(async()=>{for(let i=0;i<40;i++){try{const r=await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}await new Promise(r=>setTimeout(r,3000))}document.getElementById('loading-msg').textContent='Your workspace is still being set up. Please wait a moment and try again.'})()} 
+  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;pollWorkspace(url,true)}
   catch(err){showMsg('verify-msg',err.message,'error')}
   setLoading(btn,false)
 }
