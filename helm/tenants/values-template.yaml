@@ -36,3 +36,13 @@ skills:
 #   limits:
 #     cpu: 4
 #     memory: 4Gi
+
+# Gateway API routing (path-based, replaces Ingress)
+gateway:
+  enabled: true
+  gatewayName: openclaw-gateway
+  gatewayNamespace: openclaw-system
+  cognito:
+    userPoolArn: "{{COGNITO_POOL_ARN}}"
+    clientId: "{{COGNITO_CLIENT_ID}}"
+    domain: "{{COGNITO_DOMAIN}}"

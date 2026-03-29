@@ -162,10 +162,10 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         envFrom:
-        {{- if .Values.gateway.token.generate }}
+        {{- if and .Values.gateway .Values.gateway.token .Values.gateway.token.generate }}
         - secretRef:
             name: {{ include "openclaw-helm.fullname" . }}-gateway-token
-        {{- else if .Values.gateway.token.secretName }}
+        {{- else if and .Values.gateway .Values.gateway.token .Values.gateway.token.secretName }}
         - secretRef:
             name: {{ .Values.gateway.token.secretName }}
         {{- end }}

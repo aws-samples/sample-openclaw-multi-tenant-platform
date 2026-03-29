@@ -39,54 +39,35 @@ with open('/tmp/values.yaml', 'w') as f:
     f.write(content)
 PYEOF
 
+# Add Cognito callback URL for this tenant's path
+echo "==> Adding Cognito callback URL"
+python3 << CBEOF
+import json, subprocess
+result = subprocess.run(
+    ['aws', 'cognito-idp', 'describe-user-pool-client',
+     '--user-pool-id', '${COGNITO_POOL_ID}', '--client-id', '${ALB_CLIENT_ID}',
+     '--region', '${REGION}', '--query', 'UserPoolClient.CallbackURLs', '--output', 'json'],
+    capture_output=True, text=True)
+urls = json.loads(result.stdout)
+new_cb = 'https://${DOMAIN}/t/${TENANT}/oauth2/idpresponse'
+if new_cb not in urls:
+    urls.append(new_cb)
+    subprocess.run(
+        ['aws', 'cognito-idp', 'update-user-pool-client',
+         '--user-pool-id', '${COGNITO_POOL_ID}', '--client-id', '${ALB_CLIENT_ID}',
+         '--callback-urls'] + urls + [
+         '--explicit-auth-flows', 'ALLOW_USER_PASSWORD_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH', 'ALLOW_USER_SRP_AUTH',
+         '--allowed-o-auth-flows', 'code', '--allowed-o-auth-scopes', 'openid', 'email', 'profile',
+         '--allowed-o-auth-flows-user-pool-client', '--supported-identity-providers', 'COGNITO',
+         '--region', '${REGION}'], capture_output=True)
+    print(f'  Added: {new_cb}')
+else:
+    print(f'  Already exists: {new_cb}')
+CBEOF
+
 echo "==> Helm upgrade --install"
 helm upgrade --install "${RELEASE}" /tmp/chart.tgz \
   --namespace "${NS}" --create-namespace \
   -f /tmp/values.yaml
 
-echo "==> Creating Gateway API resources"
-cat << EOF | kubectl apply -f -
-apiVersion: gateway.k8s.aws/v1beta1
-kind: TargetGroupConfiguration
-metadata:
-  name: openclaw-${TENANT}-tg
-  namespace: ${NS}
-spec:
-  targetReference:
-    name: openclaw-${TENANT}
-  defaultConfiguration:
-    targetType: ip
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: openclaw-${TENANT}
-  namespace: ${NS}
-spec:
-  parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: openclaw-gateway
-      namespace: openclaw-system
-      sectionName: https
-  rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /t/${TENANT}
-      filters:
-        - type: URLRewrite
-          urlRewrite:
-            path:
-              type: ReplacePrefixMatch
-              replacePrefixMatch: /
-      backendRefs:
-        - name: openclaw-${TENANT}
-          port: 18789
-EOF
-
 echo "==> Done: ${TENANT}"
-
-echo "==> Writing status file"
-echo "{\"status\":\"ready\",\"tenant\":\"${TENANT}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /tmp/status.json
-aws s3 cp /tmp/status.json "s3://${AUTH_BUCKET}/status/${TENANT}.json" --region "${REGION}"

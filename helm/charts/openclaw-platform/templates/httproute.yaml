@@ -24,6 +24,11 @@ spec:
             path:
               type: ReplacePrefixMatch
               replacePrefixMatch: /
+        - type: ExtensionRef
+          extensionRef:
+            group: "gateway.k8s.aws"
+            kind: "ListenerRuleConfiguration"
+            name: "{{ include "openclaw-helm.fullname" . }}-auth"
       backendRefs:
         - name: {{ include "openclaw-helm.fullname" . }}
           port: {{ .Values.service.port }}

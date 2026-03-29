@@ -488,7 +488,6 @@ export class EksClusterStack extends cdk.Stack {
         TENANT_ROLE_ARN: { value: tenantRole.roleArn },
         REGION: { value: this.region },
         CHART_BUCKET: { value: errorPagesBucket.bucketName },
-        AUTH_BUCKET: { value: authUiBucket.bucketName },
         DOMAIN: { value: domainName },
         CERTIFICATE_ARN: { value: certificate.certificateArn },
         COGNITO_CLIENT_ID: { value: cognitoClientId },

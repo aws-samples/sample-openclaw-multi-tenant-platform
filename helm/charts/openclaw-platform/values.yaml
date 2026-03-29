@@ -211,3 +211,7 @@ gateway:
   enabled: false
   gatewayName: openclaw-gateway
   gatewayNamespace: openclaw-system
+  cognito:
+    userPoolArn: ""
+    clientId: ""
+    domain: ""
