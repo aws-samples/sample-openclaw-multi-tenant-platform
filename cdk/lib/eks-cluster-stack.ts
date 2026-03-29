@@ -446,7 +446,6 @@ export class EksClusterStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/post-confirmation'),
-      layers: [k8sLayer],
       environment: {
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         CLUSTER_NAME: cluster.clusterName,
@@ -455,11 +454,11 @@ export class EksClusterStack extends cdk.Stack {
         CERTIFICATE_ARN: certificate.certificateArn,
         COGNITO_DOMAIN: cognitoDomain,
         DOMAIN: domainName,
+        CODEBUILD_PROJECT: 'openclaw-tenant-builder',
         OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
         TENANT_ROLE_ARN: tenantRole.roleArn,
       },
-      timeout: cdk.Duration.seconds(60),
-      memorySize: 512,
+      timeout: cdk.Duration.seconds(30),
     });
     alertsTopic.grantPublish(postConfirmFn);
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
@@ -467,8 +466,12 @@ export class EksClusterStack extends cdk.Stack {
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:openclaw/*`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
+      actions: ['eks:CreatePodIdentityAssociation'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
+    }));
+    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['codebuild:StartBuild'],
+      resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/openclaw-tenant-builder`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:PassRole', 'iam:GetRole'],
@@ -525,10 +528,6 @@ export class EksClusterStack extends cdk.Stack {
       actions: ['eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
-    cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
-      groups: ['system:masters'],
-      username: 'lambda-post-confirm',
-    });
     cluster.awsAuth.addRoleMapping(tenantBuilder.role!, {
       groups: ['system:masters'],
       username: 'codebuild-tenant-builder',
