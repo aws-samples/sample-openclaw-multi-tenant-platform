@@ -232,6 +232,13 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         "spec": {
             "podSelector": {},
             "policyTypes": ["Ingress", "Egress"],
+            "ingress": [
+                {
+                    "ports": [
+                        { "port": 18789, "protocol": "TCP" }
+                    ]
+                }
+            ],
             "egress": [
                 {
                     "ports": [
@@ -250,6 +257,11 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     info!("Ensured NetworkPolicy default-deny in {tenant_ns}");
 
     // 5. Helm release: create values ConfigMap and run helm upgrade --install
+    let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
+    let cognito_pool_arn = std::env::var("COGNITO_POOL_ARN").unwrap_or_default();
+    let cognito_client_id = std::env::var("COGNITO_CLIENT_ID").unwrap_or_default();
+    let cognito_domain = std::env::var("COGNITO_DOMAIN").unwrap_or_default();
+
     let helm_values = serde_yaml::to_string(&json!({
         "tenant": {
             "name": &name,
@@ -257,6 +269,16 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "skills": &tenant.spec.skills,
             "budget": tenant.spec.budget.as_ref().map(|b| b.monthly_usd).unwrap_or(100),
             "enabled": tenant.spec.enabled,
+        },
+        "gateway": {
+            "enabled": true,
+            "gatewayName": "openclaw-gateway",
+            "gatewayNamespace": "openclaw-system",
+            "cognito": {
+                "userPoolArn": &cognito_pool_arn,
+                "clientId": &cognito_client_id,
+                "domain": &cognito_domain,
+            }
         }
     }))
     .map_err(|e| Error::HelmError(e.to_string()))?;
@@ -287,17 +309,28 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         .map_err(Error::KubeError)?;
     info!("Ensured Helm values ConfigMap {name}-helm-values in {tenant_ns}");
 
+    // Download chart from S3 if not cached
+    let chart_path = "/tmp/openclaw-platform.tgz";
+    if !std::path::Path::new(chart_path).exists() {
+        let dl = tokio::process::Command::new("aws")
+            .args(["s3", "cp", &format!("s3://{}/openclaw-platform.tgz", std::env::var("CHART_BUCKET").unwrap_or_default()), chart_path, "--region", &std::env::var("AWS_REGION").unwrap_or("us-west-2".into())])
+            .output().await
+            .map_err(|e| Error::HelmError(format!("Failed to download chart: {e}")))?;
+        if !dl.status.success() {
+            return Err(Error::HelmError(format!("Chart download failed: {}", String::from_utf8_lossy(&dl.stderr))));
+        }
+    }
+
     let mut helm_child = tokio::process::Command::new("helm")
         .args([
             "upgrade",
             "--install",
             &name,
-            "openclaw/openclaw",
+            chart_path,
             "--namespace",
             tenant_ns,
             "--values",
             "/dev/stdin",
-            "--wait",
             "--timeout",
             "5m",
         ])
@@ -357,7 +390,9 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "scaleTargetRef": {
                 "name": name,
                 "kind": "Deployment",
-                "apiVersion": "apps/v1"
+                "apiVersion": "apps/v1",
+                "service": name,
+                "port": 18789
             }
         }
     });
