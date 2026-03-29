@@ -456,7 +456,7 @@ export class EksClusterStack extends cdk.Stack {
         OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
         TENANT_ROLE_ARN: tenantRole.roleArn,
       },
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(60),
     });
     alertsTopic.grantPublish(postConfirmFn);
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
@@ -464,7 +464,7 @@ export class EksClusterStack extends cdk.Stack {
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:openclaw/*`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['eks:CreatePodIdentityAssociation'],
+      actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
@@ -526,6 +526,10 @@ export class EksClusterStack extends cdk.Stack {
       actions: ['eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
+    cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
+      groups: ['system:masters'],
+      username: 'lambda-post-confirm',
+    });
     cluster.awsAuth.addRoleMapping(tenantBuilder.role!, {
       groups: ['system:masters'],
       username: 'codebuild-tenant-builder',

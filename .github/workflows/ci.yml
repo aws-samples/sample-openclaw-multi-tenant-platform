@@ -143,8 +143,17 @@ jobs:
       - name: Helm lint
         run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
 
+      - name: Python syntax
+        run: |
+          python3 -m py_compile cdk/lambda/pre-signup/index.py
+          python3 -m py_compile cdk/lambda/post-confirmation/index.py
+
       - name: Shell syntax
         run: for f in scripts/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck (allow failures)
+        continue-on-error: true
+        run: shellcheck scripts/*.sh || true
 
   # ============================================================
   # Security (every PR) ~1 min
@@ -157,7 +166,7 @@ jobs:
 
       - name: No hardcoded secrets
         run: |
-          FOUND=$(grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ || true)
+          FOUND=$(grep -rn '387671391109\|AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" --include="*.md" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ | grep -v cdk.out | grep -v cdk.json || true)
           [ -n "$FOUND" ] && echo "$FOUND" && exit 1 || echo "Clean"
 
       - name: No CJK in code
