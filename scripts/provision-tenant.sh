@@ -71,7 +71,7 @@ else:
 CBEOF
 
 echo "==> Helm install"
-helm install "${RELEASE}" /tmp/chart.tgz \
+helm upgrade --install "${RELEASE}" /tmp/chart.tgz \
   --namespace "${NS}" --create-namespace \
   -f /tmp/values.yaml \
   --wait --timeout 180s
