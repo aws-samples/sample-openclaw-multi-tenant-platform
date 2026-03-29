@@ -1,0 +1,37 @@
+[package]
+name = "tenant-operator"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[[bin]]
+doc = false
+name = "tenant-operator"
+path = "src/main.rs"
+
+[[bin]]
+doc = false
+name = "crdgen"
+path = "src/crdgen.rs"
+
+[lib]
+name = "tenant_operator"
+path = "src/lib.rs"
+
+[dependencies]
+kube = { version = "3.1.0", features = ["runtime", "client", "derive", "admission"] }
+k8s-openapi = { version = "0.27.0", features = ["latest", "schemars"] }
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util"] }
+futures = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "2"
+actix-web = "4"
+prometheus-client = "0.24"
+anyhow = "1.0.102"
+serde_yaml = "0.9.34"
+

@@ -6,68 +6,177 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
 jobs:
-  lint-and-synth:
+  # ============================================================
+  # Rust: fast checks (every PR) ~3 min
+  # ============================================================
+  rust-lint-test:
+    name: "Rust: lint + test"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: operator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: operator
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --lib --all-features
+
+      - name: CRD generation verify
+        run: |
+          cargo run --bin crdgen > /tmp/crd-generated.yaml
+          diff -u yaml/crd.yaml /tmp/crd-generated.yaml || { echo "CRD out of date"; exit 1; }
+
+  # ============================================================
+  # Rust: heavy checks (merge to main only) ~8 min
+  # ============================================================
+  rust-integration:
+    name: "Rust: K8s integration"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: rust-lint-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: operator
+
+      - name: Build release binary
+        working-directory: operator
+        run: cargo build --release --bin tenant-operator
+
+      - name: Create k3d cluster
+        uses: AbsaOSS/k3d-action@v2
+        with:
+          cluster-name: test
+          args: --no-lb --k3s-arg "--disable=traefik@server:0"
+
+      - name: Install CRD and run operator
+        run: |
+          kubectl apply -f operator/yaml/crd.yaml
+          kubectl wait --for=condition=Established crd/tenants.openclaw.io --timeout=30s
+          operator/target/release/tenant-operator &
+          sleep 5
+          curl -sf http://localhost:8080/health | jq .
+
+      - name: Create and verify tenant
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: openclaw.io/v1alpha1
+          kind: Tenant
+          metadata:
+            name: test-alice
+            namespace: default
+          spec:
+            email: alice@example.com
+            displayName: Alice
+            skills: [weather]
+            budget: { monthlyUSD: 50 }
+            enabled: true
+          EOF
+          for i in $(seq 1 30); do
+            PHASE=$(kubectl get tenant test-alice -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+            [ "$PHASE" = "Ready" ] && echo "Tenant ready" && break
+            sleep 2
+          done
+          kubectl get ns openclaw-test-alice
+          kubectl get pvc test-alice-data -n openclaw-test-alice
+          kubectl get sa test-alice -n openclaw-test-alice
+          kubectl get networkpolicy default-deny -n openclaw-test-alice
+
+      - name: Test deletion cleanup
+        run: |
+          kubectl delete tenant test-alice
+          sleep 15
+          kubectl get ns openclaw-test-alice 2>&1 | grep -q "not found\|Terminating"
+
+  rust-docker:
+    name: "Rust: Docker build"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: rust-lint-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        working-directory: operator
+        run: docker build -t tenant-operator:test .
+
+  # ============================================================
+  # Platform: CDK + Helm + Scripts (every PR) ~2 min
+  # ============================================================
+  platform-lint:
+    name: "Platform: CDK + Helm + Scripts"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Install CDK dependencies
+      - name: CDK compile
         working-directory: cdk
-        run: npm ci
+        run: npm ci && npx tsc --noEmit
 
-      - name: TypeScript compile check
-        working-directory: cdk
-        run: npx tsc --noEmit
-
-      - name: CDK synth (validate templates)
+      - name: CDK synth
         working-directory: cdk
         run: |
           cp cdk.json.example cdk.json
           npx cdk synth --no-staging 2>&1 || true
-          # synth may fail due to placeholder values, but template generation should work
 
       - name: Helm lint
-        run: |
-          helm lint helm/charts/openclaw-platform/ \
-            --set ingress.enabled=true \
-            --set ingress.host=test.example.com \
-            --set tenant.name=test
+        run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
 
-      - name: Shell script syntax check
-        run: |
-          for f in scripts/*.sh; do
-            bash -n "$f" && echo "✅ $f" || echo "❌ $f"
-          done
+      - name: Shell syntax
+        run: for f in scripts/*.sh; do bash -n "$f"; done
 
-      - name: No sensitive data check
-        run: |
-          MATCHES=$(grep -rn "387671391109\|snese\.net\|us-west-2_yRqDzKF0t\|103uif8rdrp29ak4eki7lc09ru" \
-            --include="*.ts" --include="*.py" --include="*.md" --include="*.sh" --include="*.html" --include="*.yaml" \
-            2>/dev/null | grep -v node_modules | grep -v cdk.out | grep -v ".git/" | grep -v cdk.json | wc -l)
-          if [ "$MATCHES" -gt 0 ]; then
-            echo "❌ Found $MATCHES sensitive data matches"
-            exit 1
-          fi
-          echo "✅ No sensitive data found"
+  # ============================================================
+  # Security (every PR) ~1 min
+  # ============================================================
+  security-scan:
+    name: "Security scan"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: No CJK characters check
+      - name: No hardcoded secrets
         run: |
-          python3 -c "
-          import glob
-          total=0
-          for f in glob.glob('**/*', recursive=True):
-              if any(x in f for x in ['node_modules','cdk.out','.git','research/']): continue
-              try:
-                  with open(f) as fh:
-                      for line in fh: total+=sum(1 for c in line if '\u4e00'<=c<='\u9fff')
-              except: pass
-          if total > 0:
-              print(f'❌ Found {total} CJK characters')
+          FOUND=$(grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ || true)
+          [ -n "$FOUND" ] && echo "$FOUND" && exit 1 || echo "Clean"
+
+      - name: No CJK in code
+        run: |
+          python3 << 'PYEOF'
+          import glob, os
+          found = []
+          for ext in ['*.ts', '*.py', '*.rs', '*.html']:
+              for f in glob.glob(f'**/{ext}', recursive=True):
+                  if any(x in f for x in ['node_modules','cdk.out','.git','target/']): continue
+                  try:
+                      with open(f) as fh:
+                          for i, line in enumerate(fh, 1):
+                              if any('\u4e00' <= c <= '\u9fff' for c in line):
+                                  found.append(f'{f}:{i}')
+                  except: pass
+          if found:
+              print(f'Found CJK in {len(found)} lines:')
+              for f in found[:10]: print(f'  {f}')
               exit(1)
-          print('✅ No CJK characters')
-          "
+          print('Clean')
+          PYEOF

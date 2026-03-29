@@ -12,4 +12,5 @@ helm/tenants/values-*.yaml
 !helm/tenants/values-template.yaml
 cdk/cdk.json
 logos/
+operator/target/
 __pycache__/
