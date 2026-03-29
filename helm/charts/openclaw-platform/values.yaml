@@ -72,7 +72,7 @@ config:
     mode: local
     bind: lan
     auth:
-      mode: token
+      mode: local
     controlUi:
       allowedOrigins: []
   
