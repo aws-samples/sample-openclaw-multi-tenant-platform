@@ -32,7 +32,7 @@ These MUST be true at all times. Violating any = broken deployment.
 3. **Zero CJK characters** — All code, comments, docs in English
 4. **Helm values-template placeholders** — `{{TENANT}}`, `{{DOMAIN}}`, etc. must match what `provision-tenant.sh` substitutes
 5. **Cognito triggers survive `update-user-pool`** — Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
-6. **Gateway API** — Path-based routing via HTTPRoute + URLRewrite. No subdomain needed. One ALB for all tenants.
+6. **Gateway API + Tenant Operator** — Path-based routing via HTTPRoute + URLRewrite, tenant lifecycle managed by CRD Operator. This is the current architecture.
 
 ## File Relationships
 

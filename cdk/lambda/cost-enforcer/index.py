@@ -5,12 +5,13 @@ from datetime import datetime, timezone
 
 import boto3
 
-PRICING = {
+_DEFAULT_PRICING = {
     'anthropic.claude-opus-4': {'input': 15.0, 'output': 75.0},
     'anthropic.claude-sonnet-4': {'input': 3.0, 'output': 15.0},
     'deepseek': {'input': 0.14, 'output': 0.28},
     'default': {'input': 3.0, 'output': 15.0},
 }
+PRICING = json.loads(os.environ['PRICING_JSON']) if os.environ.get('PRICING_JSON') else _DEFAULT_PRICING
 
 CLUSTER_NAME = os.environ['CLUSTER_NAME']
 LOG_GROUP = os.environ['LOG_GROUP']

@@ -37,8 +37,19 @@ def get_eks_token():
     return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
 
 
-def create_tenant_cr(tenant, email, token):
-    """Create a Tenant CR via K8s API."""
+def create_tenant_cr(tenant, email, token, retries=3):
+    """Create a Tenant CR via K8s API with retry."""
+    import base64, time
+    for attempt in range(retries):
+        try:
+            return _create_tenant_cr_inner(tenant, email, token)
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            time.sleep(2 ** attempt)
+
+
+def _create_tenant_cr_inner(tenant, email, token):
     import base64
     cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
     endpoint = cluster['endpoint']
@@ -117,7 +128,11 @@ def handler(event, context):
         if 'already exists' not in str(e).lower():
             raise
 
-    # 3. Create Tenant CR → Operator handles the rest
+    # 3. Validate tenant name (defense in depth)
+    if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
+        raise Exception(f'Invalid tenant name: {tenant}')
+
+    # 4. Create Tenant CR → Operator handles the rest
     create_tenant_cr(tenant, email, token)
 
     # 4. Notify admin
