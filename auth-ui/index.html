@@ -156,39 +156,20 @@ function pollWorkspace(url,isNewSignup){
   const bar=document.getElementById('progress-bar');
   const ptext=document.getElementById('progress-text');
   const fallback=document.getElementById('loading-fallback');
+  showSection('loading-section');
   if(isNewSignup){
     title.textContent='Creating your workspace...';
-    msg.textContent='This takes about 2 minutes. Please don\u2019t close this page.';
-    progress.style.display='block';
-    const steps=['Setting up your account...','Configuring your AI assistant...','Deploying your workspace...','Almost ready...'];
-    let si=0;
-    const stepInterval=setInterval(()=>{if(si<steps.length){ptext.textContent=steps[si];bar.style.width=Math.min(20+si*22,90)+'%';si++}},25000);
-    bar.style.width='10%';ptext.textContent=steps[0];
-    (async()=>{
-      for(let i=0;i<60;i++){
-        try{await fetch(url,{mode:'no-cors',cache:'no-store'});clearInterval(stepInterval);bar.style.width='100%';ptext.textContent='Ready!';title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},800);return}catch(e){}
-        await new Promise(r=>setTimeout(r,3000))
-      }
-      clearInterval(stepInterval);
-      title.textContent='Still setting up...';
-      msg.textContent='Your workspace is taking longer than expected. Please try signing in again in a few minutes.';
-      bar.style.width='90%';ptext.textContent='';fallback.style.display='block';
-    })()
+    msg.textContent='This takes about 45 seconds. Please don\u2019t close this page.';
+    progress.style.display='block';bar.style.width='5%';
+    const steps=[{t:0,w:'10%',m:'Setting up your account...'},{t:8,w:'30%',m:'Configuring AI assistant...'},{t:20,w:'55%',m:'Deploying workspace...'},{t:35,w:'80%',m:'Almost ready...'},{t:45,w:'95%',m:'Finalizing...'}];
+    steps.forEach(s=>{setTimeout(()=>{bar.style.width=s.w;ptext.textContent=s.m},s.t*1000)});
+    setTimeout(()=>{bar.style.width='100%';ptext.textContent='Ready!';title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},1000)},50000);
   }else{
     title.textContent='Opening your workspace...';
-    msg.textContent='This may take up to 30 seconds if your workspace was idle.';
+    msg.textContent='Redirecting...';
     progress.style.display='none';
-    (async()=>{
-      for(let i=0;i<20;i++){
-        try{await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}
-        await new Promise(r=>setTimeout(r,3000))
-      }
-      title.textContent='Workspace not responding';
-      msg.textContent='Your workspace may still be starting up. Please try again in a moment.';
-      fallback.style.display='block';
-    })()
+    setTimeout(()=>{window.location.href=url},1500);
   }
-  showSection('loading-section')
 }
 function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';document.getElementById('tos').style.display=t==='signup'?'block':'none';document.getElementById('strength-bar').style.display=t==='signup'?'block':'none';if(t==='signup')updateStrength();hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
 function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}
