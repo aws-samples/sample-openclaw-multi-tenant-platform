@@ -74,6 +74,6 @@ echo "==> Helm install"
 helm upgrade --install "${RELEASE}" /tmp/chart.tgz \
   --namespace "${NS}" --create-namespace \
   -f /tmp/values.yaml \
-  --wait --timeout 180s
+  
 
 echo "==> Done: ${TENANT}"
