@@ -1,40 +1,31 @@
 import os
-import boto3
-import urllib.request
 import json
+import urllib.request
 
-sns = boto3.client('sns')
-TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
 ALLOWED_DOMAINS = [d.strip() for d in os.environ.get('ALLOWED_DOMAINS', 'example.com').split(',')]
 TURNSTILE_SECRET = os.environ.get('TURNSTILE_SECRET', '')
 
-def verify_turnstile(token):
-    if not token:
-        raise Exception('CAPTCHA verification required')
-    data = json.dumps({'secret': TURNSTILE_SECRET, 'response': token}).encode()
-    req = urllib.request.Request('https://challenges.cloudflare.com/turnstile/v0/siteverify',
-                                 data=data, headers={'Content-Type': 'application/json'})
-    resp = json.loads(urllib.request.urlopen(req).read())
-    if not resp.get('success'):
-        raise Exception('CAPTCHA verification failed')
-
 def handler(event, context):
-    email = event['request']['userAttributes'].get('email', 'unknown')
+    email = event['request']['userAttributes'].get('email', '')
     domain = email.split('@')[-1].lower() if '@' in email else ''
 
-    # Gate: only allowed email domains
     if domain not in ALLOWED_DOMAINS:
-        raise Exception(f'Email domain not allowed: {domain}')
+        raise Exception('Registration is restricted to company email addresses.')
 
-    # Gate: CAPTCHA (if configured)
     if TURNSTILE_SECRET:
         token = event['request'].get('clientMetadata', {}).get('turnstileToken', '')
-        verify_turnstile(token)
+        if not token:
+            raise Exception('CAPTCHA verification required.')
+        data = json.dumps({'secret': TURNSTILE_SECRET, 'response': token}).encode()
+        req = urllib.request.Request('https://challenges.cloudflare.com/turnstile/v0/siteverify',
+                                     data=data, headers={'Content-Type': 'application/json'})
+        resp = json.loads(urllib.request.urlopen(req).read())
+        if not resp.get('success'):
+            raise Exception('CAPTCHA verification failed.')
 
-    # Auto-confirm: email domain is the trust gate, no admin approval needed
-    event['response']['autoConfirmUser'] = True
-    event['response']['autoVerifyEmail'] = True
+    # Let Cognito handle verification code flow naturally.
+    # User receives code → ConfirmSignUp → CONFIRMED → Post-confirmation fires.
+    event['response']['autoConfirmUser'] = False
+    event['response']['autoVerifyEmail'] = False
 
-    # Notify admin (informational, not approval)
-    sns.publish(TopicArn=TOPIC_ARN, Subject='New User Registered', Message=f'New user: {email}')
     return event

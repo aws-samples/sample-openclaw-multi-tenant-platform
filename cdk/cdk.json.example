@@ -113,6 +113,7 @@
     "selfSignupEnabled": true,
     "defaultTenantBudgetUsd": 100,
     "defaultTenantSkills": "weather,gog",
-    "sesFromEmail": "noreply@your-domain.com"
+    "sesFromEmail": "noreply@your-domain.com",
+    "albClientId": "YOUR_ALB_CLIENT_ID"
   }
 }

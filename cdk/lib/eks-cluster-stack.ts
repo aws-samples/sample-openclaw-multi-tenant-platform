@@ -389,6 +389,7 @@ export class EksClusterStack extends cdk.Stack {
     const domainName = this.node.tryGetContext('zoneName') || 'example.com';
     const cognitoPoolId = this.node.tryGetContext('cognitoPoolId') || '';
     const cognitoClientId = this.node.tryGetContext('cognitoClientId') || '';
+    const albClientId = this.node.tryGetContext('albClientId') || cognitoClientId;
     const cognitoDomain = this.node.tryGetContext('cognitoDomain') || '';
     const allowedEmailDomains = this.node.tryGetContext('allowedEmailDomains') || 'example.com';
     const githubOwner = this.node.tryGetContext('githubOwner') || '';
@@ -483,6 +484,11 @@ export class EksClusterStack extends cdk.Stack {
         REGION: { value: this.region },
         CHART_BUCKET: { value: errorPagesBucket.bucketName },
         DOMAIN: { value: domainName },
+        CERTIFICATE_ARN: { value: certificate.certificateArn },
+        COGNITO_POOL_ID: { value: cognitoPoolId },
+        COGNITO_CLIENT_ID: { value: cognitoClientId },
+        ALB_CLIENT_ID: { value: albClientId },
+        COGNITO_DOMAIN: { value: cognitoDomain },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
         version: '0.2',
@@ -498,8 +504,8 @@ export class EksClusterStack extends cdk.Stack {
             commands: [
               'NAMESPACE="openclaw-${TENANT_NAME}"',
               'RELEASE="openclaw-${TENANT_NAME}"',
-              'aws s3 cp s3://${CHART_BUCKET}/openclaw-platform.tgz /tmp/chart.tgz',
-              'helm install "$RELEASE" /tmp/chart.tgz --namespace "$NAMESPACE" --create-namespace --set "tenant.name=${TENANT_NAME}" --set "fullnameOverride=${RELEASE}" --set "ingress.enabled=true" --set "ingress.host=${TENANT_NAME}.${DOMAIN}" --set "scaleToZero.enabled=true" --wait --timeout 180s',
+              'aws s3 cp s3://${CHART_BUCKET}/provision-tenant.sh /tmp/provision-tenant.sh',
+              'bash /tmp/provision-tenant.sh',
             ],
           },
         },
@@ -507,6 +513,10 @@ export class EksClusterStack extends cdk.Stack {
       source: codebuild.Source.s3({ bucket: errorPagesBucket, path: 'codebuild/source.zip' }),
     });
     errorPagesBucket.grantRead(tenantBuilder.role!);
+    tenantBuilder.role!.addToPrincipalPolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:DescribeUserPoolClient', 'cognito-idp:UpdateUserPoolClient'],
+      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+    }));
     tenantBuilder.role!.addToPrincipalPolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
