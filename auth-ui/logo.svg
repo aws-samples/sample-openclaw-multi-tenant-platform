@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Iteration 9: Shield stronger + constellation (scattered stars = unlimited tenants) -->
+  <g id="icon">
+    <rect width="512" height="512" rx="96" fill="#6366F1"/>
+    <!-- Shield — more visible -->
+    <path d="M256 70 L385 138 L385 285 Q385 395 256 442 Q127 395 127 285 L127 138 Z" fill="#fff" opacity="0.08" stroke="#fff" stroke-width="3" stroke-opacity="0.25"/>
+    <!-- Constellation: scattered dots of varying sizes = many tenants -->
+    <g id="constellation" fill="#fff">
+      <circle cx="145" cy="110" r="4" opacity="0.5"/>
+      <circle cx="380" cy="95" r="3" opacity="0.4"/>
+      <circle cx="105" cy="200" r="3.5" opacity="0.35"/>
+      <circle cx="410" cy="185" r="4" opacity="0.45"/>
+      <circle cx="130" cy="310" r="3" opacity="0.3"/>
+      <circle cx="395" cy="300" r="3.5" opacity="0.35"/>
+      <circle cx="160" cy="400" r="4" opacity="0.4"/>
+      <circle cx="350" cy="410" r="3" opacity="0.35"/>
+      <circle cx="90" cy="260" r="2.5" opacity="0.25"/>
+      <circle cx="420" cy="245" r="2.5" opacity="0.25"/>
+      <circle cx="200" cy="440" r="2.5" opacity="0.3"/>
+      <circle cx="310" cy="445" r="3" opacity="0.3"/>
+      <circle cx="170" cy="80" r="2" opacity="0.2"/>
+      <circle cx="340" cy="75" r="2.5" opacity="0.25"/>
+      <circle cx="440" cy="350" r="2" opacity="0.2"/>
+      <circle cx="75" cy="360" r="2" opacity="0.2"/>
+    </g>
+    <!-- Faint connection lines between some stars -->
+    <g stroke="#fff" stroke-width="1" opacity="0.08">
+      <line x1="145" y1="110" x2="380" y2="95"/>
+      <line x1="105" y1="200" x2="130" y2="310"/>
+      <line x1="410" y1="185" x2="395" y2="300"/>
+      <line x1="160" y1="400" x2="310" y2="445"/>
+      <line x1="200" y1="440" x2="350" y2="410"/>
+    </g>
+    <g id="lobster" transform="translate(256,235) scale(1.45)">
+      <path d="M-30,-60 Q-110,-105 -115,-35 Q-120,25 -55,15 Q-25,8 -25,-25" fill="#fff" opacity="0.95"/>
+      <path d="M30,-60 Q110,-105 115,-35 Q120,25 55,15 Q25,8 25,-25" fill="#fff" opacity="0.95"/>
+      <ellipse cx="0" cy="15" rx="38" ry="52" fill="#fff" opacity="0.95"/>
+      <circle cx="-13" cy="-12" r="7" fill="#6366F1"/>
+      <circle cx="13" cy="-12" r="7" fill="#6366F1"/>
+      <circle cx="-10" cy="-14" r="2.5" fill="#fff"/>
+      <circle cx="16" cy="-14" r="2.5" fill="#fff"/>
+      <ellipse cx="0" cy="78" rx="28" ry="11" fill="#fff" opacity="0.85"/>
+      <ellipse cx="0" cy="96" rx="20" ry="9" fill="#fff" opacity="0.75"/>
+      <path d="M-10,-62 Q-35,-115 -65,-125" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.8"/>
+      <path d="M10,-62 Q35,-115 65,-125" stroke="#fff" stroke-width="5" stroke-linecap="round" fill="none" opacity="0.8"/>
+    </g>
+  </g>
+</svg>

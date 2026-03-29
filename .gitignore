@@ -11,3 +11,4 @@ research/
 helm/tenants/values-*.yaml
 !helm/tenants/values-template.yaml
 cdk/cdk.json
+logos/
