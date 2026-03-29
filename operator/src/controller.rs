@@ -1,7 +1,6 @@
 use crate::{Error, Metrics, Result};
 use futures::StreamExt;
-use k8s_openapi::api::core::v1::{ConfigMap, Namespace, PersistentVolumeClaim, ServiceAccount};
-use k8s_openapi::api::networking::v1::NetworkPolicy;
+use k8s_openapi::api::core::v1::{Namespace, PersistentVolumeClaim, ServiceAccount};
 
 use kube::{
     CustomResource, Resource, ResourceExt,
@@ -93,6 +92,11 @@ pub struct TenantCondition {
     pub message: Option<String>,
 }
 
+/// Helper to require an environment variable, returning HelmError if missing
+fn require_env(key: &str) -> Result<String> {
+    std::env::var(key).map_err(|_| Error::HelmError(format!("{key} not set")))
+}
+
 // --- Reconciler Context ---
 
 #[derive(Clone)]
@@ -138,7 +142,7 @@ async fn reconcile(tenant: Arc<Tenant>, ctx: Arc<Context>) -> Result<Action> {
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-/// Apply desired state: ensure namespace, PVC, ServiceAccount, NetworkPolicy exist
+/// Apply desired state: ensure namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Result<Action> {
     let client = ctx.client.clone();
     let name = tenant.name_any();
@@ -216,54 +220,15 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         .map_err(Error::KubeError)?;
     info!("Ensured ServiceAccount {name} in {tenant_ns}");
 
-    // 4. NetworkPolicy — managed by Helm chart, not operator
-    // (Helm chart creates a more complete policy including Pod Identity Agent access)
-    /*
-    let np_api: Api<NetworkPolicy> = Api::namespaced(client.clone(), tenant_ns);
-    let np_patch: serde_json::Value = json!({
-        "apiVersion": "networking.k8s.io/v1",
-        "kind": "NetworkPolicy",
-        "metadata": {
-            "name": "default-deny",
-            "namespace": tenant_ns,
-            "labels": {
-                "openclaw.io/tenant": name,
-                "app.kubernetes.io/managed-by": "tenant-operator"
-            }
-        },
-        "spec": {
-            "podSelector": {},
-            "policyTypes": ["Ingress", "Egress"],
-            "ingress": [
-                {
-                    "ports": [
-                        { "port": 18789, "protocol": "TCP" }
-                    ]
-                }
-            ],
-            "egress": [
-                {
-                    "ports": [
-                        { "port": 53, "protocol": "UDP" },
-                        { "port": 53, "protocol": "TCP" },
-                        { "port": 443, "protocol": "TCP" }
-                    ]
-                }
-            ]
-        }
-    });
-    np_api
-        .patch("default-deny", &ssapply, &Patch::Apply(np_patch))
-        .await
-        .map_err(Error::KubeError)?;
-    info!("Ensured NetworkPolicy default-deny in {tenant_ns}");
-    */
+    // 4. NetworkPolicy — managed by Helm chart via ArgoCD, not operator
 
-    // 5. Helm release: create values ConfigMap and run helm upgrade --install
-    let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
-    let cognito_pool_arn = std::env::var("COGNITO_POOL_ARN").unwrap_or_default();
-    let cognito_client_id = std::env::var("COGNITO_CLIENT_ID").unwrap_or_default();
-    let cognito_domain = std::env::var("COGNITO_DOMAIN").unwrap_or_default();
+    // 5. ArgoCD Application — delegates Helm chart deployment to ArgoCD
+    let _gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
+    let cognito_pool_arn = require_env("COGNITO_POOL_ARN")?;
+    let cognito_client_id = require_env("COGNITO_CLIENT_ID")?;
+    let cognito_domain = require_env("COGNITO_DOMAIN")?;
+    let chart_repo = require_env("CHART_REPO")?;
+    let chart_version = std::env::var("CHART_VERSION").unwrap_or_else(|_| "1.3.14".into());
 
     let helm_values = serde_yaml::to_string(&json!({
         "tenant": {
@@ -286,85 +251,61 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     }))
     .map_err(|e| Error::HelmError(e.to_string()))?;
 
-    let cm_api: Api<ConfigMap> = Api::namespaced(client.clone(), tenant_ns);
-    let cm_patch: serde_json::Value = json!({
-        "apiVersion": "v1",
-        "kind": "ConfigMap",
+    let app_ar = ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk("argoproj.io", "v1alpha1", "Application"),
+        "applications",
+    );
+    let app_api: Api<DynamicObject> = Api::namespaced_with(client.clone(), "argocd", &app_ar);
+    let app_patch: serde_json::Value = json!({
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
         "metadata": {
-            "name": format!("{name}-helm-values"),
-            "namespace": tenant_ns,
+            "name": format!("tenant-{name}"),
+            "namespace": "argocd",
             "labels": {
-                "openclaw.io/tenant": name,
+                "openclaw.io/tenant": &name,
                 "app.kubernetes.io/managed-by": "tenant-operator"
             }
         },
-        "data": {
-            "values.yaml": helm_values
+        "spec": {
+            "project": "default",
+            "source": {
+                "repoURL": &chart_repo,
+                "chart": "openclaw-platform",
+                "targetRevision": &chart_version,
+                "helm": {
+                    "values": &helm_values
+                }
+            },
+            "destination": {
+                "server": "https://kubernetes.default.svc",
+                "namespace": tenant_ns
+            },
+            "syncPolicy": {
+                "automated": {
+                    "prune": true,
+                    "selfHeal": true
+                },
+                "syncOptions": ["CreateNamespace=false"]
+            }
         }
     });
-    cm_api
+    let argocd_condition = match app_api
         .patch(
-            &format!("{name}-helm-values"),
+            &format!("tenant-{name}"),
             &ssapply,
-            &Patch::Apply(cm_patch),
+            &Patch::Apply(app_patch),
         )
         .await
-        .map_err(Error::KubeError)?;
-    info!("Ensured Helm values ConfigMap {name}-helm-values in {tenant_ns}");
-
-    // Download chart from S3 if not cached
-    let chart_path = "/tmp/openclaw-platform.tgz";
-    if !std::path::Path::new(chart_path).exists() {
-        let dl = tokio::process::Command::new("aws")
-            .args(["s3", "cp", &format!("s3://{}/openclaw-platform.tgz", std::env::var("CHART_BUCKET").unwrap_or_default()), chart_path, "--region", &std::env::var("AWS_REGION").unwrap_or("us-west-2".into())])
-            .output().await
-            .map_err(|e| Error::HelmError(format!("Failed to download chart: {e}")))?;
-        if !dl.status.success() {
-            return Err(Error::HelmError(format!("Chart download failed: {}", String::from_utf8_lossy(&dl.stderr))));
+    {
+        Ok(_) => {
+            info!("Ensured ArgoCD Application tenant-{name}");
+            json!({ "type": "ArgoAppReady", "status": "True" })
         }
-    }
-
-    let mut helm_child = tokio::process::Command::new("helm")
-        .args([
-            "upgrade",
-            "--install",
-            &name,
-            chart_path,
-            "--namespace",
-            tenant_ns,
-            "--values",
-            "/dev/stdin",
-            "--timeout",
-            "5m",
-        ])
-        .stdin(std::process::Stdio::piped())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .map_err(|e| Error::HelmError(format!("Failed to spawn helm: {e}")))?;
-
-    // Write values to stdin
-    if let Some(mut stdin) = helm_child.stdin.take() {
-        use tokio::io::AsyncWriteExt;
-        stdin
-            .write_all(helm_values.as_bytes())
-            .await
-            .map_err(|e| Error::HelmError(format!("Failed to write helm values: {e}")))?;
-        drop(stdin);
-    }
-
-    let output = helm_child
-        .wait_with_output()
-        .await
-        .map_err(|e| Error::HelmError(format!("Helm process error: {e}")))?;
-
-    let helm_condition = if output.status.success() {
-        info!("Helm release {name} deployed in {tenant_ns}");
-        json!({ "type": "HelmReleaseReady", "status": "True" })
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!("Helm release {name} failed: {stderr}");
-        json!({ "type": "HelmReleaseReady", "status": "False", "message": stderr.to_string() })
+        Err(e) => {
+            warn!("ArgoCD Application tenant-{name} failed: {e}");
+            json!({ "type": "ArgoAppReady", "status": "False", "message": e.to_string() })
+        }
     };
 
     // 6. Ensure KEDA HTTPScaledObject (scale-to-zero after 15m idle, max 1 replica)
@@ -422,8 +363,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "conditions": [
                 { "type": "NamespaceReady", "status": "True" },
                 { "type": "PVCBound", "status": "Unknown", "message": "Pending verification" },
-                { "type": "NetworkPolicyApplied", "status": "True" },
-                helm_condition,
+                argocd_condition,
                 keda_condition
             ]
         }
@@ -460,6 +400,26 @@ async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Res
     let oref = tenant.object_ref(&());
 
     info!("Cleaning up Tenant \"{name}\"");
+
+    // Delete ArgoCD Application first (stops sync before namespace deletion)
+    let app_ar = ApiResource::from_gvk_with_plural(
+        &kube::api::GroupVersionKind::gvk("argoproj.io", "v1alpha1", "Application"),
+        "applications",
+    );
+    let app_api: Api<DynamicObject> = Api::namespaced_with(client.clone(), "argocd", &app_ar);
+    let app_name = format!("tenant-{name}");
+    if app_api
+        .get_opt(&app_name)
+        .await
+        .map_err(Error::KubeError)?
+        .is_some()
+    {
+        app_api
+            .delete(&app_name, &Default::default())
+            .await
+            .map_err(Error::KubeError)?;
+        info!("Deleted ArgoCD Application {app_name}");
+    }
 
     // Delete namespace (cascades all resources inside)
     // PVC retention is handled by StorageClass reclaimPolicy

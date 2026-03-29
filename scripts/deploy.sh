@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 echo '==> Step 1: CDK Deploy'
-cd cdk && npm ci && npx cdk deploy OpenClawEksStack --require-approval never && cd ..
+cd cdk && npm ci && npx cdk deploy OpenClawEksStack --require-approval broadening && cd ..
 echo '==> Step 2: Setup Cognito'
 bash scripts/setup-cognito.sh
 echo '==> Step 3: Deploy Auth UI'

@@ -1,35 +1,6 @@
-# ArgoCD ApplicationSet — auto-discover tenants from helm/tenants/values-*.yaml
-# Replace <YOUR_GITHUB_ORG> with your GitHub org/user (e.g. your-org)
-apiVersion: argoproj.io/v1alpha1
-kind: ApplicationSet
-metadata:
-  name: openclaw-tenants
-  namespace: argocd
-spec:
-  generators:
-    - git:
-        repoURL: https://github.com/<YOUR_GITHUB_ORG>/openclaw-platform.git
-        revision: main
-        files:
-          - path: helm/tenants/values-*.yaml
-  template:
-    metadata:
-      name: '{{path.filenameNormalized}}'
-    spec:
-      project: default
-      source:
-        repoURL: https://github.com/<YOUR_GITHUB_ORG>/openclaw-platform.git
-        path: helm/charts/openclaw-platform
-        targetRevision: main
-        helm:
-          valueFiles:
-            - '../../tenants/{{path.filename}}'
-      destination:
-        server: https://kubernetes.default.svc
-        namespace: 'openclaw-{{path.basenameNormalized}}'
-      syncPolicy:
-        automated:
-          prune: true
-          selfHeal: true
-        syncOptions:
-          - CreateNamespace=true
+# This file has been removed.
+# The Tenant Operator now creates ArgoCD Application CRs directly,
+# replacing the ApplicationSet git-file generator approach.
+# See operator/src/controller.rs for the new flow.
+#
+# To fully remove this directory, delete this placeholder after merge.
