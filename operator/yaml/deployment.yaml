@@ -18,10 +18,13 @@ rules:
     resources: ["tenants", "tenants/status"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
-    resources: ["namespaces", "persistentvolumeclaims", "serviceaccounts", "events"]
+    resources: ["namespaces", "persistentvolumeclaims", "serviceaccounts", "events", "configmaps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["http.keda.sh"]
+    resources: ["httpscaledobjects"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -68,6 +71,13 @@ spec:
             requests:
               memory: "64Mi"
               cpu: "50m"
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           livenessProbe:
             httpGet:
               path: /health
