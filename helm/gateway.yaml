@@ -30,7 +30,7 @@ spec:
       group: gateway.k8s.aws
   listeners:
     - name: https
-      hostname: "*.claw.snese.net"
+      hostname: "claw.snese.net"
       protocol: HTTPS
       port: 443
       allowedRoutes:

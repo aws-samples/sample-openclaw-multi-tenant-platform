@@ -490,6 +490,9 @@ export class EksClusterStack extends cdk.Stack {
         CHART_BUCKET: { value: errorPagesBucket.bucketName },
         DOMAIN: { value: domainName },
         CERTIFICATE_ARN: { value: certificate.certificateArn },
+        COGNITO_POOL_ID: { value: cognitoPoolId },
+        ALB_CLIENT_ID: { value: albClientId },
+        COGNITO_DOMAIN: { value: cognitoDomain },
         COGNITO_CLIENT_ID: { value: cognitoClientId },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
