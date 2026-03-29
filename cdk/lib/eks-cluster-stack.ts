@@ -449,7 +449,6 @@ export class EksClusterStack extends cdk.Stack {
         TENANT_ROLE_ARN: tenantRole.roleArn,
         DOMAIN: domainName,
         CODEBUILD_PROJECT: 'openclaw-tenant-builder',
-        SES_FROM_EMAIL: `noreply@${domainName}`,
       },
       timeout: cdk.Duration.seconds(30),
     });
@@ -463,12 +462,12 @@ export class EksClusterStack extends cdk.Stack {
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['codebuild:StartBuild'],
-      resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/openclaw-tenant-builder`],
+      actions: ['iam:PassRole', 'iam:GetRole'],
+      resources: [tenantRole.roleArn],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ses:SendEmail'],
-      resources: [`arn:aws:ses:${this.region}:${this.account}:identity/${domainName}`],
+      actions: ['codebuild:StartBuild'],
+      resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/openclaw-tenant-builder`],
     }));
 
     // ── CodeBuild: Tenant Builder ────────────────────────────────────────────

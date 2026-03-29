@@ -17,16 +17,17 @@ echo "  Pool:   $POOL_ID"
 echo "  Client: $CLIENT_ID"
 echo "  Domain: $DOMAIN"
 
-# 1. User pool settings: self-signup + email auto-verify
-echo "  → Setting user pool config"
+# 1. User pool: ALL settings in ONE call (update-user-pool replaces entire config)
+echo "  → Updating user pool (self-signup + email verify + Lambda triggers)"
 aws cognito-idp update-user-pool \
   --user-pool-id "$POOL_ID" \
   --auto-verified-attributes email \
   --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
+  --lambda-config "PreSignUp=$PRE_ARN,PostConfirmation=$POST_ARN" \
   --region "$REGION"
 
 # 2. Client: auth flows + callback URLs
-echo "  → Updating client auth flows + callback URLs"
+echo "  → Updating client"
 aws cognito-idp update-user-pool-client \
   --user-pool-id "$POOL_ID" \
   --client-id "$CLIENT_ID" \
@@ -38,16 +39,8 @@ aws cognito-idp update-user-pool-client \
   --supported-identity-providers COGNITO \
   --region "$REGION" > /dev/null
 
-# 3. Lambda triggers
-echo "  → Attaching Lambda triggers"
-aws cognito-idp update-user-pool \
-  --user-pool-id "$POOL_ID" \
-  --lambda-config "PreSignUp=$PRE_ARN,PostConfirmation=$POST_ARN" \
-  --auto-verified-attributes email \
-  --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
-  --region "$REGION"
-
-# 4. Lambda invoke permissions
+# 3. Lambda invoke permissions
+echo "  → Setting Lambda permissions"
 for ARN in "$PRE_ARN" "$POST_ARN"; do
   FN_NAME=$(echo "$ARN" | awk -F: '{print $NF}')
   aws lambda add-permission \
@@ -59,8 +52,9 @@ for ARN in "$PRE_ARN" "$POST_ARN"; do
     --region "$REGION" 2>/dev/null || true
 done
 
-echo "✅ Cognito configured"
-echo "  Self-signup: enabled"
-echo "  Auto-verify: email"
-echo "  Auth flows: USER_PASSWORD_AUTH + SRP + REFRESH"
-echo "  Lambda triggers: PreSignUp + PostConfirmation"
+# 4. Verify
+echo ""
+echo "=== Cognito Configured ==="
+LAMBDA_CHECK=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL_ID" --region "$REGION" --query 'UserPool.LambdaConfig')
+echo "  Lambda triggers: $LAMBDA_CHECK"
+echo "=========================="
