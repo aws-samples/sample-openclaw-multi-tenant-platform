@@ -127,7 +127,7 @@ input::placeholder{color:#555}
     <div id="welcome-section" class="section">
       <div class="check">✓</div>
       <h2>Account Created</h2>
-      <p>Your account is pending admin approval. You will receive an email with your personal AI assistant URL once approved.</p>
+      <p>Your workspace is being set up. This usually takes about 2 minutes. You will receive an email when it is ready.</p>
       <p class="link" onclick="showSection('auth-section')" style="margin-top:1.5rem">Back to sign in</p>
     </div>
   </div>
@@ -157,7 +157,7 @@ async function handleSubmit(e){
   setLoading(btn,true);
   try{
     if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});pendingEmail=email;showSection('verify-section')}
-    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;showSection('loading-section');(async()=>{for(let i=0;i<20;i++){try{const r=await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}await new Promise(r=>setTimeout(r,3000))}document.getElementById('loading-msg').textContent='Your workspace is taking longer than expected. Please contact your administrator.'})()}
+    else{await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${t}.${C.domain}`;showSection('loading-section');(async()=>{for(let i=0;i<20;i++){try{const r=await fetch(url,{mode:'no-cors',cache:'no-store'});window.location.href=url;return}catch(e){}await new Promise(r=>setTimeout(r,3000))}document.getElementById('loading-msg').textContent='Your workspace is still being set up. Please wait a moment and try again.'})()}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)
 }

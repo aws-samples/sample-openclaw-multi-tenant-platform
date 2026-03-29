@@ -18,10 +18,10 @@ A company employee goes from zero to chatting with their personal AI assistant i
 │  3. Verify email (enter code from inbox)                        │
 │     → Cognito ConfirmSignUp                                     │
 │                                                                 │
-│  4. "Account Created — pending admin approval"                  │
+│  4. "Account Created — being set up"                  │
 │     → Admin receives SNS notification                           │
 │                                                                 │
-│  5. Admin approves in Cognito Console                           │
+│  5. Email verified in Cognito Console                           │
 │     → Post-confirmation Lambda:                                 │
 │       a. Secrets Manager secret                                 │
 │       b. Pod Identity Association                               │
@@ -68,7 +68,7 @@ A company employee goes from zero to chatting with their personal AI assistant i
 
 ### 4. Pending Approval
 
-- User sees "Account Created — pending admin approval" page
+- User sees "Account Created — being set up" page
 - Admin receives SNS email notification
 - User cannot log in until admin approves
 
@@ -81,7 +81,7 @@ A company employee goes from zero to chatting with their personal AI assistant i
 
 - Sent via Amazon SES directly to user's email
 - Contains tenant URL: `https://<name>.your-domain.com`
-- Sent within seconds of admin approval
+- Sent within seconds of auto-provisioning
 
 ### 7. First Login
 

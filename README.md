@@ -34,7 +34,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **Scale to zero** — KEDA scales idle pods to 0; cold start in 15-30s
 - **Internal ALB** — not internet-facing; all traffic through CloudFront + WAF
 - **Custom auth UI** — branded login/signup on your domain (no Cognito Hosted UI)
-- **Self-service signup** — Cognito + Lambda auto-provisions tenants on admin approval
+- **Self-service signup** — Cognito + Lambda auto-provisions tenants on auto-provisioning
 - **GitOps** — ArgoCD (EKS Capability) manages tenants via ApplicationSet
 - **Cost control** — per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** — 20% cheaper compute with t4g instances

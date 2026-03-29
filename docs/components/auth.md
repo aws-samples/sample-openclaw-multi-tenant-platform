@@ -50,7 +50,7 @@ A single-page app that talks directly to the Cognito API via `AWSCognitoIdentity
 - Hosted UI URLs are ugly (`https://{domain}.auth.{region}.amazoncognito.com/...`)
 - Limited CSS customization, no control over layout or UX flow
 - Can't integrate Cloudflare Turnstile CAPTCHA
-- Can't show custom post-signup messages (e.g., "pending admin approval")
+- Can't show custom post-signup messages (e.g., "being set up")
 
 **Features:**
 - Sign in / Sign up tabs
@@ -105,7 +105,7 @@ def handler(event, context):
             raise Exception('CAPTCHA token missing')
         verify_turnstile(token)  # POST to Cloudflare siteverify API
 
-    # 3. Require admin approval
+    # 3. Require auto-provisioning
     event['response']['autoConfirmUser'] = False
     event['response']['autoVerifyEmail'] = True
 
