@@ -167,6 +167,12 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | `https://alice.your-domain.com` | Tenant AI assistant |
 | `https://your-domain.com/admin.html` | Admin dashboard |
 
+## Quick Start (Minimal)
+
+1. **Configure**: `cp cdk/cdk.json.example cdk/cdk.json` — fill in your values
+2. **Deploy**: `bash scripts/deploy.sh`
+3. **Visit**: `https://your-domain.com`
+
 ## Tenant Management
 
 ```bash

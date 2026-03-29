@@ -50,7 +50,8 @@
 **How it's configured**:
 - Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS` env var)
 - Cloudflare Turnstile CAPTCHA verification (if `TURNSTILE_SECRET` is set)
-- `autoConfirmUser: false` — admin must manually approve each user
+- `autoConfirmUser: true` — email domain restriction is the trust gate, not admin approval
+  > **Note**: The `allowedEmailDomains` setting in `cdk.json` is the primary access control. Ensure this is set to your company domain only.
 - SNS notification on every signup attempt
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` → `PreSignupFn`

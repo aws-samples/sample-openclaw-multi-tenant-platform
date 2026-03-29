@@ -216,7 +216,9 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         .map_err(Error::KubeError)?;
     info!("Ensured ServiceAccount {name} in {tenant_ns}");
 
-    // 4. Ensure default-deny NetworkPolicy
+    // 4. NetworkPolicy — managed by Helm chart, not operator
+    // (Helm chart creates a more complete policy including Pod Identity Agent access)
+    /*
     let np_api: Api<NetworkPolicy> = Api::namespaced(client.clone(), tenant_ns);
     let np_patch: serde_json::Value = json!({
         "apiVersion": "networking.k8s.io/v1",
@@ -255,6 +257,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         .await
         .map_err(Error::KubeError)?;
     info!("Ensured NetworkPolicy default-deny in {tenant_ns}");
+    */
 
     // 5. Helm release: create values ConfigMap and run helm upgrade --install
     let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
