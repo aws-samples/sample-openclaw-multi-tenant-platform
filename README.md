@@ -183,6 +183,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 |--------|---------|
 | `post-deploy.sh` | VPC Origin + CloudFront #2 + Route53 + WAF |
 | `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
+| `upload-helm-chart.sh` | Package and upload Helm chart to S3 (for CodeBuild) |
 | `setup-cognito.sh` | Cognito config (auth flows, triggers) |
 | `setup-keda.sh` | Install KEDA for scale-to-zero |
 | `setup-argocd.sh` | ArgoCD EKS Capability status |

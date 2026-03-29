@@ -481,6 +481,8 @@ export class EksClusterStack extends cdk.Stack {
         CLUSTER_NAME: { value: cluster.clusterName },
         TENANT_ROLE_ARN: { value: tenantRole.roleArn },
         REGION: { value: this.region },
+        CHART_BUCKET: { value: errorPagesBucket.bucketName },
+        DOMAIN: { value: domainName },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
         version: '0.2',
@@ -496,17 +498,15 @@ export class EksClusterStack extends cdk.Stack {
             commands: [
               'NAMESPACE="openclaw-${TENANT_NAME}"',
               'RELEASE="openclaw-${TENANT_NAME}"',
-              'helm install "$RELEASE" helm/charts/openclaw-platform --namespace "$NAMESPACE" --create-namespace --set "tenant.name=${TENANT_NAME}" --set "fullnameOverride=${RELEASE}" --set "ingress.enabled=true" --set "ingress.host=${TENANT_NAME}." --set "scaleToZero.enabled=true" --wait --timeout 180s',
+              'aws s3 cp s3://${CHART_BUCKET}/openclaw-platform.tgz /tmp/chart.tgz',
+              'helm install "$RELEASE" /tmp/chart.tgz --namespace "$NAMESPACE" --create-namespace --set "tenant.name=${TENANT_NAME}" --set "fullnameOverride=${RELEASE}" --set "ingress.enabled=true" --set "ingress.host=${TENANT_NAME}.${DOMAIN}" --set "scaleToZero.enabled=true" --wait --timeout 180s',
             ],
           },
         },
       }),
-      source: codebuild.Source.gitHub({
-        owner: githubOwner,
-        repo: githubRepo,
-        branchOrRef: 'main',
-      }),
+      source: codebuild.Source.s3({ bucket: errorPagesBucket, path: 'codebuild/source.zip' }),
     });
+    errorPagesBucket.grantRead(tenantBuilder.role!);
     tenantBuilder.role!.addToPrincipalPolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
