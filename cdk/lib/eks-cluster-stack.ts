@@ -450,10 +450,7 @@ export class EksClusterStack extends cdk.Stack {
       environment: {
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         CLUSTER_NAME: cluster.clusterName,
-        COGNITO_POOL_ID: cognitoPoolId,
-        ALB_CLIENT_ID: albClientId,
         CERTIFICATE_ARN: certificate.certificateArn,
-        COGNITO_DOMAIN: cognitoDomain,
         DOMAIN: domainName,
         CODEBUILD_PROJECT: 'openclaw-tenant-builder',
         OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
@@ -493,10 +490,7 @@ export class EksClusterStack extends cdk.Stack {
         CHART_BUCKET: { value: errorPagesBucket.bucketName },
         DOMAIN: { value: domainName },
         CERTIFICATE_ARN: { value: certificate.certificateArn },
-        COGNITO_POOL_ID: { value: cognitoPoolId },
         COGNITO_CLIENT_ID: { value: cognitoClientId },
-        ALB_CLIENT_ID: { value: albClientId },
-        COGNITO_DOMAIN: { value: cognitoDomain },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
         version: '0.2',
@@ -671,10 +665,7 @@ export class EksClusterStack extends cdk.Stack {
       code: lambda.Code.fromAsset('lambda/cost-enforcer'),
       environment: {
         CLUSTER_NAME: cluster.clusterName,
-        COGNITO_POOL_ID: cognitoPoolId,
-        ALB_CLIENT_ID: albClientId,
         CERTIFICATE_ARN: certificate.certificateArn,
-        COGNITO_DOMAIN: cognitoDomain,
         LOG_GROUP: `/aws/containerinsights/${cluster.clusterName}/application`,
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         REGION: this.region,

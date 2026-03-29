@@ -42,7 +42,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
 ## Architecture
 
-Tenant provisioning: Post-confirmation Lambda creates K8s resources directly via API (~15s), no CodeBuild dependency.
+Path-based routing via Gateway API: `claw.snese.net/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
 
 ```
 Internet
@@ -226,7 +226,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ### Architecture
 
-Tenant provisioning: Post-confirmation Lambda creates K8s resources directly via API (~15s), no CodeBuild dependency.
+Path-based routing via Gateway API: `claw.snese.net/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
 - [System Architecture](docs/architecture.md)
 - [Security Deep Dive](docs/security.md)
 

@@ -99,7 +99,7 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 | `cloudfrontCertificateArn` | ACM certificate ARN (us-east-1, for CloudFront) |
 | `cognitoPoolId` | Cognito User Pool ID |
 | `cognitoClientId` | Cognito public client ID (for auth UI) |
-| `albClientId` | Cognito confidential client ID (for ALB auth) |
+| `albClientId` | Cognito confidential client ID (legacy, for ALB Cognito auth) |
 | `cognitoDomain` | Cognito domain prefix |
 | `allowedEmailDomains` | Comma-separated allowed email domains |
 | `githubOwner` | GitHub org/user for ArgoCD |

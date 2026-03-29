@@ -7,15 +7,12 @@ from botocore.exceptions import ClientError
 sm = boto3.client('secretsmanager')
 eks_client = boto3.client('eks')
 sns = boto3.client('sns')
-cognito = boto3.client('cognito-idp')
 cb = boto3.client('codebuild')
 
 TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
 CLUSTER_NAME = os.environ['CLUSTER_NAME']
 TENANT_ROLE_ARN = os.environ['TENANT_ROLE_ARN']
 DOMAIN = os.environ.get('DOMAIN', 'example.com')
-COGNITO_POOL_ID = os.environ.get('COGNITO_POOL_ID', '')
-ALB_CLIENT_ID = os.environ.get('ALB_CLIENT_ID', '')
 CODEBUILD_PROJECT = os.environ.get('CODEBUILD_PROJECT', 'openclaw-tenant-builder')
 
 
@@ -53,29 +50,7 @@ def handler(event, context):
         if 'already exists' not in str(e).lower():
             raise
 
-    # 3. Cognito callback URL (ALB client)
-    if ALB_CLIENT_ID and COGNITO_POOL_ID:
-        try:
-            info = cognito.describe_user_pool_client(
-                UserPoolId=COGNITO_POOL_ID, ClientId=ALB_CLIENT_ID,
-            )['UserPoolClient']
-            callbacks = info.get('CallbackURLs', [])
-            new_cb = f'https://{tenant}.{DOMAIN}/oauth2/idpresponse'
-            if new_cb not in callbacks:
-                callbacks.append(new_cb)
-                cognito.update_user_pool_client(
-                    UserPoolId=COGNITO_POOL_ID, ClientId=ALB_CLIENT_ID,
-                    CallbackURLs=callbacks,
-                    ExplicitAuthFlows=info.get('ExplicitAuthFlows', []),
-                    AllowedOAuthFlows=info.get('AllowedOAuthFlows', []),
-                    AllowedOAuthScopes=info.get('AllowedOAuthScopes', []),
-                    AllowedOAuthFlowsUserPoolClient=True,
-                    SupportedIdentityProviders=info.get('SupportedIdentityProviders', []),
-                )
-        except ClientError:
-            pass
-
-    # 4. Trigger CodeBuild for Helm install
+    # 3. Trigger CodeBuild for Helm install
     try:
         cb.start_build(
             projectName=CODEBUILD_PROJECT,
