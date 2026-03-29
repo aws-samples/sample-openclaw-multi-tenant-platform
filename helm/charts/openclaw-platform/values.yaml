@@ -205,3 +205,9 @@ fetchSecret: |
     result[id] = SecretString;
   }
   process.stdout.write(JSON.stringify(result));
+
+# Gateway API (replaces Ingress for path-based routing)
+gateway:
+  enabled: false
+  gatewayName: openclaw-gateway
+  gatewayNamespace: openclaw-system

@@ -194,6 +194,7 @@ export class EksClusterStack extends cdk.Stack {
         serviceAccount: { create: false, name: 'aws-load-balancer-controller' },
         region: this.region,
         vpcId: vpc.vpcId,
+        controllerConfig: { featureGates: { ALBGatewayAPI: true } },
       },
     });
 

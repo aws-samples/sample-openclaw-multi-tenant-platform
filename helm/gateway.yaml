@@ -1,0 +1,38 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: openclaw-alb
+spec:
+  controllerName: gateway.k8s.aws/alb
+---
+apiVersion: gateway.k8s.aws/v1beta1
+kind: LoadBalancerConfiguration
+metadata:
+  name: openclaw-lb-config
+  namespace: openclaw-system
+spec:
+  scheme: internal
+  loadBalancerAttributes:
+    - key: idle_timeout.timeout_seconds
+      value: "120"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: openclaw-gateway
+  namespace: openclaw-system
+spec:
+  gatewayClassName: openclaw-alb
+  infrastructure:
+    parametersRef:
+      kind: LoadBalancerConfiguration
+      name: openclaw-lb-config
+      group: gateway.k8s.aws
+  listeners:
+    - name: https
+      hostname: "*.claw.snese.net"
+      protocol: HTTPS
+      port: 443
+      allowedRoutes:
+        namespaces:
+          from: All
