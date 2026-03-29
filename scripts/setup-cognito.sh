@@ -22,6 +22,7 @@ echo "  → Setting AutoVerifiedAttributes: email"
 aws cognito-idp update-user-pool \
   --user-pool-id "$POOL_ID" \
   --auto-verified-attributes email \
+  --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
   --region "$REGION"
 
 # 2. Update client: auth flows + callback URLs
@@ -43,6 +44,7 @@ aws cognito-idp update-user-pool \
   --user-pool-id "$POOL_ID" \
   --lambda-config "PreSignUp=$PRE_ARN,PostConfirmation=$POST_ARN" \
   --auto-verified-attributes email \
+  --admin-create-user-config '{"AllowAdminCreateUserOnly": false}' \
   --region "$REGION"
 
 # 4. Grant Cognito permission to invoke Lambdas
