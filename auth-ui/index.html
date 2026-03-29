@@ -157,19 +157,20 @@ function pollWorkspace(url,isNewSignup){
   const ptext=document.getElementById('progress-text');
   const fallback=document.getElementById('loading-fallback');
   showSection('loading-section');
-  if(isNewSignup){
-    title.textContent='Creating your workspace...';
-    msg.textContent='This takes about 45 seconds. Please don\u2019t close this page.';
-    progress.style.display='block';bar.style.width='5%';
-    const steps=[{t:0,w:'10%',m:'Setting up your account...'},{t:8,w:'30%',m:'Configuring AI assistant...'},{t:20,w:'55%',m:'Deploying workspace...'},{t:35,w:'80%',m:'Almost ready...'},{t:45,w:'95%',m:'Finalizing...'}];
-    steps.forEach(s=>{setTimeout(()=>{bar.style.width=s.w;ptext.textContent=s.m},s.t*1000)});
-    setTimeout(()=>{bar.style.width='100%';ptext.textContent='Ready!';title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},1000)},50000);
-  }else{
-    title.textContent='Opening your workspace...';
-    msg.textContent='Redirecting...';
-    progress.style.display='none';
-    setTimeout(()=>{window.location.href=url},1500);
-  }
+  title.textContent=isNewSignup?'Creating your workspace...':'Opening your workspace...';
+  msg.textContent=isNewSignup?'This usually takes about 2 minutes.':'Connecting...';
+  progress.style.display=isNewSignup?'block':'none';
+  if(isNewSignup){bar.style.width='5%';ptext.textContent='Setting up...';}
+  const max=isNewSignup?60:20;
+  let i=0;
+  const poll=async()=>{
+    i++;
+    if(isNewSignup){const p=Math.min(5+i*1.5,95);bar.style.width=p+'%';ptext.textContent=i<8?'Setting up account...':i<18?'Configuring AI assistant...':i<30?'Deploying workspace...':'Almost ready...';}
+    try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status!==404&&r.status!==502&&r.status!==503){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},800);return;}}catch(e){}
+    if(i>=max){title.textContent='Still setting up...';msg.textContent='Taking longer than expected. Try refreshing in a minute.';fallback.style.display='block';return;}
+    setTimeout(poll,3000);
+  };
+  poll();
 }
 function switchTab(t){tab=t;document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',(i===0&&t==='login')||(i===1&&t==='signup')));document.getElementById('submit-btn').innerHTML=t==='login'?'Sign In<span class="spinner"></span>':'Create Account<span class="spinner"></span>';document.getElementById('pw-hint').style.display=t==='signup'?'block':'none';document.getElementById('forgot-link').style.display=t==='login'?'block':'none';document.getElementById('tos').style.display=t==='signup'?'block':'none';document.getElementById('strength-bar').style.display=t==='signup'?'block':'none';if(t==='signup')updateStrength();hideMsg('msg');const tc=document.getElementById('turnstile-container');if(t==='signup'&&C.turnstileSiteKey){tc.style.display='block';if(turnstileId===null&&typeof turnstile!=='undefined'){turnstileId=turnstile.render('#turnstile-container',{sitekey:C.turnstileSiteKey})}}else{tc.style.display='none'}}
 function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.className='msg '+c}

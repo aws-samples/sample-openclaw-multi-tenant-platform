@@ -86,3 +86,7 @@ spec:
 EOF
 
 echo "==> Done: ${TENANT}"
+
+echo "==> Writing status file"
+echo "{\"status\":\"ready\",\"tenant\":\"${TENANT}\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > /tmp/status.json
+aws s3 cp /tmp/status.json "s3://${AUTH_BUCKET}/status/${TENANT}.json" --region "${REGION}"
