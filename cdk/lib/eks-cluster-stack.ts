@@ -440,35 +440,39 @@ export class EksClusterStack extends cdk.Stack {
     alertsTopic.grantPublish(preSignupFn);
 
     // ── Lambda: Post-Confirmation ───────────────────────────────────────────
+    const k8sLayer = lambda.LayerVersion.fromLayerVersionArn(this, 'K8sLayer',
+      `arn:aws:lambda:${this.region}:${this.account}:layer:openclaw-k8s-client:1`);
     const postConfirmFn = new lambda.Function(this, 'PostConfirmFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/post-confirmation'),
+      layers: [k8sLayer],
       environment: {
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         CLUSTER_NAME: cluster.clusterName,
-        TENANT_ROLE_ARN: tenantRole.roleArn,
+        COGNITO_POOL_ID: cognitoPoolId,
+        ALB_CLIENT_ID: albClientId,
+        CERTIFICATE_ARN: certificate.certificateArn,
+        COGNITO_DOMAIN: cognitoDomain,
         DOMAIN: domainName,
-        CODEBUILD_PROJECT: 'openclaw-tenant-builder',
+        OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
+        TENANT_ROLE_ARN: tenantRole.roleArn,
       },
-      timeout: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 512,
     });
     alertsTopic.grantPublish(postConfirmFn);
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource'],
+      actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource', 'secretsmanager:GetSecretValue', 'secretsmanager:RestoreSecret', 'secretsmanager:UpdateSecret'],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:openclaw/*`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['eks:CreatePodIdentityAssociation'],
+      actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:PassRole', 'iam:GetRole'],
       resources: [tenantRole.roleArn],
-    }));
-    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['codebuild:StartBuild'],
-      resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/openclaw-tenant-builder`],
     }));
 
     // ── CodeBuild: Tenant Builder ────────────────────────────────────────────
@@ -521,6 +525,10 @@ export class EksClusterStack extends cdk.Stack {
       actions: ['eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
     }));
+    cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
+      groups: ['system:masters'],
+      username: 'lambda-post-confirm',
+    });
     cluster.awsAuth.addRoleMapping(tenantBuilder.role!, {
       groups: ['system:masters'],
       username: 'codebuild-tenant-builder',
@@ -663,6 +671,10 @@ export class EksClusterStack extends cdk.Stack {
       code: lambda.Code.fromAsset('lambda/cost-enforcer'),
       environment: {
         CLUSTER_NAME: cluster.clusterName,
+        COGNITO_POOL_ID: cognitoPoolId,
+        ALB_CLIENT_ID: albClientId,
+        CERTIFICATE_ARN: certificate.certificateArn,
+        COGNITO_DOMAIN: cognitoDomain,
         LOG_GROUP: `/aws/containerinsights/${cluster.clusterName}/application`,
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         REGION: this.region,

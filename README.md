@@ -42,6 +42,8 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
 ## Architecture
 
+Tenant provisioning: Post-confirmation Lambda creates K8s resources directly via API (~15s), no CodeBuild dependency.
+
 ```
 Internet
   │
@@ -183,7 +185,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 |--------|---------|
 | `post-deploy.sh` | VPC Origin + CloudFront #2 + Route53 + WAF |
 | `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
-| `upload-helm-chart.sh` | Package and upload Helm chart to S3 (for CodeBuild) |
+| `upload-helm-chart.sh` | Package and upload Helm chart to S3 (for manual tenant creation) |
 | `setup-cognito.sh` | Cognito config (auth flows, triggers) |
 | `setup-keda.sh` | Install KEDA for scale-to-zero |
 | `setup-argocd.sh` | ArgoCD EKS Capability status |
@@ -223,6 +225,8 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ## Documentation
 
 ### Architecture
+
+Tenant provisioning: Post-confirmation Lambda creates K8s resources directly via API (~15s), no CodeBuild dependency.
 - [System Architecture](docs/architecture.md)
 - [Security Deep Dive](docs/security.md)
 

@@ -114,6 +114,7 @@
     "defaultTenantBudgetUsd": 100,
     "defaultTenantSkills": "weather,gog",
     "sesFromEmail": "noreply@your-domain.com",
-    "albClientId": "YOUR_ALB_CLIENT_ID"
+    "albClientId": "YOUR_ALB_CLIENT_ID",
+    "openclawImage": "ghcr.io/openclaw/openclaw:latest"
   }
 }
