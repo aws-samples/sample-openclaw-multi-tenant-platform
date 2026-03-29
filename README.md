@@ -38,7 +38,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **GitOps** — ArgoCD (EKS Capability) manages tenants via ApplicationSet
 - **Cost control** — per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** — 20% cheaper compute with t4g instances
-- **14 design docs** — architecture, scale-to-zero, ArgoCD, multi-region, and more
+- **Security deep-dive** — 10 layers, threat model, compliance considerations
 
 ## Architecture
 
@@ -217,21 +217,38 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Architecture](docs/architecture.md) | Full diagrams (Mermaid + ASCII) |
-| [User Journey](docs/user-journey.md) | End-user experience (10 steps) |
-| [Admin Journey](docs/admin-journey.md) | Admin operations guide |
-| [Demo Cheat Sheet](docs/demo-cheat-sheet.md) | 15-min demo script + objection handling |
-| [Scale to Zero](docs/scale-to-zero.md) | KEDA HTTP Add-on design |
-| [Self-Service Signup](docs/self-service-signup.md) | Cognito + Lambda auto-provisioning |
-| [ArgoCD](docs/argocd.md) | EKS Capability GitOps setup |
-| [Webhook Setup](docs/webhook-setup.md) | Slack/Discord integration |
-| [Usage Tracking](docs/usage-tracking.md) | Per-tenant cost tracking |
-| [Migration Guide](docs/migration-guide.md) | v1 → v2 migration |
-| [Tenant CRD](docs/tenant-crd.md) | Kubernetes Operator design (future) |
-| [Multi-Region](docs/multi-region.md) | DR architecture design (future) |
-| [Terraform](docs/terraform.md) | Terraform alternative design (future) |
+### Architecture
+- [System Architecture](docs/architecture.md)
+- [Security Deep Dive](docs/security.md)
+
+### Components
+Learn how each component works:
+| Component | Description |
+|-----------|-------------|
+| [EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
+| [Networking](docs/components/networking.md) | VPC, CloudFront, VPC Origin, WAF |
+| [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
+| [IAM](docs/components/iam.md) | Pod Identity, ABAC, tenant isolation |
+| [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
+| [GitOps](docs/components/gitops.md) | ArgoCD EKS Capability |
+| [Observability](docs/components/observability.md) | CloudWatch, alarms, cost tracking |
+| [CI/CD](docs/components/cicd.md) | GitHub Actions, CodeBuild, image updates |
+| [Storage](docs/components/storage.md) | PVC, EBS snapshots, backup/restore |
+
+### Operations
+| Guide | Description |
+|-------|-------------|
+| [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
+| [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
+| [Migration](docs/operations/migration.md) | v1 → v2 upgrade |
+| [Webhook Setup](docs/operations/webhook.md) | Slack/Discord integration |
+
+### Design (Future)
+| Design | Description |
+|--------|-------------|
+| [Tenant CRD](docs/design/tenant-crd.md) | Kubernetes Operator |
+| [Multi-Region](docs/design/multi-region.md) | DR architecture |
+| [Terraform](docs/design/terraform.md) | IaC alternative |
 
 ## Project Structure
 
@@ -248,7 +265,12 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 │   ├── charts/openclaw-platform/
 │   └── tenants/values-template.yaml
 ├── argocd/                     # ArgoCD Applications + ApplicationSets
-├── docs/                       # 14 design documents
+├── docs/                       # Architecture, security, components, operations, design
+│   ├── architecture.md
+│   ├── security.md
+│   ├── components/             # Per-component deep dives
+│   ├── operations/             # Admin, user, migration, webhook guides
+│   └── design/                 # Future: Tenant CRD, multi-region, Terraform
 ├── scripts/                    # 20 operations scripts
 ├── .github/workflows/ci.yml   # CI pipeline
 └── LICENSE                     # MIT
