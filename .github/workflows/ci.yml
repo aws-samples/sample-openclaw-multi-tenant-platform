@@ -158,7 +158,9 @@ jobs:
         working-directory: cdk
         run: |
           cp cdk.json.example cdk.json
-          npx cdk synth --no-staging 2>&1 || true
+          set -o pipefail
+          npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log
+          if grep -q "Error:" /tmp/synth.log; then exit 1; fi
 
       - name: Helm lint
         run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
@@ -173,8 +175,7 @@ jobs:
         run: for f in scripts/*.sh; do bash -n "$f"; done
 
       - name: ShellCheck
-        run: shellcheck scripts/*.sh || true
-        continue-on-error: true
+        run: shellcheck --severity=error scripts/*.sh
 
   # ============================================================
   # Security (every PR) ~1 min
