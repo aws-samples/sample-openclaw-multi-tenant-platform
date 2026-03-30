@@ -22,6 +22,11 @@ spec:
       initContainers:
       - name: init-config
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
         resources:
           limits:
             cpu: 500m
@@ -45,6 +50,11 @@ spec:
       
       - name: init-skills
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
         resources:
           limits:
             cpu: "1"
@@ -76,6 +86,11 @@ spec:
 
       - name: init-tools
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
         resources:
           limits:
             cpu: "1"
@@ -92,14 +107,12 @@ spec:
             fi
             # Patch @smithy/credential-provider-imds: add EKS Pod Identity Agent IP (169.254.170.23)
             # to GREENGRASS_HOSTS. Without this, fromContainerMetadata rejects the Pod Identity endpoint.
-            # Applied to both workspace (for fetch-secret.mjs) and /app (for OpenClaw's Bedrock client).
-            for IMDS_FILE in \
-              /home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js \
-              /app/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js; do
-              if [ -f "$IMDS_FILE" ] && ! grep -q "169.254.170.23" "$IMDS_FILE"; then
-                sed -i 's/"127.0.0.1": true,/"127.0.0.1": true, "169.254.170.23": true,/' "$IMDS_FILE"
-              fi
-            done
+            # Only patch workspace copy (writable PVC). /app is read-only (image layer) and cannot be
+            # modified with readOnlyRootFilesystem.
+            IMDS_FILE=/home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js
+            if [ -f "$IMDS_FILE" ] && ! grep -q "169.254.170.23" "$IMDS_FILE"; then
+              sed -i 's/"127.0.0.1": true,/"127.0.0.1": true, "169.254.170.23": true,/' "$IMDS_FILE"
+            fi
             cp /config/fetch-secret.mjs /home/node/.openclaw/workspace/bin/fetch-secret.mjs
             chmod 700 /home/node/.openclaw/workspace/bin/fetch-secret.mjs
         volumeMounts:
@@ -114,6 +127,11 @@ spec:
       - name: main
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        securityContext:
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: [ALL]
         command:
         - node
         - dist/index.js

@@ -49,6 +49,15 @@ spec:
           containers:
             - name: backup
               image: amazon/aws-cli:latest
+              securityContext:
+                runAsNonRoot: true
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+              - name: tmp
+                mountPath: /tmp
               command: ["sh", "-c"]
               args:
                 - |
@@ -56,9 +65,13 @@ spec:
                   DATE=$(date +%Y-%m-%d)
                   REGION="${AWS_DEFAULT_REGION:-us-west-2}"
 
-                  # Install kubectl
-                  curl -sLO "https://dl.k8s.io/release/$(curl -sL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                  install kubectl /usr/local/bin/kubectl && rm kubectl
+                  # Install kubectl with checksum verification
+                  KUBECTL_VERSION=$(curl -sL https://dl.k8s.io/release/stable.txt)
+                  curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+                  curl -sLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"
+                  echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c -
+                  install kubectl /tmp/kubectl && rm kubectl kubectl.sha256
+                  export PATH="/tmp:$PATH"
 
                   # Get all openclaw PVCs
                   PVCS=$(kubectl get pvc -A -l app.kubernetes.io/name=openclaw-helm -o json)
@@ -101,3 +114,6 @@ spec:
                     aws ec2 delete-snapshot --region "$REGION" --snapshot-id "$SNAP_ID"
                   done
                   echo "Done"
+          volumes:
+          - name: tmp
+            emptyDir: {}
