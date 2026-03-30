@@ -29,6 +29,11 @@ impl Error {
     }
 }
 
+pub mod types;
+pub use types::*;
+
+pub mod resources;
+
 pub mod controller;
 pub use crate::controller::*;
 
