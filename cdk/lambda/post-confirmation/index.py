@@ -1,12 +1,10 @@
 import os
 import re
-import secrets
 import json
 import urllib.request
 import boto3
 from botocore.exceptions import ClientError
 
-sm = boto3.client('secretsmanager')
 eks_client = boto3.client('eks')
 sns = boto3.client('sns')
 sts = boto3.client('sts')
@@ -37,19 +35,19 @@ def get_eks_token():
     return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
 
 
-def create_tenant_cr(tenant, email, token, retries=3):
+def create_tenant_cr(tenant, email, retries=3):
     """Create a Tenant CR via K8s API with retry."""
     import base64, time
     for attempt in range(retries):
         try:
-            return _create_tenant_cr_inner(tenant, email, token)
+            return _create_tenant_cr_inner(tenant, email)
         except Exception as e:
             if attempt == retries - 1:
                 raise
             time.sleep(2 ** attempt)
 
 
-def _create_tenant_cr_inner(tenant, email, token):
+def _create_tenant_cr_inner(tenant, email):
     import base64
     cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
     endpoint = cluster['endpoint']
@@ -100,25 +98,7 @@ def handler(event, context):
     tenant = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
     ns = f'openclaw-{tenant}'
 
-    # 1. Gateway token in Secrets Manager
-    token = secrets.token_urlsafe(32)
-    secret_name = f'openclaw/{tenant}/gateway-token'
-    try:
-        sm.create_secret(
-            Name=secret_name, SecretString=token,
-            Tags=[{'Key': 'tenant-namespace', 'Value': ns}],
-        )
-    except ClientError as e:
-        code = e.response['Error']['Code']
-        if code == 'ResourceExistsException':
-            pass
-        elif code == 'InvalidRequestException' and 'scheduled for deletion' in str(e):
-            sm.restore_secret(SecretId=secret_name)
-            sm.update_secret(SecretId=secret_name, SecretString=token)
-        else:
-            raise
-
-    # 2. Pod Identity Association
+    # 1. Pod Identity Association
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
@@ -128,12 +108,12 @@ def handler(event, context):
         if 'already exists' not in str(e).lower():
             raise
 
-    # 3. Validate tenant name (defense in depth)
+    # 2. Validate tenant name (defense in depth)
     if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
         raise Exception(f'Invalid tenant name: {tenant}')
 
-    # 4. Create Tenant CR → Operator handles the rest
-    create_tenant_cr(tenant, email, token)
+    # 3. Create Tenant CR → Operator handles the rest
+    create_tenant_cr(tenant, email)
 
     # 4. Notify admin
     sns.publish(

@@ -244,6 +244,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "gatewayNamespace": "openclaw-system",
             "domain": &gateway_domain,
             "cognito": {
+                "enabled": true,
                 "userPoolArn": &cognito_pool_arn,
                 "clientId": &cognito_client_id,
                 "domain": &cognito_domain,
