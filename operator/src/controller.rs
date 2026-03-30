@@ -280,7 +280,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
                 }
             },
             "destination": {
-                "server": "https://kubernetes.default.svc",
+                "name": "in-cluster",
                 "namespace": tenant_ns
             },
             "syncPolicy": {
