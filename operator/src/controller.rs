@@ -328,7 +328,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             }
         },
         "spec": {
-            "hosts": [format!("{name}.openclaw.io")],
+            "hosts": [if gateway_domain.is_empty() { name.clone() } else { format!("{name}.{gateway_domain}") }],
             "targetPendingRequests": 1,
             "scaledownPeriod": 900,
             "replicas": { "min": 0, "max": 1 },
