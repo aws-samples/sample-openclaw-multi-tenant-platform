@@ -18,10 +18,22 @@ rules:
     resources: ["tenants", "tenants/status"]
     verbs: ["get", "list", "watch", "patch", "update"]
   - apiGroups: [""]
-    resources: ["namespaces", "persistentvolumeclaims", "serviceaccounts", "events", "configmaps"]
+    resources: ["namespaces", "persistentvolumeclaims", "serviceaccounts", "events", "configmaps", "services", "resourcequotas"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources: ["httproutes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["gateway.k8s.aws"]
+    resources: ["listenerruleconfigurations", "targetgroupconfigurations"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["http.keda.sh"]
     resources: ["httpscaledobjects"]
@@ -79,12 +91,6 @@ spec:
               drop:
                 - ALL
           env:
-            # Git repo containing Helm charts for tenant deployments
-            - name: CHART_REPO
-              value: "https://github.com/ORG/REPO.git"
-            # Chart version / branch to deploy (defaults to 1.3.14 in code)
-            - name: CHART_VERSION
-              value: "main"
             # AWS region for SDK calls
             - name: AWS_REGION
               value: "REGION"
