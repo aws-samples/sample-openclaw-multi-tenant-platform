@@ -69,8 +69,11 @@
 **How it's configured**:
 - VPC with public/private subnet separation (2 AZs, /24 subnets)
 - Pods run exclusively in private subnets
-- ALB is **internal** (scheme: internal) — not internet-facing
-- Traffic path: Internet → CloudFront → VPC Origin → Internal ALB → Pod
+- ALB is **internet-facing** with 3-layer origin protection:
+  - L3/L4: ALB Security Group allows only CloudFront managed prefix list
+  - L7: WAF validates `X-Verify-Origin` custom header from CloudFront
+  - Transport: HTTPS-only origin protocol
+- Traffic path: Internet → CloudFront → ALB (public, CF-only SG) → Pod
 - 2 NAT Gateways (HA) for outbound internet
 - NetworkPolicy per tenant namespace:
 
@@ -101,10 +104,10 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 **How it's configured**:
 - Cognito User Pool for signup identity management
-- OpenClaw gateway runs in `local` auth mode
-- Security via CloudFront + internal ALB (not internet-facing)
+- OpenClaw gateway runs in `local` auth mode with token authentication
+- 3-layer origin protection: CloudFront prefix list SG + WAF header validation + HTTPS-only
 - Path-based routing via Gateway API HTTPRoute
-- Traffic path: Internet → CloudFront → VPC Origin → Internal ALB → HTTPRoute → Pod
+- Traffic path: Internet → CloudFront → internet-facing ALB (CF-only) → HTTPRoute → Pod
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` → `UserPool` (imported)
 
@@ -276,15 +279,15 @@ ORDER BY eventtime DESC LIMIT 20;
 ### Attack Surface Diagram
 
 ```
-Internet ──► CloudFront ──► WAF ──► VPC Origin ──► Internal ALB ──► Pod
-   │              │           │                         │            │
-   │         TLS termination  │                    Cognito OIDC  NetworkPolicy
-   │         Edge caching     │                    Session cookie  ABAC
-   │                     Rate limit                                exec deny
-   │                     Common Rules                              fs: workspaceOnly
+Internet ──► CloudFront ──► ALB (internet-facing, CF-only SG) ──► Pod
+   │              │           │                                     │
+   │         TLS termination  WAF: origin header verify         NetworkPolicy
+   │         Edge caching     + Common Rules + Rate Limit        ABAC
+   │                          SG: CF prefix list only            exec deny
+   │                                                             fs: workspaceOnly
    │
    └──► Cognito ──► Pre-signup Lambda ──► Turnstile + domain check
-                    Post-confirm Lambda ──► SM + Pod Identity + Helm
+                    Post-confirm Lambda ──► SM + Pod Identity + Tenant CR
 ```
 
 ---
@@ -302,8 +305,7 @@ These are known gaps — not yet implemented or intentionally deferred:
 | Image signing / verification | Not implemented | No Sigstore/Cosign verification on container images. |
 | Secrets rotation | Not implemented | Secrets Manager secrets are not auto-rotated. |
 | WAF logging | Not enabled | WAF sampled requests enabled but full logging to S3/CloudWatch not configured. |
-| VPC Flow Logs | Not enabled | No VPC Flow Logs for network forensics. |
-| GuardDuty | Not enabled | No runtime threat detection for EKS. |
+| GuardDuty | Not enabled | No runtime threat detection for EKS. Run `scripts/setup-guardduty.sh` to enable. |
 | KMS encryption | Default | EBS uses default encryption. No customer-managed KMS keys for S3 or Secrets Manager. |
 
 ---
