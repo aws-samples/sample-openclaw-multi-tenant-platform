@@ -60,13 +60,14 @@ pub async fn ensure_pvc(
     name: &str,
     tenant_ns: &str,
     ssapply: &PatchParams,
-) -> Result<()> {
+) -> Result<Value> {
     let pvc_api: Api<PersistentVolumeClaim> = Api::namespaced(client, tenant_ns);
+    let pvc_name = format!("{name}-data");
     let pvc_patch: Value = json!({
         "apiVersion": "v1",
         "kind": "PersistentVolumeClaim",
         "metadata": {
-            "name": format!("{name}-data"),
+            "name": &pvc_name,
             "namespace": tenant_ns,
             "labels": {
                 "openclaw.io/tenant": name,
@@ -84,11 +85,20 @@ pub async fn ensure_pvc(
         }
     });
     pvc_api
-        .patch(&format!("{name}-data"), ssapply, &Patch::Apply(pvc_patch))
+        .patch(&pvc_name, ssapply, &Patch::Apply(pvc_patch))
         .await
         .map_err(Error::KubeError)?;
-    info!("Ensured PVC {name}-data in {tenant_ns}");
-    Ok(())
+    info!("Ensured PVC {pvc_name} in {tenant_ns}");
+
+    // Check actual PVC phase
+    let pvc = pvc_api.get(&pvc_name).await.map_err(Error::KubeError)?;
+    let phase = pvc
+        .status
+        .as_ref()
+        .and_then(|s| s.phase.as_deref())
+        .unwrap_or("Pending");
+    let status = if phase == "Bound" { "True" } else { "False" };
+    Ok(json!({ "type": "PVCBound", "status": status, "message": format!("Phase: {phase}") }))
 }
 
 pub async fn ensure_service_account(
@@ -248,7 +258,7 @@ pub async fn ensure_deployment(
     tenant_ns: &str,
     ssapply: &PatchParams,
     spec: &TenantSpec,
-) -> Result<()> {
+) -> Result<Value> {
     let openclaw_image = std::env::var("OPENCLAW_IMAGE")
         .unwrap_or_else(|_| "ghcr.io/openclaw/openclaw:latest".into());
 
@@ -370,6 +380,19 @@ pub async fn ensure_deployment(
                             ]
                         },
                         {
+                            "name": "init-doctor",
+                            "image": &full_image,
+                            "resources": {
+                                "limits": { "cpu": "500m", "memory": "512Mi" },
+                                "requests": { "cpu": "100m", "memory": "128Mi" }
+                            },
+                            "command": ["node", "dist/index.js", "doctor", "--fix", "--non-interactive"],
+                            "volumeMounts": [
+                                { "name": "data", "mountPath": "/home/node/.openclaw" },
+                                { "name": "tmp", "mountPath": "/tmp" }
+                            ]
+                        },
+                        {
                             "name": "init-skills",
                             "image": &full_image,
                             "resources": {
@@ -471,7 +494,23 @@ pub async fn ensure_deployment(
         .await
         .map_err(Error::KubeError)?;
     info!("Ensured Deployment {name} in {tenant_ns}");
-    Ok(())
+
+    // Check actual deployment health
+    let deploy = deploy_api.get(name).await.map_err(Error::KubeError)?;
+    let available = deploy
+        .status
+        .as_ref()
+        .and_then(|s| s.available_replicas)
+        .unwrap_or(0);
+    let (status, message) = if available >= 1 {
+        ("True", "Deployment has available replicas".to_string())
+    } else {
+        (
+            "False",
+            "Deployment has no available replicas yet".to_string(),
+        )
+    };
+    Ok(json!({ "type": "DeploymentReady", "status": status, "message": message }))
 }
 
 pub async fn ensure_service(
