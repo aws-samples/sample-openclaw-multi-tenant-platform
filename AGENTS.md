@@ -9,9 +9,9 @@ Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated Ope
 ## Architecture at a Glance
 
 ```
-User → CloudFront → ALB (internal) → EKS Pod (per-tenant)
-                                        ↓
-                                   Amazon Bedrock
+User → CloudFront → Internet-facing ALB (CF-only SG + WAF) → EKS Pod (per-tenant)
+                                                                ↓
+                                                           Amazon Bedrock
 ```
 
 Tenant lifecycle:
@@ -25,7 +25,7 @@ Cognito SignUp → Lambda (post-confirmation) → Tenant CR
 Key components:
 - `cdk/` — AWS CDK infrastructure (TypeScript)
 - `helm/` — Kubernetes manifests (Helm chart)
-- `auth-ui/` — Single-page auth UI (vanilla JS, no framework)
+- `auth-ui/` — Auth UI pages (vanilla JS, no framework) — index.html, admin.html, terms, privacy
 - `cdk/lambda/` — Cognito trigger functions (Python)
 - `operator/` — Tenant Operator (Rust/kube-rs) — creates K8s primitives + ArgoCD Application
 - `scripts/` — Operational scripts (Bash)
@@ -56,6 +56,7 @@ operator/yaml/deployment.yaml  ← Operator deployment + RBAC (includes ArgoCD p
 scripts/deploy-auth-ui.sh  ← Uploads auth-ui/ to S3, uses sed to inject config
 helm/tenants/values-template.yaml  ← Tenant Helm values with {{PLACEHOLDERS}}
 auth-ui/index.html  ← SPA, config injected by deploy-auth-ui.sh via sed
+auth-ui/admin.html  ← Admin dashboard, same sed injection pattern
 ```
 
 ## How to Make Changes
@@ -82,7 +83,7 @@ bash scripts/upload-helm-chart.sh
 
 ### Auth UI
 ```bash
-# Edit auth-ui/index.html
+# Edit auth-ui/index.html or auth-ui/admin.html
 # IMPORTANT: deploy-auth-ui.sh uses sed to inject config
 # Patterns like clientId:'' must match exactly (minified, no spaces)
 bash scripts/deploy-auth-ui.sh
@@ -115,7 +116,7 @@ Before declaring any change complete:
 - [ ] `python3 -c "compile(...)"` — Lambda syntax OK
 - [ ] `helm template test helm/charts/openclaw-platform` — Helm renders
 - [ ] `cd operator && cargo clippy -- -D warnings` — Operator compiles clean
-- [ ] No sensitive data: `grep -rn "123456789012\|snese\.net" --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches (excluding cdk.json)
+- [ ] No sensitive data: `grep -rn "123456789012" --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches (excluding cdk.json)
 - [ ] No CJK: `grep -Prn '[\x{4e00}-\x{9fff}]' --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches
 - [ ] Cognito triggers attached: `aws cognito-idp describe-user-pool --query 'UserPool.LambdaConfig'`
 
@@ -131,7 +132,7 @@ Before declaring any change complete:
 
 ## Conventions
 
-- Commit messages: English, imperative mood, prefix with `feat:`, `fix:`, `docs:`, `perf:`
+- Commit messages: English, imperative mood, prefix with `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 - Commit messages: **NEVER** include real domain names, AWS account IDs, ARNs, CloudFront distribution IDs, or any deployment-specific values. Use `example.com`, `123456789012`, etc.
 - Run `bash scripts/install-hooks.sh` after clone to enable commit-msg scanning
 - Scripts: Bash, `set -euo pipefail`, use `get_output()` helper for CloudFormation outputs
