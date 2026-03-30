@@ -164,7 +164,7 @@ jobs:
           set -o pipefail
           npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log
           echo "::group::cdk-nag findings"
-          grep -c '\[Error' /tmp/synth.log && echo "cdk-nag errors found (non-blocking for sample code)" || echo "No cdk-nag errors"
+          grep -c '\\[Error' /tmp/synth.log && echo "cdk-nag errors found (non-blocking for sample code)" || echo "No cdk-nag errors"
           echo "::endgroup::"
 
       - name: Helm lint
@@ -193,7 +193,7 @@ jobs:
 
       - name: No hardcoded secrets
         run: |
-          FOUND=$(grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" --include="*.md" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ | grep -v cdk.out | grep -v cdk.json || true)
+          FOUND=$(grep -rn 'AKIA[A-Z0-9]\\{16\\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" --include="*.md" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ | grep -v cdk.out | grep -v cdk.json || true)
           [ -n "$FOUND" ] && echo "$FOUND" && exit 1 || echo "Clean"
 
       - name: No CJK in code
@@ -226,7 +226,7 @@ jobs:
             echo "Could not determine commit range, skipping"
             exit 0
           fi
-          FOUND=$(echo "$COMMITS" | grep -iE '[0-9]{12}\.dkr\.ecr|AKIA[A-Z0-9]{16}|[a-z0-9]{10,}\.cloudfront\.net|arn:aws:' || true)
+          FOUND=$(echo "$COMMITS" | grep -iE '[0-9]{12}\\.dkr\\.ecr|AKIA[A-Z0-9]{16}|[a-z0-9]{10,}\\.cloudfront\\.net|arn:aws:' || true)
           if [ -n "$FOUND" ]; then
             echo "::error::Commit messages contain sensitive data:"
             echo "$FOUND"
@@ -239,6 +239,36 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm audit --audit-level=high 2>&1 || true
+
+      - name: Semgrep (JS/TS/Python)
+        run: |
+          pip3 install semgrep==1.156.0 --quiet
+          set +e
+          semgrep scan --config auto --severity ERROR --severity WARNING --error .
+          EXIT_CODE=$?
+          set -e
+          if [ $EXIT_CODE -eq 0 ]; then
+            echo "Semgrep: no findings"
+          elif [ $EXIT_CODE -eq 1 ]; then
+            echo "::warning::Semgrep found issues (non-blocking for sample code)"
+          else
+            echo "::error::Semgrep crashed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+
+      - name: Install Trivy
+        run: |
+          TRIVY_VERSION="0.69.3"
+          TRIVY_SHA256="1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75"
+          curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz
+          echo "${TRIVY_SHA256}  /tmp/trivy.tar.gz" | sha256sum -c -
+          tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+
+      - name: Trivy config scan (Dockerfile, Helm, K8s YAML)
+        run: trivy config --severity HIGH,CRITICAL --exit-code 0 .
+
+      - name: Trivy filesystem scan (dependencies)
+        run: trivy fs --severity HIGH,CRITICAL --exit-code 0 .
 
   # ============================================================
   # CodeQL — DISABLED

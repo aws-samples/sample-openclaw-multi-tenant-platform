@@ -135,7 +135,7 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 1. **Rust**: format check, clippy, unit tests, CRD generation verify
 2. **Rust**: cargo-deny (license + security advisory audit)
 3. **Platform**: CDK compile + synth with [cdk-nag](https://github.com/cdklabs/cdk-nag) (AWS Solutions checks), Helm lint, Python syntax, Shell syntax, ShellCheck
-4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit --audit-level=high`
+4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit --audit-level=high`, Semgrep (JS/TS/Python), Trivy config + filesystem scan
 5. **Main-only**: K8s integration test (k3d), Docker build
 
 ### Supply Chain Hardening
