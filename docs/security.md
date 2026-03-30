@@ -10,8 +10,8 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  1. Edge         CloudFront + WAF (Common Rules + rate limit)          │
 │  2. Signup       Turnstile CAPTCHA + email domain restriction          │
-│  3. Network      Internal ALB + VPC private subnets + NetworkPolicy    │
-│  4. Auth         Cognito signup + local auth (CloudFront + internal ALB) │
+│  3. Network      Internet-facing ALB (CF-only SG) + NetworkPolicy      │
+│  4. Auth         Cognito signup + local token auth + 3-layer origin    │
 │  5. Tenant       Namespace isolation + ABAC + ResourceQuota            │
 │  6. Secrets      exec SecretRef — on-demand fetch, never persisted     │
 │  7. LLM          Bedrock via Pod Identity — zero API keys              │
@@ -75,6 +75,7 @@
   - Transport: HTTPS-only origin protocol
 - Traffic path: Internet → CloudFront → ALB (public, CF-only SG) → Pod
 - 2 NAT Gateways (HA) for outbound internet
+- VPC Flow Logs enabled (all traffic → CloudWatch Logs)
 - NetworkPolicy per tenant namespace:
 
 ```yaml
@@ -90,7 +91,7 @@
 
 The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over port 443 while allowing external AWS service endpoints (Bedrock, Secrets Manager, container registries).
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` → `Vpc`
+**CDK reference**: `cdk/lib/eks-cluster-stack.ts` → `Vpc`, `VpcFlowLog`
 
 **Helm reference**: `helm/charts/openclaw-platform/templates/networkpolicy.yaml`
 
@@ -115,7 +116,7 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 **Helm template**: `helm/charts/openclaw-platform/templates/httproute.yaml`
 
-**Attacks mitigated**: Direct pod access from internet (internal ALB), unauthorized access (CloudFront + local auth)
+**Attacks mitigated**: Direct pod access from internet (CF-only SG), unauthorized access (CloudFront + WAF + local auth)
 
 ---
 
@@ -240,6 +241,7 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 - Logs stored in S3 bucket: `openclaw-audit-logs-{account}-{region}`
 - Athena database + table for SQL queries over audit logs
 - CloudWatch Container Insights for pod-level metrics and application logs
+- EKS control plane logging: all 5 types (api, audit, authenticator, controllerManager, scheduler)
 
 **Script**: `scripts/setup-audit-logging.sh`
 
@@ -264,7 +266,7 @@ ORDER BY eventtime DESC LIMIT 20;
 | DDoS | CloudFront edge caching + WAF rate limiting (2000 req/5min/IP) |
 | SQLi / XSS | WAF AWSManagedRulesCommonRuleSet |
 | Bot signups | Cloudflare Turnstile CAPTCHA + email domain allowlist |
-| Unauthenticated access | ALB Cognito OIDC — no request reaches pod without valid session |
+| Unauthenticated access | 3-layer origin protection: CF prefix list SG + WAF header + HTTPS |
 | Cross-tenant data access | Namespace isolation + NetworkPolicy + ABAC on Secrets Manager |
 | Cross-tenant network | NetworkPolicy blocks 10.0.0.0/8 on egress port 443 |
 | API key leakage | Zero API keys — all access via Pod Identity + STS temporary credentials |
@@ -319,7 +321,7 @@ These are known gaps — not yet implemented or intentionally deferred:
 | Access Control | Cognito + ABAC + Pod Identity | Add MFA for admin accounts |
 | Encryption in Transit | TLS everywhere (CloudFront → ALB → Pod) | ✅ |
 | Encryption at Rest | EBS default encryption, S3 default encryption | Consider CMK for sensitive data |
-| Logging & Monitoring | CloudTrail + CloudWatch + SNS alerts | Add VPC Flow Logs, enable WAF logging |
+| Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs + SNS alerts | Enable WAF logging |
 | Change Management | GitOps (ArgoCD) + CI/CD | Add SAST/DAST to pipeline |
 | Incident Response | SNS alerts + Athena queries | Document runbooks |
 | Data Retention | 7-day EBS snapshots, CloudTrail in S3 | Define retention policy per data class |

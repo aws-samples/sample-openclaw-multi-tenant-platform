@@ -6,7 +6,7 @@ Thank you for your interest in contributing to OpenClaw Platform!
 
 - AWS account with admin access
 - AWS CLI v2 configured
-- Node.js 18+ and npm
+- Node.js 22+ and npm
 - kubectl
 - Helm 3
 - Python 3.12+
@@ -46,7 +46,7 @@ cdk/                    # AWS CDK infrastructure (TypeScript)
 helm/                   # Kubernetes manifests
   charts/openclaw-platform/  # Helm chart (15 templates)
   tenants/values-template.yaml  # Per-tenant values template
-auth-ui/                # Login/signup UI (single HTML file)
+auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
 operator/               # Tenant Operator (Rust/kube-rs)
 scripts/                # Operational scripts (Bash)
 argocd/                 # ArgoCD base config
@@ -116,6 +116,9 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 | `selfSignupEnabled` | Allow self-registration (default: `true`) |
 | `defaultTenantBudgetUsd` | Monthly Bedrock budget per tenant (default: `100`) |
 | `defaultTenantSkills` | Default skills for new tenants (default: `weather,gog`) |
+| `sesFromEmail` | SES sender email for welcome emails |
+| `albClientId` | Cognito App Client ID for ALB auth |
+| `allowedPublicCidrs` | CIDR ranges for EKS API endpoint access (placeholder, not yet wired) |
 
 ## Coding Standards
 
@@ -130,13 +133,13 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 
 The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 
-1. TypeScript compilation check
-2. Helm lint
-3. Shell syntax validation
-4. Sensitive data scan (account IDs, secrets)
-5. CJK character scan (must be 0)
+1. **Rust**: format check, clippy, unit tests, CRD generation verify
+2. **Rust**: cargo-deny (license + security advisory audit)
+3. **Platform**: CDK compile + synth, Helm lint, Python syntax, Shell syntax, ShellCheck
+4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan
+5. **Main-only**: K8s integration test (k3d), Docker build
 
-All checks must pass before merge.
+All PR checks must pass before merge.
 
 ## Architecture Decisions
 
