@@ -35,16 +35,9 @@ def get_eks_token():
     return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
 
 
-def create_tenant_cr(tenant, email, retries=3):
-    """Create a Tenant CR via K8s API with retry."""
-    import base64, time
-    for attempt in range(retries):
-        try:
-            return _create_tenant_cr_inner(tenant, email)
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            time.sleep(2 ** attempt)
+def create_tenant_cr(tenant, email):
+    """Create a Tenant CR via K8s API (single attempt, must complete within Cognito 5s limit)."""
+    return _create_tenant_cr_inner(tenant, email)
 
 
 def _create_tenant_cr_inner(tenant, email):
