@@ -24,14 +24,12 @@ A platform admin deploys, manages, and monitors the OpenClaw multi-tenant platfo
 
 ```
 1. Receive SNS email: "New signup: user@company.com"
-2. Open AWS Cognito Console → User Pool → Users
-3. Find the user (status: UNCONFIRMED) → Click "Confirm user"
-4. Post-confirmation Lambda runs automatically:
+2. Post-confirmation Lambda runs automatically:
    a. Creates Secrets Manager secret (gateway token)
    b. Creates EKS Pod Identity Association
-   c. Triggers CodeBuild project (helm install)
+   c. Creates Tenant CR (operator reconciles → ArgoCD syncs Helm)
    d. Sends SES welcome email to user
-5. ~2 minutes later, tenant pod is running
+3. ~2 minutes later, tenant pod is running
 ```
 
 ## Daily Operations
@@ -159,8 +157,8 @@ cd cdk && npx cdk deploy
 
 | Action | Automated | Manual |
 |--------|-----------|--------|
-| User signup | ✅ Cognito + Lambda | Admin clicks "Confirm" |
-| Tenant provisioning | ✅ Lambda → CodeBuild | — |
+| User signup | ✅ Cognito + Lambda | — |
+| Tenant provisioning | ✅ Lambda → Tenant CR → Operator → ArgoCD | — |
 | Welcome email | ✅ SES | — |
 | Scale to zero | ✅ KEDA (15 min idle) | — |
 | Scale up | ✅ KEDA (on request) | — |

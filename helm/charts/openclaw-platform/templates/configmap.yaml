@@ -11,6 +11,11 @@ data:
     {{- $origin := printf "https://%s" .Values.ingress.host }}
     {{- $_ := set $config.gateway.controlUi "allowedOrigins" (list $origin) }}
     {{- end }}
+    {{- if and .Values.gateway.enabled .Values.gateway.domain }}
+    {{- $extUrl := printf "https://%s/t/%s" .Values.gateway.domain .Values.tenant.name }}
+    {{- $_ := set $config.gateway.controlUi "basePath" (printf "/t/%s" .Values.tenant.name) }}
+    {{- $_ := set $config.gateway.controlUi "allowedOrigins" (list (printf "https://%s" .Values.gateway.domain)) }}
+    {{- end }}
 {{ $config | toJson | indent 4 }}
   bash_aliases: |
     alias openclaw='node /app/dist/index.js'

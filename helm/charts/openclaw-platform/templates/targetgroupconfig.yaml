@@ -11,4 +11,9 @@ spec:
     name: {{ include "openclaw-helm.fullname" . }}
   defaultConfiguration:
     targetType: ip
+    healthCheckConfig:
+      healthCheckPath: /healthz
+      healthyThresholdCount: 2
+      unhealthyThresholdCount: 2
+      healthCheckIntervalSeconds: 15
 {{- end }}

@@ -11,7 +11,7 @@
 │  1. Edge         CloudFront + WAF (Common Rules + rate limit)          │
 │  2. Signup       Turnstile CAPTCHA + email domain restriction          │
 │  3. Network      Internal ALB + VPC private subnets + NetworkPolicy    │
-│  4. Auth         Cognito OIDC + ALB trusted-proxy + session cookies    │
+│  4. Auth         Cognito signup + local auth (CloudFront + internal ALB) │
 │  5. Tenant       Namespace isolation + ABAC + ResourceQuota            │
 │  6. Secrets      exec SecretRef — on-demand fetch, never persisted     │
 │  7. LLM          Bedrock via Pod Identity — zero API keys              │
@@ -50,7 +50,7 @@
 **How it's configured**:
 - Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS` env var)
 - Cloudflare Turnstile CAPTCHA verification (if `TURNSTILE_SECRET` is set)
-- `autoConfirmUser: true` — email domain restriction is the trust gate, not admin approval
+- `autoConfirmUser: true` — email domain restriction is the trust gate, no admin approval required
   > **Note**: The `allowedEmailDomains` setting in `cdk.json` is the primary access control. Ensure this is set to your company domain only.
 - SNS notification on every signup attempt
 
@@ -97,23 +97,22 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 ## Layer 4: Authentication
 
-**What it does**: Ensures every request is authenticated before reaching a pod.
+**What it does**: Ensures access is controlled before reaching a pod.
 
 **How it's configured**:
-- Cognito User Pool with per-tenant user assignment
-- ALB authenticates via OIDC before forwarding (Cognito integration)
-- Session cookie: `AWSELBAuthSessionCookie` with configurable timeout (default: 7 days)
-- Pod runs in `trusted-proxy` mode — trusts `x-amzn-oidc-identity` header from ALB
-- Required headers: `x-amzn-oidc-data` (JWT) validated by ALB
-- Trusted proxies restricted to `10.0.0.0/8` (VPC CIDR range)
+- Cognito User Pool for signup identity management
+- OpenClaw gateway runs in `local` auth mode
+- Security via CloudFront + internal ALB (not internet-facing)
+- Path-based routing via Gateway API HTTPRoute
+- Traffic path: Internet → CloudFront → VPC Origin → Internal ALB → HTTPRoute → Pod
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` → `UserPool` (imported)
 
 **Helm reference**: `helm/charts/openclaw-platform/values.yaml` → `config.gateway.auth`
 
-**Helm template**: `helm/charts/openclaw-platform/templates/ingress.yaml` → Cognito annotations
+**Helm template**: `helm/charts/openclaw-platform/templates/httproute.yaml`
 
-**Attacks mitigated**: Unauthenticated access, session hijacking (cookie-based with ALB validation), header spoofing (trusted-proxy only accepts from VPC CIDR)
+**Attacks mitigated**: Direct pod access from internet (internal ALB), unauthorized access (CloudFront + local auth)
 
 ---
 

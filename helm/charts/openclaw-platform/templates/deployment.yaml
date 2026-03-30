@@ -34,7 +34,7 @@ spec:
         - -c
         - |
           mkdir -p /home/node/.openclaw
-          [ -f /home/node/.openclaw/openclaw.json ] || cp /config/openclaw.json /home/node/.openclaw/openclaw.json
+          cp /config/openclaw.json /home/node/.openclaw/openclaw.json
         volumeMounts:
         - name: config
           mountPath: /config
@@ -127,22 +127,19 @@ spec:
         - containerPort: 18789
           protocol: TCP
         livenessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 18789
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5
         readinessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 18789
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
         startupProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 18789
           initialDelaySeconds: 5
           periodSeconds: 5

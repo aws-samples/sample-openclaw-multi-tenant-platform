@@ -39,7 +39,7 @@ These MUST be true at all times. Violating any = broken deployment.
 1. **`cdk diff` = no differences** — CDK code must match deployed stack
 2. **Zero sensitive data in repo** — No account IDs, Cognito IDs, domains, ARNs. All via `cdk.json` context (gitignored)
 3. **Zero CJK characters** — All code, comments, docs in English
-4. **Helm values-template placeholders** — `{{TENANT}}`, `{{DOMAIN}}`, etc. must match what `provision-tenant.sh` substitutes
+4. **Helm values-template placeholders** — `{{TENANT}}`, `{{DOMAIN}}`, etc. must match what the operator and ArgoCD Application use
 5. **Cognito triggers survive `update-user-pool`** — Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
 6. **Gateway API + Tenant Operator** — Path-based routing via HTTPRoute + URLRewrite, tenant lifecycle managed by CRD Operator. Helm deployment delegated to ArgoCD via Application CR.
 7. **Operator stays distroless** — `operator/Dockerfile` uses `gcr.io/distroless/cc-debian12`. No external binary dependencies (no helm, no aws CLI). All K8s operations via kube-rs API.
@@ -124,7 +124,6 @@ Before declaring any change complete:
 | Pitfall | Cause | Fix |
 |---------|-------|-----|
 | Cognito triggers disappear | `update-user-pool` without `--lambda-config` | Always run `setup-cognito.sh` after any Cognito change |
-| ALB returns "client must have secret" | Ingress annotation uses public client ID | Use ALB client ID (`albClientId` in cdk.json) |
 | `deploy-auth-ui.sh` sed fails silently | Spaces in minified JS patterns | Match exact minified format: `clientId:''` not `clientId: ''` |
 | CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
 | Namespace stuck in Terminating | TargetGroupBinding finalizer | Recreate ns → delete TGB → delete ns |

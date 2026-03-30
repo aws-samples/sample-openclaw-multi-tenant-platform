@@ -60,7 +60,7 @@ spec:
       serviceAccountName: tenant-operator
       containers:
         - name: tenant-operator
-          image: tenant-operator:latest
+          image: 387671391109.dkr.ecr.us-west-2.amazonaws.com/openclaw-tenant-operator:latest
           ports:
             - containerPort: 8080
               name: http

@@ -19,24 +19,21 @@ A company employee goes from zero to chatting with their personal AI assistant i
 │     → Cognito ConfirmSignUp                                     │
 │                                                                 │
 │  4. "Account Created — being set up"                  │
-│     → Admin receives SNS notification                           │
-│                                                                 │
-│  5. Email verified in Cognito Console                           │
 │     → Post-confirmation Lambda:                                 │
 │       a. Secrets Manager secret                                 │
 │       b. Pod Identity Association                               │
-│       c. CodeBuild → helm install                               │
+│       c. Tenant CR → Operator → ArgoCD → Helm                  │
 │       d. SES welcome email to user                              │
 │                                                                 │
-│  6. User receives email: "Your URL is alice.your-domain.com"    │
+│  5. User receives email: "Your URL is claw.your-domain.com/t/alice/" │
 │                                                                 │
-│  7. Open https://alice.your-domain.com                          │
-│     → CloudFront #2 → VPC Origin → Internal ALB                │
-│     → Cognito auth → OpenClaw Control UI                        │
+│  6. Open https://claw.your-domain.com/t/alice/                  │
+│     → CloudFront → VPC Origin → Internal ALB                   │
+│     → Gateway API HTTPRoute → OpenClaw (local auth)             │
 │                                                                 │
-│  8. Chat with AI assistant (Bedrock, zero API keys)             │
+│  7. Chat with AI assistant (Bedrock, zero API keys)             │
 │                                                                 │
-│  9. Idle 15 min → KEDA scales pod to 0 (data preserved)        │
+│  8. Idle 15 min → KEDA scales pod to 0 (data preserved)        │
 │                                                                 │
 │  10. Return later → "Waking up..." (15-30s) → resume            │
 │                                                                 │
@@ -60,34 +57,24 @@ A company employee goes from zero to chatting with their personal AI assistant i
 - Cloudflare Turnstile CAPTCHA (optional, enabled via env var)
 - Cognito SDK `SignUp` API call (no redirect to Cognito Hosted UI)
 
-### 3. Email Verification
+### 3. Workspace Provisioning
 
-- Cognito sends 6-digit code to user's email
-- User enters code on the verify screen
-- "Resend code" link available if email is delayed
+- Post-confirmation Lambda creates Tenant CR
+- Operator provisions namespace, PVC, ServiceAccount, ArgoCD Application
+- ArgoCD syncs Helm chart → pod ready (~2 min)
+- User receives welcome email with workspace URL
 
-### 4. Pending Approval
-
-- User sees "Account Created — being set up" page
-- Admin receives SNS email notification
-- User cannot log in until admin approves
-
-### 5. Admin Approval
-
-- Admin confirms user in AWS Cognito Console
-- Post-confirmation Lambda triggers automatically (see [Admin Journey](admin-journey.md))
-
-### 6. Welcome Email
+### 4. Welcome Email
 
 - Sent via Amazon SES directly to user's email
-- Contains tenant URL: `https://<name>.your-domain.com`
+- Contains tenant URL: `https://claw.<domain>/t/<tenant>/`
 - Sent within seconds of auto-provisioning
 
-### 7. First Login
+### 5. First Login
 
 - User opens their tenant URL
-- CloudFront #2 → VPC Origin → Internal ALB
-- ALB Cognito auth action redirects to Cognito login
+- CloudFront → VPC Origin → Internal ALB → Gateway API HTTPRoute
+- OpenClaw gateway (local auth mode)
 - User enters email + password
 - ALB validates token, sets 7-day session cookie
 - Forwarded to OpenClaw Control UI

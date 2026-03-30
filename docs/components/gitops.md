@@ -107,7 +107,7 @@ For each matching file, it creates an Application that:
 
 **Add a tenant:**
 
-1. Create `helm/tenants/values-<name>.yaml` (via `create-tenant.sh` or CodeBuild)
+1. Create `helm/tenants/values-<name>.yaml` (via Tenant Operator)
 2. `git push` to `main`
 3. ArgoCD detects the new file → creates namespace + all resources
 

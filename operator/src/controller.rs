@@ -223,7 +223,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     // 4. NetworkPolicy — managed by Helm chart via ArgoCD, not operator
 
     // 5. ArgoCD Application — delegates Helm chart deployment to ArgoCD
-    let _gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
+    let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
     let cognito_pool_arn = require_env("COGNITO_POOL_ARN")?;
     let cognito_client_id = require_env("COGNITO_CLIENT_ID")?;
     let cognito_domain = require_env("COGNITO_DOMAIN")?;
@@ -242,6 +242,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "enabled": true,
             "gatewayName": "openclaw-gateway",
             "gatewayNamespace": "openclaw-system",
+            "domain": &gateway_domain,
             "cognito": {
                 "userPoolArn": &cognito_pool_arn,
                 "clientId": &cognito_client_id,
@@ -271,7 +272,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "project": "default",
             "source": {
                 "repoURL": &chart_repo,
-                "chart": "openclaw-platform",
+                "path": "helm/charts/openclaw-platform",
                 "targetRevision": &chart_version,
                 "helm": {
                     "values": &helm_values
