@@ -119,7 +119,9 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 
 ## Coding Standards
 
-- **Language**: All code, comments, and documentation in English
+- **Language**: All code, comments, documentation, issue titles, PR titles, and issue/PR bodies in English
+- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup Lambda")
+- **PR titles**: English, conventional commit prefix: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 - **CDK**: TypeScript, follow existing patterns in `eks-cluster-stack.ts`
 - **Lambda**: Python 3.12, boto3, handle errors with `ClientError`
 - **Scripts**: Bash, `set -euo pipefail`, use `get_output()` for CloudFormation outputs
