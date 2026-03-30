@@ -322,7 +322,8 @@ These are known gaps — not yet implemented or intentionally deferred:
 | Encryption in Transit | TLS everywhere (CloudFront → ALB → Pod) | ✅ |
 | Encryption at Rest | EBS default encryption, S3 default encryption | Consider CMK for sensitive data |
 | Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs + SNS alerts | Enable WAF logging |
-| Change Management | GitOps (ArgoCD) + CI/CD | Add SAST/DAST to pipeline |
+| Change Management | GitOps (ArgoCD) + CI/CD | ✅ cdk-nag, npm audit in CI |
+| Supply Chain | GitHub Actions SHA-pinned, npm --ignore-scripts, cargo-deny | ✅ |
 | Incident Response | SNS alerts + Athena queries | Document runbooks |
 | Data Retention | 7-day EBS snapshots, CloudTrail in S3 | Define retention policy per data class |
 
