@@ -97,7 +97,9 @@ phase3_verify() {
 }
 
 phase4_run() {
-  bash scripts/deploy-auth-ui.sh
+  # Auth UI is now deployed by CDK BucketDeployment — no manual step needed
+  echo "  Auth UI deployed automatically by CDK (BucketDeployment + config.js)"
+  return 0
 }
 phase4_verify() {
   local domain
