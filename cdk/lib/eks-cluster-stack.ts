@@ -7,6 +7,7 @@ import * as events from 'aws-cdk-lib/aws-events';
 import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as cw_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
@@ -439,6 +440,52 @@ export class EksClusterStack extends cdk.Stack {
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
     });
     podRestartAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
+
+    // Cold start alarm — alert when pod startup exceeds 60s
+    const perfLogGroup = logs.LogGroup.fromLogGroupName(this, 'PerfLogGroup',
+      `/aws/containerinsights/${cluster.clusterName}/performance`);
+    const coldStartFilter = new logs.MetricFilter(this, 'ColdStartFilter', {
+      logGroup: perfLogGroup,
+      filterPattern: logs.FilterPattern.all(
+        logs.FilterPattern.stringValue('$.Type', '=', 'Pod'),
+        logs.FilterPattern.stringValue('$.PodStatus', '=', 'Running'),
+        logs.FilterPattern.exists('$.pod_startup_duration_seconds'),
+      ),
+      metricNamespace: 'OpenClaw/ColdStart',
+      metricName: 'PodStartupDurationSeconds',
+      metricValue: '$.pod_startup_duration_seconds',
+      defaultValue: 0,
+    });
+    const coldStartAlarm = new cloudwatch.Alarm(this, 'ColdStartAlarm', {
+      alarmName: 'OpenClaw-PodColdStartSlow',
+      metric: coldStartFilter.metric({ statistic: 'Maximum', period: cdk.Duration.seconds(300) }),
+      evaluationPeriods: 1,
+      threshold: 60,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    coldStartAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
+
+    // Bedrock latency alarm — alert when P95 response time exceeds 10s
+    const appLogGroup = logs.LogGroup.fromLogGroupName(this, 'AppLogGroup',
+      `/aws/containerinsights/${cluster.clusterName}/application`);
+    const bedrockLatencyFilter = new logs.MetricFilter(this, 'BedrockLatencyFilter', {
+      logGroup: appLogGroup,
+      filterPattern: logs.FilterPattern.literal('{ $.message = "*bedrock*response*" && $.duration = * }'),
+      metricNamespace: 'OpenClaw/Bedrock',
+      metricName: 'BedrockResponseTimeMs',
+      metricValue: '$.duration',
+      defaultValue: 0,
+    });
+    const bedrockLatencyAlarm = new cloudwatch.Alarm(this, 'BedrockLatencyAlarm', {
+      alarmName: 'OpenClaw-BedrockP95Latency',
+      metric: bedrockLatencyFilter.metric({ statistic: 'p95', period: cdk.Duration.seconds(300) }),
+      evaluationPeriods: 2,
+      threshold: 10000,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+    bedrockLatencyAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
 
     // ── ECR: Pull-Through Cache for GHCR ──────────────────────────────────
     new ecr.CfnPullThroughCacheRule(this, 'GhcrCache', {
