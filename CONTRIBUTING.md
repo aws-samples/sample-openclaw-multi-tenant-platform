@@ -134,9 +134,23 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 
 1. **Rust**: format check, clippy, unit tests, CRD generation verify
 2. **Rust**: cargo-deny (license + security advisory audit)
-3. **Platform**: CDK compile + synth, Helm lint, Python syntax, Shell syntax, ShellCheck
-4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan
+3. **Platform**: CDK compile + synth with [cdk-nag](https://github.com/cdklabs/cdk-nag) (AWS Solutions checks), Helm lint, Python syntax, Shell syntax, ShellCheck
+4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit --audit-level=high`
 5. **Main-only**: K8s integration test (k3d), Docker build
+
+### Supply Chain Hardening
+
+All GitHub Actions are **pinned to commit SHA** (not version tags) to prevent [tag poisoning attacks](https://www.microsoft.com/en-us/security/blog/2026/03/24/detecting-investigating-defending-against-trivy-supply-chain-compromise/). When updating an action version, always pin to the full SHA:
+
+```yaml
+# Good
+- uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+# Bad — vulnerable to tag poisoning
+- uses: actions/checkout@v4
+```
+
+npm dependencies are installed with `--ignore-scripts` in CI security jobs to prevent postinstall hook attacks.
 
 All PR checks must pass before merge.
 

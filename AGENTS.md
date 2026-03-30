@@ -115,13 +115,24 @@ cargo clippy -- -D warnings
 Before declaring any change complete:
 
 - [ ] `cd cdk && npx tsc --noEmit` — CDK compiles
+- [ ] `cd cdk && npx cdk synth --no-staging` — cdk-nag runs (review findings, suppress with rationale if needed)
 - [ ] `cd cdk && npx cdk diff` — Shows expected changes (or no differences)
-- [ ] `python3 -c "compile(...)"` — Lambda syntax OK
-- [ ] `helm template test helm/charts/openclaw-platform` — Helm renders
-- [ ] `cd operator && cargo clippy -- -D warnings` — Operator compiles clean
-- [ ] No sensitive data: `grep -rn "123456789012" --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches (excluding cdk.json)
-- [ ] No CJK: `grep -Prn '[\x{4e00}-\x{9fff}]' --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches
+- [ ] `cd operator && cargo clippy -- -D warnings && cargo test --lib` — Operator compiles + tests pass
+- [ ] `python3 -m py_compile cdk/lambda/*/index.py` — Lambda syntax OK
+- [ ] `helm lint helm/charts/openclaw-platform/` — Helm renders
+- [ ] No sensitive data: `grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs"` = 0 matches
+- [ ] No CJK in code files
 - [ ] Cognito triggers attached: `aws cognito-idp describe-user-pool --query 'UserPool.LambdaConfig'`
+
+## CI Pipeline
+
+CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
+
+- **All GitHub Actions pinned to commit SHA** — prevents tag poisoning (ref: Trivy supply chain attack, March 2026)
+- **`permissions: contents: read`** at workflow level — least privilege by default
+- **`npm ci --ignore-scripts`** in security job — blocks postinstall hook attacks
+- **cdk-nag integrated** — `AwsSolutionsChecks` runs on every `cdk synth` via `cdk/bin/cdk.ts`
+- **PR jobs are fast (~5 min)**, heavy jobs (k3d integration, Docker build) only on merge to main
 
 ## Common Pitfalls
 

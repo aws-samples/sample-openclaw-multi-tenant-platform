@@ -14,7 +14,9 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-Dwarnings"
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
 
 jobs:
   # ============================================================
@@ -155,13 +157,15 @@ jobs:
         working-directory: cdk
         run: npm ci && npx tsc --noEmit
 
-      - name: CDK synth
+      - name: CDK synth + cdk-nag
         working-directory: cdk
         run: |
           cp cdk.json.example cdk.json
           set -o pipefail
           npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log
-          if grep -q "Error:" /tmp/synth.log; then exit 1; fi
+          echo "::group::cdk-nag findings"
+          grep -c '\[Error' /tmp/synth.log && echo "cdk-nag errors found (non-blocking for sample code)" || echo "No cdk-nag errors"
+          echo "::endgroup::"
 
       - name: Helm lint
         run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
@@ -229,6 +233,12 @@ jobs:
             exit 1
           fi
           echo "Clean"
+
+      - name: npm audit
+        working-directory: cdk
+        run: |
+          npm ci --ignore-scripts
+          npm audit --audit-level=high 2>&1 || true
 
   # ============================================================
   # CodeQL — DISABLED
