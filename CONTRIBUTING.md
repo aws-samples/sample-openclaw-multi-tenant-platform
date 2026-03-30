@@ -43,13 +43,12 @@ cdk/                    # AWS CDK infrastructure (TypeScript)
   lib/eks-cluster-stack.ts   # Main stack (~700 lines)
   lambda/                    # Cognito trigger functions (Python)
   cdk.json.example           # Configuration template
-helm/                   # Kubernetes manifests
-  charts/openclaw-platform/  # Helm chart (15 templates)
+helm/                   # Kubernetes manifests (reference templates)
+  charts/openclaw-platform/  # Helm chart (reference only, not used by operator)
   tenants/values-template.yaml  # Per-tenant values template
 auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
 operator/               # Tenant Operator (Rust/kube-rs)
 scripts/                # Operational scripts (Bash)
-argocd/                 # ArgoCD base config
 docs/                   # Architecture and operations docs
 ```
 
@@ -64,9 +63,6 @@ See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
 ```bash
 # CDK
 cd cdk && npx tsc --noEmit
-
-# Helm
-helm template test helm/charts/openclaw-platform
 
 # Lambda
 python3 -c "compile(open('cdk/lambda/pre-signup/index.py').read(), 'x', 'exec')"
@@ -110,8 +106,6 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 | `cognitoClientId` | Cognito public client ID (for auth UI) |
 | `cognitoDomain` | Cognito domain prefix |
 | `allowedEmailDomains` | Comma-separated allowed email domains |
-| `githubOwner` | GitHub org/user for ArgoCD |
-| `githubRepo` | GitHub repo name for ArgoCD |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
 | `openclawImage` | Container image (e.g., `ghcr.io/openclaw/openclaw:2026.3.24`) |
 | `sesFromEmail` | SES sender email for welcome emails |
@@ -125,7 +119,6 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 - **CDK**: TypeScript, follow existing patterns in `eks-cluster-stack.ts`
 - **Lambda**: Python 3.12, boto3, handle errors with `ClientError`
 - **Scripts**: Bash, `set -euo pipefail`, use `get_output()` for CloudFormation outputs
-- **Helm**: Follow Helm best practices, use `_helpers.tpl` for shared logic
 - **Commits**: Imperative mood, prefixed: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 
 ## CI Checks

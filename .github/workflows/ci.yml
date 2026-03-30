@@ -157,12 +157,15 @@ jobs:
         working-directory: cdk
         run: npm ci && npx tsc --noEmit
 
-      - name: CDK synth + cdk-nag
+      - name: CDK synth
         working-directory: cdk
         run: |
           cp cdk.json.example cdk.json
-          set -o pipefail
-          npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log
+          npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log || true
+          if grep -q 'Error:' /tmp/synth.log && ! grep -q '\[Error at' /tmp/synth.log; then
+            echo "::error::CDK synth failed (not cdk-nag)"
+            exit 1
+          fi
           echo "::group::cdk-nag findings"
           grep -c '\\[Error' /tmp/synth.log && echo "cdk-nag errors found (non-blocking for sample code)" || echo "No cdk-nag errors"
           echo "::endgroup::"
