@@ -71,10 +71,12 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     let ssapply = PatchParams::apply("tenant-operator").force();
 
     resources::ensure_namespace(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
+    let pvc_condition = resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_service_account(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_config_map(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_deployment(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec).await?;
+    let deploy_condition =
+        resources::ensure_deployment(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
+            .await?;
     resources::ensure_service(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_network_policy(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_resource_quota(client.clone(), &name, tenant_ns, &ssapply).await?;
@@ -114,7 +116,8 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "phase": if tenant.spec.enabled { "Ready" } else { "Suspended" },
             "conditions": [
                 { "type": "NamespaceReady", "status": "True" },
-                { "type": "PVCBound", "status": "Unknown", "message": "Pending verification" },
+                pvc_condition,
+                deploy_condition,
                 keda_condition,
                 httproute_condition,
                 lrc_condition,
