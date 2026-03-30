@@ -38,7 +38,7 @@ These MUST be true at all times. Violating any = broken deployment.
 
 1. **`cdk diff` = no differences** — CDK code must match deployed stack
 2. **Zero sensitive data in repo** — No account IDs, Cognito IDs, domains, ARNs. All via `cdk.json` context (gitignored)
-3. **Zero CJK characters** — All code, comments, docs in English
+3. **Zero CJK characters** — All code, comments, docs, issue titles, PR titles, and issue/PR bodies in English
 4. **Helm values-template placeholders** — `{{TENANT}}`, `{{DOMAIN}}`, etc. must match what the operator and ArgoCD Application use
 5. **Cognito triggers survive `update-user-pool`** — Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
 6. **Gateway API + Tenant Operator** — Path-based routing via HTTPRoute + URLRewrite, tenant lifecycle managed by CRD Operator. Helm deployment delegated to ArgoCD via Application CR.
@@ -135,6 +135,8 @@ Before declaring any change complete:
 
 ## Conventions
 
+- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup Lambda")
+- **PR titles**: English, conventional commit prefix: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 - Commit messages: English, imperative mood, prefix with `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 - Commit messages: **NEVER** include real domain names, AWS account IDs, ARNs, CloudFront distribution IDs, or any deployment-specific values. Use `example.com`, `123456789012`, etc.
 - Run `bash scripts/install-hooks.sh` after clone to enable commit-msg scanning
