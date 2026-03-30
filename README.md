@@ -2,7 +2,6 @@
   <img src="https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazon-eks&logoColor=white" alt="EKS">
   <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
   <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
-  <img src="https://img.shields.io/badge/ArgoCD-GitOps-EF7B4D?logo=argo&logoColor=white" alt="ArgoCD">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
 </p>
@@ -35,7 +34,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **3-layer origin protection** — internet-facing ALB with CF-only SG + WAF + HTTPS
 - **Custom auth UI** — branded login/signup on your domain (no Cognito Hosted UI)
 - **Self-service signup** — Cognito + Lambda auto-provisions tenants on auto-provisioning
-- **GitOps** — ArgoCD (EKS Capability) manages tenants via ApplicationSet
+- **Operator-managed** — Tenant Operator creates all K8s resources directly (no GitOps layer)
 - **Cost control** — per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** — 20% cheaper compute with t4g instances
 - **Security deep-dive** — 10 layers, threat model, compliance considerations
@@ -59,7 +58,7 @@ Internet
 EKS Cluster
 │  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
 │  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
-│  ArgoCD (EKS Capability) + KEDA HTTP Add-on
+│  KEDA HTTP Add-on
 │
 ├── namespace: openclaw-{tenant}
 │   ├── Deployment + PVC (persists across scale-to-zero)
@@ -95,7 +94,6 @@ For full control over each deployment phase:
 - Docker
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** — public client for SPA)
-- AWS Identity Center (for ArgoCD EKS Capability)
 
 #### 1. Configure
 
@@ -117,8 +115,6 @@ cp cdk/cdk.json.example cdk/cdk.json
 | `cognitoClientId` | Cognito App Client ID (**no secret**) |
 | `cognitoDomain` | Cognito domain prefix |
 | `allowedEmailDomains` | Comma-separated allowed email domains |
-| `githubOwner` | GitHub org/user for ArgoCD source |
-| `githubRepo` | Repository name (default: `openclaw-platform`) |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
 | `sesFromEmail` | SES sender email for welcome emails (default: `noreply@<domain>`) |
 | `albClientId` | Cognito App Client ID for ALB auth |
@@ -150,7 +146,6 @@ Creates ECR repo, builds the Tenant Operator Docker image, pushes to ECR, and de
 # Core setup
 ./scripts/setup-keda.sh                    # Scale-to-zero
 ./scripts/setup-cognito.sh                 # Auth configuration
-./scripts/setup-argocd.sh                  # ArgoCD EKS Capability status
 
 # Monitoring
 ./scripts/setup-pvc-backup.sh              # Daily PVC backups
@@ -177,7 +172,6 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ```bash
 ./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF→ALB
 ./scripts/deploy-auth-ui.sh       # Upload auth UI to S3
-./scripts/setup-argocd-apps.sh    # ArgoCD Applications + ApplicationSets
 ```
 
 ### 7. Access
@@ -223,11 +217,8 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | `post-deploy.sh` | CloudFront #2 + Route53 + WAF |
 | `build-operator.sh` | Build, push, deploy Tenant Operator |
 | `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
-| `upload-helm-chart.sh` | Package and upload Helm chart to S3 (for manual tenant creation) |
 | `setup-cognito.sh` | Cognito config (auth flows, triggers) |
 | `setup-keda.sh` | Install KEDA for scale-to-zero |
-| `setup-argocd.sh` | ArgoCD EKS Capability status |
-| `setup-argocd-apps.sh` | Apply ArgoCD Applications |
 | `setup-guardduty.sh` | Enable GuardDuty EKS protection |
 | `cleanup-test-resources.sh` | Clean up orphan S3 buckets and test secrets |
 | `health-check.sh` | Platform health (JSON output) |
@@ -279,7 +270,6 @@ Learn how each component works:
 | [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
 | [IAM](docs/components/iam.md) | Pod Identity, ABAC, tenant isolation |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
-| [GitOps](docs/components/gitops.md) | ArgoCD EKS Capability |
 | [Observability](docs/components/observability.md) | CloudWatch, alarms, cost tracking |
 | [CI/CD](docs/components/cicd.md) | GitHub Actions, Tenant Operator, image updates |
 | [Storage](docs/components/storage.md) | PVC, EBS snapshots, backup/restore |
@@ -310,10 +300,9 @@ Learn how each component works:
 │   ├── lib/eks-cluster-stack.ts
 │   ├── lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
 │   └── cdk.json.example        # Config template
-├── helm/                       # Helm chart + tenant templates
+├── helm/                       # Helm chart templates (reference only, not used by operator)
 │   ├── charts/openclaw-platform/
 │   └── tenants/values-template.yaml
-├── argocd/                     # ArgoCD Applications + ApplicationSets
 ├── docs/                       # Architecture, security, components, operations, design
 │   ├── architecture.md
 │   ├── security.md
