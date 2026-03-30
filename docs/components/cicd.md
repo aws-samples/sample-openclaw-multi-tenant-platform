@@ -25,35 +25,9 @@ The CI checks for hardcoded values matching:
 
 Excludes: `node_modules`, `cdk.out`, `.git/`, `cdk.json`.
 
-## CodeBuild: Tenant Builder
+## Tenant Provisioning
 
-`openclaw-tenant-builder` — a CodeBuild project that runs `helm install` for a new tenant. Triggered by the Post-Confirmation Lambda when a user signs up.
-
-### Flow
-
-```
-User signs up → Cognito → Post-Confirmation Lambda
-                            → Creates Secrets Manager secret
-                            → Creates Pod Identity association
-                            → Starts CodeBuild build (TENANT_NAME env var)
-```
-
-### Build Steps
-
-1. Install `kubectl` (v1.32) and `helm`
-2. `aws eks update-kubeconfig` for the cluster
-3. `helm install openclaw-<tenant> helm/charts/openclaw-platform` with:
-   - `--namespace openclaw-<tenant> --create-namespace`
-   - `--set tenant.name=<tenant>`
-   - `--set ingress.enabled=true`
-   - `--set scaleToZero.enabled=true`
-   - `--wait --timeout 180s`
-
-### IAM
-
-- CodeBuild role has `eks:DescribeCluster` permission
-- Mapped to `system:masters` in `aws-auth` ConfigMap (username: `codebuild-tenant-builder`)
-- Source: GitHub repo (`main` branch)
+Tenant provisioning is handled by the Tenant Operator (Rust/kube-rs). The Post-Confirmation Lambda creates a Tenant CR, and the operator reconciles it into Namespace, PVC, ServiceAccount, ArgoCD Application, and KEDA HSO. ArgoCD then syncs the Helm chart into the tenant namespace. No CodeBuild or manual `helm install` required.
 
 ## Image Update CronJob
 

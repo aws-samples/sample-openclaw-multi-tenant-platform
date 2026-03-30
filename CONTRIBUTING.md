@@ -11,6 +11,7 @@ Thank you for your interest in contributing to OpenClaw Platform!
 - Helm 3
 - Python 3.12+
 - Docker (for CDK asset bundling)
+- Rust toolchain (for operator development)
 
 ## Quick Setup
 
@@ -26,6 +27,15 @@ cp cdk/cdk.json.example cdk/cdk.json
 # Edit cdk/cdk.json with your AWS account details
 ```
 
+## Operator Build
+
+```bash
+cd operator
+cargo build --release
+# For ARM64 (Graviton):
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc cargo build --release --target aarch64-unknown-linux-gnu
+```
+
 ## Project Structure
 
 ```
@@ -37,8 +47,9 @@ helm/                   # Kubernetes manifests
   charts/openclaw-platform/  # Helm chart (15 templates)
   tenants/values-template.yaml  # Per-tenant values template
 auth-ui/                # Login/signup UI (single HTML file)
+operator/               # Tenant Operator (Rust/kube-rs)
 scripts/                # Operational scripts (Bash)
-argocd/                 # GitOps ApplicationSet
+argocd/                 # ArgoCD base config
 docs/                   # Architecture and operations docs
 ```
 
@@ -71,10 +82,7 @@ grep -rn 'AKIA\|amazonaws\.com\|[0-9]\{12\}' \
 ### 3. Deploy to your environment
 
 ```bash
-cd cdk && npx cdk deploy OpenClawEksStack --require-approval never
-bash scripts/setup-cognito.sh
-bash scripts/deploy-auth-ui.sh
-bash scripts/upload-helm-chart.sh
+bash scripts/deploy.sh
 ```
 
 ### 4. Test
@@ -84,7 +92,7 @@ bash scripts/upload-helm-chart.sh
 cd cdk && npx cdk diff  # Should show "no differences"
 
 # Signup flow
-# Open https://<your-domain> → Sign Up → Verify → Workspace loads
+# Open https://<your-domain> → Sign Up → Workspace loads at claw.<domain>/t/<tenant>/
 ```
 
 ## Configuration
@@ -99,7 +107,6 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 | `cloudfrontCertificateArn` | ACM certificate ARN (us-east-1, for CloudFront) |
 | `cognitoPoolId` | Cognito User Pool ID |
 | `cognitoClientId` | Cognito public client ID (for auth UI) |
-| `albClientId` | Cognito confidential client ID (legacy, for ALB Cognito auth) |
 | `cognitoDomain` | Cognito domain prefix |
 | `allowedEmailDomains` | Comma-separated allowed email domains |
 | `githubOwner` | GitHub org/user for ArgoCD |

@@ -16,7 +16,7 @@ User ──► Browser ──► CloudFront #1 ──► S3 (custom auth UI)    
                      (your-domain.com)  (login/signup, Cognito SDK)                   │
                           │                                                          │
                      CloudFront #2 ──► VPC Origin ──► Internal ALB ──► EKS Pod       │
-                     (*.your-domain.com)               (WAF attached)                │
+                     (claw.your-domain.com)            (WAF attached)                │
                           │                                │                         │
                           │                    ┌───────────┼─────────────────┐       │
                           │    │    ▼           ▼                 ▼                  │
@@ -26,7 +26,13 @@ User ──► Browser ──► CloudFront #1 ──► S3 (custom auth UI)    
                           │    │                ▲                                    │
                           │    │  Lambda Triggers                                   │
                           │    ├──► Pre-signup ──► validate email domain             │
-                          │    └──► Post-confirmation ──► SM + Pod Identity + Helm  │
+                          │    └──► Post-confirmation ──► SM + Pod Identity          │
+                          │                                + Tenant CR              │
+                          │    Tenant Operator ──► NS, PVC, SA, ArgoCD App, HSO     │
+                          │    ArgoCD ──► syncs Helm chart per tenant                │
+                          │                                                         │
+                          │    Gateway API ──► path-based routing                    │
+                          │    claw.your-domain.com/t/<tenant>/                      │
                           │                                                         │
                           │    S3 ErrorPagesBucket ──► signup error pages            │
                           │                                                         │
@@ -47,21 +53,20 @@ graph TB
     end
 
     subgraph Route53
-        R53[Route53<br/>your-domain.com<br/>*.your-domain.com → ALB]
+        R53[Route53<br/>your-domain.com<br/>claw.your-domain.com → ALB]
     end
 
     subgraph ACM
-        Cert[ACM Certificate<br/>*.your-domain.com]
+        Cert[ACM Certificate<br/>claw.your-domain.com]
     end
 
     subgraph Cognito
         CUP[Cognito User Pool<br/>openclaw-users]
-        CUP_Client[App Client<br/>ALB Integration]
     end
 
     subgraph LambdaTriggers["Lambda Triggers"]
         PreSignupFn[Pre-signup Lambda<br/>email domain validation]
-        PostConfirmFn[Post-confirmation Lambda<br/>tenant provisioning]
+        PostConfirmFn[Post-confirmation Lambda<br/>creates Tenant CR]
     end
 
     subgraph S3
@@ -80,12 +85,14 @@ graph TB
 
         NAT1[NAT Gateway<br/>AZ-a]
         NAT2[NAT Gateway<br/>AZ-b]
-        ALB[ALB<br/>shared IngressGroup<br/>Cognito Auth]
+        ALB[Internal ALB<br/>Gateway API<br/>path-based routing]
 
         subgraph EKS["EKS Cluster (openclaw-cluster)"]
             MNG[Managed Node Group<br/>t4g.medium Graviton]
             KarpenterNodes[Karpenter Nodes<br/>arm64 spot]
             KEDA[KEDA<br/>scale-to-zero<br/>optional, disabled by default]
+            TenantOp[Tenant Operator<br/>Rust/kube-rs]
+            ArgoCD[ArgoCD<br/>Helm chart sync]
         end
     end
 
@@ -124,12 +131,11 @@ graph TB
     User --> R53
     R53 --> ALB
     Cert -.-> ALB
-    ALB --> CUP
-    CUP --> CUP_Client
     CUP --> PreSignupFn
     CUP --> PostConfirmFn
     PostConfirmFn --> SecretsManager
     PostConfirmFn --> EKS
+    TenantOp --> ArgoCD
     ALB --> EKS
     PubSub1 --- NAT1
     NAT1 --- PrivSub1
@@ -173,11 +179,22 @@ graph TB
         EC2NC[EC2NodeClass<br/>openclaw-nodes]
     end
 
+    subgraph ArgoNS["argocd namespace"]
+        ArgoServer[ArgoCD Server]
+        ArgoRepo[ArgoCD Repo Server]
+        ArgoApp[ArgoCD Application Controller]
+    end
+
+    subgraph OperatorNS["openclaw-system namespace"]
+        TenantOp[Tenant Operator<br/>Rust/kube-rs]
+    end
+
     subgraph NSAlice["openclaw-alice namespace"]
         DepA[Deployment<br/>openclaw-alice]
         PVCA[PVC<br/>gp3 EBS]
         SvcA[Service<br/>ClusterIP:18789]
-        IngA[Ingress<br/>alice.your-domain.com]
+        HRA[HTTPRoute<br/>/t/alice/]
+        TGCA[TargetGroupConfiguration]
         NPA[NetworkPolicy<br/>deny-all + allow-alb]
         RQA[ResourceQuota]
         SAA[ServiceAccount<br/>→ TenantRole-alice]
@@ -187,7 +204,8 @@ graph TB
         DepB[Deployment<br/>openclaw-bob]
         PVCB[PVC<br/>gp3 EBS]
         SvcB[Service<br/>ClusterIP:18789]
-        IngB[Ingress<br/>bob.your-domain.com]
+        HRB[HTTPRoute<br/>/t/bob/]
+        TGCB[TargetGroupConfiguration]
         NPB[NetworkPolicy<br/>deny-all + allow-alb]
         RQB[ResourceQuota]
         SAB[ServiceAccount<br/>→ TenantRole-bob]
@@ -197,21 +215,26 @@ graph TB
         DepC[Deployment<br/>openclaw-carol]
         PVCC[PVC<br/>gp3 EBS]
         SvcC[Service<br/>ClusterIP:18789]
-        IngC[Ingress<br/>carol.your-domain.com]
+        HRC[HTTPRoute<br/>/t/carol/]
+        TGCC[TargetGroupConfiguration]
         NPC[NetworkPolicy<br/>deny-all + allow-alb]
         RQC[ResourceQuota]
         SAC[ServiceAccount<br/>→ TenantRole-carol]
     end
 
+    TenantOp -->|creates ArgoCD App| ArgoApp
+    ArgoApp -->|syncs Helm| DepA
+    ArgoApp -->|syncs Helm| DepB
+    ArgoApp -->|syncs Helm| DepC
     DepA --> PVCA
     DepA --> SvcA
-    SvcA --> IngA
+    SvcA --> HRA
     DepB --> PVCB
     DepB --> SvcB
-    SvcB --> IngB
+    SvcB --> HRB
     DepC --> PVCC
     DepC --> SvcC
-    SvcC --> IngC
+    SvcC --> HRC
 ```
 
 ---
@@ -250,29 +273,18 @@ graph LR
 sequenceDiagram
     actor User
     participant Browser
-    participant ALB
-    participant Cognito
+    participant CloudFront
+    participant ALB as Internal ALB
     participant Pod as EKS Pod<br/>(OpenClaw Gateway)
 
-    User->>Browser: Navigate to alice.your-domain.com
-    Browser->>ALB: GET /
-    ALB->>ALB: Check session cookie
-
-    alt No valid session
-        ALB->>Browser: 302 Redirect to Cognito
-        Browser->>Cognito: /authorize (login page)
-        User->>Cognito: Enter credentials
-        Cognito->>Browser: 302 Redirect with auth code
-        Browser->>ALB: GET /oauth2/idpresponse?code=xxx
-        ALB->>Cognito: Exchange code for tokens
-        Cognito-->>ALB: ID token + access token
-        ALB->>ALB: Set session cookie (AWSELBAuthSessionCookie)
-    end
-
-    ALB->>Pod: Forward request<br/>+ x-amzn-oidc-identity header<br/>+ x-amzn-oidc-data (JWT)
-    Pod->>Pod: trusted-proxy mode<br/>extract identity from header
+    User->>Browser: Navigate to claw.your-domain.com/t/alice/
+    Browser->>CloudFront: GET /t/alice/
+    CloudFront->>ALB: Forward via VPC Origin
+    ALB->>Pod: Route via Gateway API HTTPRoute
+    Pod->>Pod: local auth mode<br/>(security via CloudFront + internal ALB)
     Pod-->>ALB: Response
-    ALB-->>Browser: Response
+    ALB-->>CloudFront: Response
+    CloudFront-->>Browser: Response
     Browser-->>User: OpenClaw UI
 ```
 
@@ -307,36 +319,35 @@ sequenceDiagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  create-tenant.sh <tenant-name>                                     │
+│  Cognito SignUp → Post-Confirmation Lambda                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
-│  Step 1: Create Secrets Manager secret                              │
-│  ────────────────────────────────────                               │
-│  aws secretsmanager create-secret                                   │
-│    --name openclaw/<tenant>/config                                  │
-│    --tags Key=tenant,Value=<tenant>                                 │
+│  Step 1: Post-Confirmation Lambda                                   │
+│  ────────────────────────────────                                   │
+│  a. Create Secrets Manager secret                                   │
+│     (openclaw/<tenant>/config, tagged tenant=<tenant>)              │
+│  b. Create Pod Identity Association                                 │
+│  c. Create Tenant CR in EKS cluster                                 │
 │                                                                     │
-│  Step 2: Create Pod Identity Association                            │
-│  ────────────────────────────────────────                           │
-│  aws eks create-pod-identity-association                            │
-│    --cluster-name openclaw-cluster                                  │
-│    --namespace openclaw-<tenant>                                    │
-│    --service-account openclaw-<tenant>                              │
-│    --role-arn arn:aws:iam::role/OpenClawTenantRole                  │
-│    --tags tenant=<tenant>                                           │
+│  Step 2: Tenant Operator reconciles Tenant CR                       │
+│  ────────────────────────────────────────────                       │
+│  a. Namespace (openclaw-<tenant>)                                   │
+│  b. PVC (gp3 EBS)                                                   │
+│  c. ServiceAccount (Pod Identity)                                   │
+│  d. ArgoCD Application (points to Helm chart)                       │
+│  e. KEDA HTTPScaledObject (scale-to-zero)                           │
 │                                                                     │
-│  Step 3: Helm install                                               │
-│  ────────────────────                                               │
-│  helm install openclaw-<tenant> thepagent/openclaw-helm             │
-│    --version 1.3.14                                                 │
-│    --namespace openclaw-<tenant> --create-namespace                 │
-│    --set tenant=<tenant>                                            │
-│    --set image=ghcr.io/openclaw/openclaw:2026.3.24                  │
-│    --set ingress.host=<tenant>.your-domain.com                       │
+│  Step 3: ArgoCD syncs Helm chart                                    │
+│  ────────────────────────────────                                   │
+│  a. Deployment + Service                                            │
+│  b. HTTPRoute (claw.your-domain.com/t/<tenant>/)                    │
+│  c. TargetGroupConfiguration                                        │
+│  d. NetworkPolicy                                                   │
 │                                                                     │
 │  Step 4: DNS — No action needed                                     │
 │  ──────────────────────────────                                     │
-│  Wildcard *.your-domain.com already points to ALB                    │
+│  Path-based routing: claw.your-domain.com/t/<tenant>/               │
+│  via Gateway API (no wildcard DNS required)                         │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -354,24 +365,22 @@ User ──► Cognito Hosted UI ──► Pre-signup Lambda
                     (auto-confirm)        (→ S3 error page)
                           │
                           ▼
-                    Admin approves user
-                    (Cognito confirm)
-                          │
-                          ▼
                     Post-confirmation Lambda
                           │
                     ┌─────┼──────────────┐
                     ▼     ▼              ▼
-                SM secret  Pod Identity   Helm install
-                (tenant)   association    (openclaw-<tenant>)
+                SM secret  Pod Identity   Tenant CR
+                (tenant)   association    (operator reconciles)
+                          │
+                          ▼
+                    Operator → ArgoCD → Helm
                           │
                           ▼
                     Tenant ready at
-                    <tenant>.your-domain.com
+                    claw.your-domain.com/t/<tenant>/
 ```
 
 Lambda source: `cdk/lambda/pre-signup/index.py`, `cdk/lambda/post-confirmation/index.py`
-Setup script: `scripts/setup-signup-triggers.sh`
 
 ---
 
@@ -398,10 +407,10 @@ Setup script: `scripts/setup-signup-triggers.sh`
 │              │ • NAT Gateway for outbound internet                          │
 │              │ • NetworkPolicy: default-deny + allow ALB ingress only       │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
-│ Auth         │ • Cognito User Pool with per-tenant user assignment          │
-│              │ • ALB authenticates via OIDC before forwarding               │
-│              │ • trusted-proxy mode: Pod trusts x-amzn-oidc-identity header │
-│              │ • Session cookie (AWSELBAuthSessionCookie) with expiry       │
+│ Auth         │ • Cognito User Pool for signup identity management            │
+│              │ • OpenClaw gateway auth mode: local                          │
+│              │ • Security via CloudFront + internal ALB (not internet-facing)│
+│              │ • Path-based routing via Gateway API HTTPRoute               │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
 │ IAM          │ • Pod Identity (no static credentials)                       │
 │              │ • ABAC: aws:PrincipalTag/tenant must match resource tag      │

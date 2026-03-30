@@ -101,7 +101,7 @@ cp cdk/cdk.json.example cdk/cdk.json
 | `cognitoClientId` | Cognito App Client ID (**no secret**) |
 | `cognitoDomain` | Cognito domain prefix |
 | `allowedEmailDomains` | Comma-separated allowed email domains |
-| `githubOwner` | GitHub org/user for CodeBuild source |
+| `githubOwner` | GitHub org/user for ArgoCD source |
 | `githubRepo` | Repository name (default: `openclaw-platform`) |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
 | `selfSignupEnabled` | Allow users to self-register (default: `true`) |
@@ -118,7 +118,7 @@ cd cdk && npm install
 npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
-Creates: EKS cluster, VPC (2 NAT Gateways), IAM roles, Lambda functions, S3 buckets, CloudFront, WAF, CloudWatch, SNS, CodeBuild. Takes ~15-20 minutes.
+Creates: EKS cluster, VPC (2 NAT Gateways), IAM roles, Lambda functions, S3 buckets, CloudFront, WAF, CloudWatch, SNS. Takes ~15-20 minutes.
 
 ### 3. Post-Deploy Setup
 
@@ -206,7 +206,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
 | Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
 | Network | ALB is **internal** — not accessible from internet |
-| Auth | Cognito + ALB trusted-proxy |
+| Auth | Cognito signup + local auth mode (CloudFront + internal ALB) |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef — fetched on-demand, never persisted |
 | LLM | Bedrock via Pod Identity — zero API keys |
@@ -247,7 +247,7 @@ Learn how each component works:
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
 | [GitOps](docs/components/gitops.md) | ArgoCD EKS Capability |
 | [Observability](docs/components/observability.md) | CloudWatch, alarms, cost tracking |
-| [CI/CD](docs/components/cicd.md) | GitHub Actions, CodeBuild, image updates |
+| [CI/CD](docs/components/cicd.md) | GitHub Actions, Tenant Operator, image updates |
 | [Storage](docs/components/storage.md) | PVC, EBS snapshots, backup/restore |
 
 ### Operations
@@ -302,7 +302,7 @@ Learn how each component works:
 | CloudFront #1 (auth UI) | CloudFront #2 (tenants) |
 | WAF WebACL | Route53 records |
 | CloudWatch + SNS | WAF → ALB association |
-| CodeBuild | CronJobs + dashboards |
+| Tenant Operator | CronJobs + dashboards |
 
 ALB is created dynamically by Kubernetes LB Controller — CDK cannot reference it at deploy time.
 
