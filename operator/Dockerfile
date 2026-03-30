@@ -1,7 +1,7 @@
 # Stage 1: Build
 FROM rust:1.94-slim AS builder
 WORKDIR /app
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
 RUN cargo build --release --bin tenant-operator
@@ -10,4 +10,5 @@ RUN cargo build --release --bin tenant-operator
 FROM gcr.io/distroless/cc-debian12
 COPY --from=builder /app/target/release/tenant-operator /
 EXPOSE 8080
+USER nonroot
 ENTRYPOINT ["/tenant-operator"]
