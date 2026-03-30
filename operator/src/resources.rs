@@ -30,6 +30,18 @@ pub async fn ensure_namespace(
                     "app.kubernetes.io/managed-by".to_string(),
                     "tenant-operator".to_string(),
                 ),
+                (
+                    "pod-security.kubernetes.io/enforce".to_string(),
+                    "restricted".to_string(),
+                ),
+                (
+                    "pod-security.kubernetes.io/warn".to_string(),
+                    "restricted".to_string(),
+                ),
+                (
+                    "pod-security.kubernetes.io/audit".to_string(),
+                    "restricted".to_string(),
+                ),
             ])),
             ..Default::default()
         },

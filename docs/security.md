@@ -49,6 +49,7 @@
 
 **How it's configured**:
 - Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS` env var)
+- Rate limiting: max 5 signups per email domain per hour (via Cognito `ListUsers` count)
 - Cloudflare Turnstile CAPTCHA verification (if `TURNSTILE_SECRET` is set)
 - `autoConfirmUser: true` — email domain restriction is the trust gate, no admin approval required
   > **Note**: The `allowedEmailDomains` setting in `cdk.json` is the primary access control. Ensure this is set to your company domain only.
@@ -265,7 +266,7 @@ ORDER BY eventtime DESC LIMIT 20;
 |---------------|------------|
 | DDoS | CloudFront edge caching + WAF rate limiting (2000 req/5min/IP) |
 | SQLi / XSS | WAF AWSManagedRulesCommonRuleSet |
-| Bot signups | Cloudflare Turnstile CAPTCHA + email domain allowlist |
+| Bot signups | Cloudflare Turnstile CAPTCHA + email domain allowlist + rate limiting (5/domain/hour) |
 | Unauthenticated access | 3-layer origin protection: CF prefix list SG + WAF header + HTTPS |
 | Cross-tenant data access | Namespace isolation + NetworkPolicy + ABAC on Secrets Manager |
 | Cross-tenant network | NetworkPolicy blocks 10.0.0.0/8 on egress port 443 |
@@ -302,8 +303,9 @@ These are known gaps — not yet implemented or intentionally deferred:
 |-----|--------|-------|
 | MFA | Not implemented | Cognito supports MFA but not enabled. Recommended for admin accounts. |
 | SAST/DAST | Not implemented | No static/dynamic application security testing in CI pipeline. Consider adding CodeGuru or Snyk. |
-| `readOnlyRootFilesystem` | Partial | Not set on main container — OpenClaw writes to `/tmp` and PVC. Init containers use `emptyDir` for `/tmp`. |
-| Pod Security Standards | Not enforced | No `PodSecurity` admission controller configured. Currently relies on Helm template defaults. |
+| ~~`readOnlyRootFilesystem`~~ | ✅ Done | Set on main container. Init containers use `emptyDir` for `/tmp`. |
+| ~~Pod Security Standards~~ | ✅ Done | `restricted` profile enforced on `openclaw-system` and all tenant namespaces. |
+| ~~Signup rate limiting~~ | ✅ Done | Pre-signup Lambda rejects >5 signups per email domain per hour via Cognito `ListUsers`. |
 | Image signing / verification | Not implemented | No Sigstore/Cosign verification on container images. |
 | Secrets rotation | Not implemented | Secrets Manager secrets are not auto-rotated. |
 | WAF logging | Not enabled | WAF sampled requests enabled but full logging to S3/CloudWatch not configured. |
