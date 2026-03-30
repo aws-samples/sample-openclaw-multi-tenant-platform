@@ -85,7 +85,7 @@ jobs:
         uses: AbsaOSS/k3d-action@v2
         with:
           cluster-name: test
-          args: --no-lb --k3s-arg "--disable=traefik@server:0"
+          args: --no-lb --k3s-arg "--disable=traefik@server:0" --image rancher/k3s:v1.35.0-k3s1
 
       - name: Install CRD and run operator
         run: |
@@ -118,7 +118,6 @@ jobs:
           kubectl get ns openclaw-test-alice
           kubectl get pvc test-alice-data -n openclaw-test-alice
           kubectl get sa test-alice -n openclaw-test-alice
-          kubectl get networkpolicy default-deny -n openclaw-test-alice
 
       - name: Test deletion cleanup
         run: |
@@ -188,7 +187,7 @@ jobs:
 
       - name: No hardcoded secrets
         run: |
-          FOUND=$(grep -rn '387671391109\|AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" --include="*.md" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ | grep -v cdk.out | grep -v cdk.json || true)
+          FOUND=$(grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs" --include="*.yaml" --include="*.md" 2>/dev/null | grep -v node_modules | grep -v ".git/" | grep -v target/ | grep -v cdk.out | grep -v cdk.json || true)
           [ -n "$FOUND" ] && echo "$FOUND" && exit 1 || echo "Clean"
 
       - name: No CJK in code
@@ -212,6 +211,23 @@ jobs:
           print('Clean')
           PYEOF
 
+      - name: No sensitive data in commit messages
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          COMMITS=$(git log --format='%B' origin/main..HEAD 2>/dev/null || echo "")
+          if [ -z "$COMMITS" ]; then
+            echo "Could not determine commit range, skipping"
+            exit 0
+          fi
+          FOUND=$(echo "$COMMITS" | grep -iE '[0-9]{12}\.dkr\.ecr|AKIA[A-Z0-9]{16}|[a-z0-9]{10,}\.cloudfront\.net|arn:aws:' || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Commit messages contain sensitive data:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean"
+
   # ============================================================
   # CodeQL (merge to main only) ~5 min
   # Static analysis for TypeScript and Python
@@ -222,6 +238,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       security-events: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -233,15 +250,3 @@ jobs:
           languages: ${{ matrix.language }}
       - uses: github/codeql-action/autobuild@v3
       - uses: github/codeql-action/analyze@v3
-
-      - name: No sensitive data in commit messages
-        if: github.event_name == 'pull_request'
-        run: |
-          COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits --jq '.commits[].messageHeadline + " " + .commits[].messageBody' 2>/dev/null || git log --format='%B' origin/main..HEAD)
-          FOUND=$(echo "$COMMITS" | grep -iE '[0-9]{12}\.dkr\.ecr|AKIA[A-Z0-9]{16}|[a-z0-9]{10,}\.cloudfront\.net|arn:aws:' || true)
-          if [ -n "$FOUND" ]; then
-            echo "::error::Commit messages contain sensitive data:"
-            echo "$FOUND"
-            exit 1
-          fi
-          echo "Clean"

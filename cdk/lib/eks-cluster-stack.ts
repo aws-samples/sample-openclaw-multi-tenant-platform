@@ -15,7 +15,7 @@ import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
-import { KubectlV32Layer } from '@aws-cdk/lambda-layer-kubectl-v32';
+import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { Construct } from 'constructs';
 
 export class EksClusterStack extends cdk.Stack {
@@ -35,11 +35,11 @@ export class EksClusterStack extends cdk.Stack {
     // ── EKS Cluster ─────────────────────────────────────────────────────────
     const cluster = new eks.Cluster(this, 'Cluster', {
       vpc,
-      version: eks.KubernetesVersion.V1_32,
+      version: eks.KubernetesVersion.V1_35,
       defaultCapacity: 0,
       clusterName: 'openclaw-cluster',
       authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
-      kubectlLayer: new KubectlV32Layer(this, 'KubectlLayer'),
+      kubectlLayer: new KubectlV35Layer(this, 'KubectlLayer'),
     });
 
     // ── Cluster Access: allow deployer's SSO role to use kubectl ─────────
@@ -500,7 +500,7 @@ export class EksClusterStack extends cdk.Stack {
         phases: {
           install: {
             commands: [
-              'curl -LO https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/',
+              'curl -LO https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/',
               'curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash',
               `aws eks update-kubeconfig --region ${this.region} --name ${cluster.clusterName}`,
             ],
