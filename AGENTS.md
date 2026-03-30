@@ -132,6 +132,8 @@ Before declaring any change complete:
 ## Conventions
 
 - Commit messages: English, imperative mood, prefix with `feat:`, `fix:`, `docs:`, `perf:`
+- Commit messages: **NEVER** include real domain names, AWS account IDs, ARNs, CloudFront distribution IDs, or any deployment-specific values. Use `example.com`, `123456789012`, etc.
+- Run `bash scripts/install-hooks.sh` after clone to enable commit-msg scanning
 - Scripts: Bash, `set -euo pipefail`, use `get_output()` helper for CloudFormation outputs
 - CDK context: All configurable values in `cdk.json`, template in `cdk.json.example`
 - Documentation: English only, Markdown, stored in `docs/`

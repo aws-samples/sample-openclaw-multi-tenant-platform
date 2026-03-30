@@ -233,3 +233,15 @@ jobs:
           languages: ${{ matrix.language }}
       - uses: github/codeql-action/autobuild@v3
       - uses: github/codeql-action/analyze@v3
+
+      - name: No sensitive data in commit messages
+        if: github.event_name == 'pull_request'
+        run: |
+          COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits --jq '.commits[].messageHeadline + " " + .commits[].messageBody' 2>/dev/null || git log --format='%B' origin/main..HEAD)
+          FOUND=$(echo "$COMMITS" | grep -iE '[0-9]{12}\.dkr\.ecr|AKIA[A-Z0-9]{16}|[a-z0-9]{10,}\.cloudfront\.net|arn:aws:' || true)
+          if [ -n "$FOUND" ]; then
+            echo "::error::Commit messages contain sensitive data:"
+            echo "$FOUND"
+            exit 1
+          fi
+          echo "Clean"
