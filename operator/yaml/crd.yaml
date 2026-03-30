@@ -55,6 +55,56 @@ spec:
                 default: true
                 description: Whether the tenant is active. False suspends the tenant.
                 type: boolean
+              env:
+                additionalProperties:
+                  type: string
+                description: Extra environment variables injected into the main container
+                nullable: true
+                type: object
+              image:
+                description: Container image override (defaults to Operator env OPENCLAW_IMAGE)
+                nullable: true
+                properties:
+                  pullPolicy:
+                    default: IfNotPresent
+                    description: 'Pull policy (default: IfNotPresent)'
+                    type: string
+                  repository:
+                    description: Image repository (defaults to Operator OPENCLAW_IMAGE env)
+                    nullable: true
+                    type: string
+                  tag:
+                    description: Image tag override
+                    nullable: true
+                    type: string
+                type: object
+              resources:
+                description: Pod resource requests and limits
+                nullable: true
+                properties:
+                  limits:
+                    description: CPU and memory specification
+                    nullable: true
+                    properties:
+                      cpu:
+                        nullable: true
+                        type: string
+                      memory:
+                        nullable: true
+                        type: string
+                    type: object
+                  requests:
+                    description: CPU and memory specification
+                    nullable: true
+                    properties:
+                      cpu:
+                        nullable: true
+                        type: string
+                      memory:
+                        nullable: true
+                        type: string
+                    type: object
+                type: object
               skills:
                 default: []
                 description: List of enabled skill names
