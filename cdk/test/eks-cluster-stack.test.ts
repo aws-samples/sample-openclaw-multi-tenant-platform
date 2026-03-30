@@ -17,7 +17,7 @@ test('Stack creates expected resources', () => {
       githubOwner: 'test',
       githubRepo: 'test',
       ssoRoleArn: 'arn:aws:iam::123456789012:role/test',
-      openclawImage: 'ghcr.io/openclaw/openclaw:latest',
+      openclawImage: '123456789012.dkr.ecr.us-west-2.amazonaws.com/ghcr/openclaw/openclaw:latest',
     }
   });
   // Just verify it synthesizes without error

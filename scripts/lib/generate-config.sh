@@ -72,8 +72,8 @@ generate_config() {
   github_owner="${github_owner:-your-org}"
   read -rp "  GitHub repo [openclaw-platform]: " github_repo
   github_repo="${github_repo:-openclaw-platform}"
-  read -rp "  OpenClaw image [ghcr.io/openclaw/openclaw:latest]: " openclaw_image
-  openclaw_image="${openclaw_image:-ghcr.io/openclaw/openclaw:latest}"
+  read -rp "  OpenClaw image [ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw:latest]: " openclaw_image
+  openclaw_image="${openclaw_image:-ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw:latest}"
 
   # Write values using node via env vars (avoids shell injection)
   DOMAIN="$domain" \

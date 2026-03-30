@@ -42,11 +42,15 @@ spec:
           containers:
             - name: updater
               image: bitnami/kubectl:latest
+              env:
+                # Set by setup-image-update.sh or manually before applying
+                - name: ECR_REPO
+                  value: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw"
               command: ["sh", "-c"]
               args:
                 - |
                   set -e
-                  REPO="ghcr.io/openclaw/openclaw"
+                  REPO="${ECR_REPO}"
                   
                   # Get current image from any openclaw deployment
                   CURRENT=$(kubectl get deploy -A -l app.kubernetes.io/name=openclaw-helm \

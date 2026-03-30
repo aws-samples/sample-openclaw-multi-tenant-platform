@@ -112,6 +112,6 @@
     "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role",
     "sesFromEmail": "noreply@your-domain.com",
     "albClientId": "YOUR_ALB_CLIENT_ID",
-    "openclawImage": "ghcr.io/openclaw/openclaw:latest"
+    "openclawImage": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw:latest"
   }
 }
