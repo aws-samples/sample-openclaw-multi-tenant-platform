@@ -72,7 +72,11 @@ config:
     mode: local
     bind: lan
     auth:
-      mode: token
+      mode: trusted-proxy
+      trustedProxy:
+        userHeader: x-amzn-oidc-identity
+    trustedProxies:
+      - "10.0.0.0/16"
     controlUi:
       allowedOrigins: []
   
@@ -180,7 +184,7 @@ skills:
 
 gateway:
   token:
-    generate: true
+    generate: false
     secretName: ""
 
 env: {}
@@ -207,6 +211,7 @@ gateway:
   gatewayNamespace: openclaw-system
   domain: ""
   cognito:
+    enabled: false
     userPoolArn: ""
     clientId: ""
     domain: ""

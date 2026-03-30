@@ -1,0 +1,19 @@
+{{- if and .Values.gateway.enabled .Values.gateway.cognito.enabled }}
+apiVersion: gateway.k8s.aws/v1beta1
+kind: ListenerRuleConfiguration
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}-cognito
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+spec:
+  actions:
+    - type: authenticate-cognito
+      authenticateCognitoConfig:
+        userPoolArn: {{ .Values.gateway.cognito.userPoolArn | quote }}
+        userPoolClientId: {{ .Values.gateway.cognito.clientId | quote }}
+        userPoolDomain: {{ .Values.gateway.cognito.domain | quote }}
+        onUnauthenticatedRequest: authenticate
+        scope: "openid email profile"
+        sessionTimeout: 604800
+{{- end }}
