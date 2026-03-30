@@ -650,14 +650,14 @@ export class EksClusterStack extends cdk.Stack {
     });
 
 
-    // ── Route53 + WAF + VPC Origin ──────────────────────────────────────────
+    // ── Route53 + WAF + ALB Origin ──────────────────────────────────────────
     // These resources depend on the Kubernetes-managed ALB (dynamic).
     // Managed by scripts/post-deploy.sh after first tenant creation:
     //   - Route53 root domain → CloudFront #1 (auth UI)
     //   - Route53 wildcard → CloudFront #2 (tenant traffic)
     //   - WAF → ALB association
-    //   - VPC Origin → internal ALB
-    //   - CloudFront #2 distribution (*.domain → VPC Origin)
+    //   - Internet-facing ALB (CF-only SG + WAF)
+    //   - CloudFront #2 distribution (*.domain → ALB)
 
 
 
