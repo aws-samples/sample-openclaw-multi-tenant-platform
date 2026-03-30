@@ -1,5 +1,7 @@
 image:
-  repository: ghcr.io/openclaw/openclaw
+  # ECR pull-through cache — auto-mirrors from ghcr.io/openclaw/openclaw
+  # Replace ACCOUNT_ID and REGION with your values (from CDK output OpenClawImageUri)
+  repository: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw
   tag: "2026.3.24"
   pullPolicy: IfNotPresent
 

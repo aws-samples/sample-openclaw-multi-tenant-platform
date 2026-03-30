@@ -13,6 +13,7 @@ import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
@@ -437,6 +438,14 @@ export class EksClusterStack extends cdk.Stack {
     });
     podRestartAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
 
+    // ── ECR: Pull-Through Cache for GHCR ──────────────────────────────────
+    new ecr.CfnPullThroughCacheRule(this, 'GhcrCache', {
+      ecrRepositoryPrefix: 'ghcr',
+      upstreamRegistryUrl: 'ghcr.io',
+    });
+
+    const openclawImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/ghcr/openclaw/openclaw`;
+
     // ── S3: Error Pages Bucket ──────────────────────────────────────────────
     const errorPagesBucket = new s3.Bucket(this, 'ErrorPagesBucket', {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
@@ -465,7 +474,7 @@ export class EksClusterStack extends cdk.Stack {
         CERTIFICATE_ARN: certificate.certificateArn,
         DOMAIN: domainName,
         CODEBUILD_PROJECT: 'openclaw-tenant-builder',
-        OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
+        OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || `${openclawImageUri}:latest`,
         TENANT_ROLE_ARN: tenantRole.roleArn,
         USER_POOL_ID: cognitoPoolId,
       },
@@ -736,6 +745,6 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
     new cdk.CfnOutput(this, 'WafAclArn', { value: wafAcl.attrArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
-
+    new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImageUri });
   }
 }
