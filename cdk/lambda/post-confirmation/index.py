@@ -122,7 +122,7 @@ def handler(event, context):
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
-            serviceAccount=tenant, roleArn=TENANT_ROLE_ARN,
+            serviceAccount=f'{tenant}-openclaw-helm', roleArn=TENANT_ROLE_ARN,
         )
     except ClientError as e:
         if 'already exists' not in str(e).lower():
