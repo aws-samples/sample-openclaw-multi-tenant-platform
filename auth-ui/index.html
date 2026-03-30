@@ -194,7 +194,7 @@ async function handleSubmit(e){
 
 async function handleVerify(e){
   e.preventDefault();const btn=document.getElementById('verify-btn');setLoading(btn,true);
-  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${C.domain}/t/${t}`;pollWorkspace(url,true,gw)}
+  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');let gw='';for(let i=0;i<5;i++){await new Promise(r=>setTimeout(r,2000));const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});gw=getGatewayToken(auth.AuthenticationResult.IdToken);if(gw)break;}localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${C.domain}/t/${t}`;pollWorkspace(url,true,gw)}
   catch(err){showMsg('verify-msg',err.message,'error')}
   setLoading(btn,false)
 }

@@ -23,7 +23,6 @@ def handler(event, context):
         if not resp.get('success'):
             raise Exception('CAPTCHA verification failed.')
 
-    event['response']['autoConfirmUser'] = True
-    event['response']['autoVerifyEmail'] = True
+    # Email verification required — Cognito sends verification code
 
     return event
