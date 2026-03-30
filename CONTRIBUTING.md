@@ -82,7 +82,8 @@ grep -rn 'AKIA\|amazonaws\.com\|[0-9]\{12\}' \
 ### 3. Deploy to your environment
 
 ```bash
-bash scripts/deploy.sh
+./setup.sh
+# Or step-by-step: see README.md Getting Started
 ```
 
 ### 4. Test
@@ -113,12 +114,8 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 | `githubRepo` | GitHub repo name for ArgoCD |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
 | `openclawImage` | Container image (e.g., `ghcr.io/openclaw/openclaw:2026.3.24`) |
-| `selfSignupEnabled` | Allow self-registration (default: `true`) |
-| `defaultTenantBudgetUsd` | Monthly Bedrock budget per tenant (default: `100`) |
-| `defaultTenantSkills` | Default skills for new tenants (default: `weather,gog`) |
 | `sesFromEmail` | SES sender email for welcome emails |
 | `albClientId` | Cognito App Client ID for ALB auth |
-| `allowedPublicCidrs` | CIDR ranges for EKS API endpoint access (placeholder, not yet wired) |
 
 ## Coding Standards
 

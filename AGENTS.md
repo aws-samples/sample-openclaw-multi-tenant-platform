@@ -53,6 +53,9 @@ cdk/lambda/pre-signup/index.py  ← Email domain gate
 cdk/lambda/post-confirmation/index.py  ← Tenant provisioning (creates Tenant CR)
 operator/src/controller.rs  ← Reconciles Tenant CR → NS, PVC, SA, ArgoCD App, KEDA HSO
 operator/yaml/deployment.yaml  ← Operator deployment + RBAC (includes ArgoCD permissions)
+setup.sh  ← One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
+scripts/lib/preflight.sh  ← Pre-flight checks (tools, AWS, cdk.json)
+scripts/lib/generate-config.sh  ← Interactive cdk.json generator
 scripts/deploy-auth-ui.sh  ← Uploads auth-ui/ to S3, uses sed to inject config
 helm/tenants/values-template.yaml  ← Tenant Helm values with {{PLACEHOLDERS}}
 auth-ui/index.html  ← SPA, config injected by deploy-auth-ui.sh via sed

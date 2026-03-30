@@ -453,8 +453,8 @@ export class EksClusterStack extends cdk.Stack {
     alertsTopic.grantPublish(preSignupFn);
 
     // ── Lambda: Post-Confirmation ───────────────────────────────────────────
-    const k8sLayer = lambda.LayerVersion.fromLayerVersionArn(this, 'K8sLayer',
-      `arn:aws:lambda:${this.region}:${this.account}:layer:openclaw-k8s-client:1`);
+    // Layer removed (#41): Lambda only uses boto3 + stdlib for K8s API calls.
+    // requirements.txt exists for local testing; CDK bundles via fromAsset.
     const postConfirmFn = new lambda.Function(this, 'PostConfirmFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
