@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import secrets
 import urllib.request
 import boto3
 from botocore.exceptions import ClientError
@@ -8,12 +9,15 @@ from botocore.exceptions import ClientError
 eks_client = boto3.client('eks')
 sns = boto3.client('sns')
 sts = boto3.client('sts')
+sm = boto3.client('secretsmanager')
+cognito = boto3.client('cognito-idp')
 
 TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
 CLUSTER_NAME = os.environ['CLUSTER_NAME']
 TENANT_ROLE_ARN = os.environ['TENANT_ROLE_ARN']
 DOMAIN = os.environ.get('DOMAIN', 'example.com')
 REGION = os.environ.get('AWS_REGION', 'us-west-2')
+USER_POOL_ID = os.environ['USER_POOL_ID']
 
 
 def get_eks_token():
@@ -105,10 +109,30 @@ def handler(event, context):
     if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
         raise Exception(f'Invalid tenant name: {tenant}')
 
-    # 3. Create Tenant CR → Operator handles the rest
+    # 3. Gateway token → SM + Cognito attribute
+    username = event['userName']
+    token = secrets.token_urlsafe(32)
+    secret_name = f'openclaw/{tenant}/gateway-token'
+    try:
+        sm.create_secret(Name=secret_name, SecretString=token,
+                         Tags=[{'Key': 'tenant', 'Value': tenant}])
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        if code == 'InvalidRequestException':
+            sm.restore_secret(SecretId=secret_name)
+            sm.update_secret(SecretId=secret_name, SecretString=token)
+        elif code == 'ResourceExistsException':
+            sm.update_secret(SecretId=secret_name, SecretString=token)
+        else:
+            raise
+    cognito.admin_update_user_attributes(
+        UserPoolId=USER_POOL_ID, Username=username,
+        UserAttributes=[{'Name': 'custom:gateway_token', 'Value': token}])
+
+    # 4. Create Tenant CR → Operator handles the rest
     create_tenant_cr(tenant, email)
 
-    # 4. Notify admin
+    # 5. Notify admin
     sns.publish(
         TopicArn=TOPIC_ARN, Subject='New Tenant Created',
         Message=f'Tenant: {tenant} ({email})\nURL: https://{DOMAIN}/t/{tenant}',

@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
@@ -468,6 +467,7 @@ export class EksClusterStack extends cdk.Stack {
         CODEBUILD_PROJECT: 'openclaw-tenant-builder',
         OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || 'ghcr.io/openclaw/openclaw:latest',
         TENANT_ROLE_ARN: tenantRole.roleArn,
+        USER_POOL_ID: cognitoPoolId,
       },
       timeout: cdk.Duration.seconds(60),
     });
@@ -475,6 +475,10 @@ export class EksClusterStack extends cdk.Stack {
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource', 'secretsmanager:GetSecretValue', 'secretsmanager:RestoreSecret', 'secretsmanager:UpdateSecret'],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:openclaw/*`],
+    }));
+    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:AdminUpdateUserAttributes'],
+      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
@@ -733,18 +737,5 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'WafAclArn', { value: wafAcl.attrArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
 
-    // ── Lambda@Edge: JWT Auth for /t/* paths ──────────────────────────────
-    // Deployed as regular Lambda, version ARN used by CloudFront via API.
-    // Lambda@Edge must be in us-east-1 — deploy separately if stack is in another region.
-    const edgeAuthFn = new lambda.Function(this, 'EdgeAuthFn', {
-      runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromAsset(path.join(__dirname, '../lambda/edge-auth')),
-      description: 'JWT auth for OpenClaw tenant paths - Lambda@Edge',
-      timeout: cdk.Duration.seconds(5),
-      memorySize: 128,
-    });
-    const edgeAuthVersion = edgeAuthFn.currentVersion;
-    new cdk.CfnOutput(this, 'EdgeAuthVersionArn', { value: edgeAuthVersion.functionArn });
   }
 }
