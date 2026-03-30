@@ -192,7 +192,7 @@ async fn reconcile(tenant: Arc<Tenant>, ctx: Arc<Context>) -> Result<Action> {
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-/// Apply desired state: ensure namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
+/// Apply desired state: ensure namespace, PVC, ServiceAccount, K8s resources, KEDA HSO
 async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Result<Action> {
     let client = ctx.client.clone();
     let name = tenant.name_any();
@@ -737,7 +737,7 @@ process.stdout.write(JSON.stringify(result));
             "minAvailable": 1,
             "selector": {
                 "matchLabels": {
-                    "app.kubernetes.io/name": "openclaw-platform",
+                    "app.kubernetes.io/name": &name,
                     "app.kubernetes.io/instance": &name
                 }
             }
@@ -749,12 +749,10 @@ process.stdout.write(JSON.stringify(result));
         .map_err(Error::KubeError)?;
     info!("Ensured PDB {name} in {tenant_ns}");
 
-    // 10. ArgoCD Application — delegates Helm chart deployment to ArgoCD
+    // 10. Read Cognito env vars for HTTPRoute / ListenerRuleConfiguration
     let cognito_pool_arn = require_env("COGNITO_POOL_ARN")?;
     let cognito_client_id = require_env("COGNITO_CLIENT_ID")?;
     let cognito_domain = require_env("COGNITO_DOMAIN")?;
-    let chart_repo = require_env("CHART_REPO")?;
-    let chart_version = std::env::var("CHART_VERSION").unwrap_or_else(|_| "1.3.14".into());
 
     // 11. HTTPRoute — route traffic to tenant service via Gateway API
     let httproute_ar = ApiResource::from_gvk_with_plural(
@@ -916,86 +914,6 @@ process.stdout.write(JSON.stringify(result));
         }
     };
 
-    let helm_values = serde_yaml::to_string(&json!({
-        "tenant": {
-            "name": &name,
-            "email": &tenant.spec.email,
-            "skills": &tenant.spec.skills,
-            "budget": tenant.spec.budget.as_ref().map(|b| b.monthly_usd).unwrap_or(100),
-            "enabled": tenant.spec.enabled,
-        },
-        "gateway": {
-            "enabled": true,
-            "gatewayName": "openclaw-gateway",
-            "gatewayNamespace": "openclaw-system",
-            "domain": &gateway_domain,
-            "cognito": {
-                "enabled": true,
-                "userPoolArn": &cognito_pool_arn,
-                "clientId": &cognito_client_id,
-                "domain": &cognito_domain,
-            }
-        }
-    }))
-    .map_err(|e| Error::HelmError(e.to_string()))?;
-
-    let app_ar = ApiResource::from_gvk_with_plural(
-        &kube::api::GroupVersionKind::gvk("argoproj.io", "v1alpha1", "Application"),
-        "applications",
-    );
-    let app_api: Api<DynamicObject> = Api::namespaced_with(client.clone(), "argocd", &app_ar);
-    let app_patch: serde_json::Value = json!({
-        "apiVersion": "argoproj.io/v1alpha1",
-        "kind": "Application",
-        "metadata": {
-            "name": format!("tenant-{name}"),
-            "namespace": "argocd",
-            "labels": {
-                "openclaw.io/tenant": &name,
-                "app.kubernetes.io/managed-by": "tenant-operator"
-            }
-        },
-        "spec": {
-            "project": "default",
-            "source": {
-                "repoURL": &chart_repo,
-                "path": "helm/charts/openclaw-platform",
-                "targetRevision": &chart_version,
-                "helm": {
-                    "values": &helm_values
-                }
-            },
-            "destination": {
-                "name": "in-cluster",
-                "namespace": tenant_ns
-            },
-            "syncPolicy": {
-                "automated": {
-                    "prune": true,
-                    "selfHeal": true
-                },
-                "syncOptions": ["CreateNamespace=false"]
-            }
-        }
-    });
-    let argocd_condition = match app_api
-        .patch(
-            &format!("tenant-{name}"),
-            &ssapply,
-            &Patch::Apply(app_patch),
-        )
-        .await
-    {
-        Ok(_) => {
-            info!("Ensured ArgoCD Application tenant-{name}");
-            json!({ "type": "ArgoAppReady", "status": "True" })
-        }
-        Err(e) => {
-            warn!("ArgoCD Application tenant-{name} failed: {e}");
-            json!({ "type": "ArgoAppReady", "status": "False", "message": e.to_string() })
-        }
-    };
-
     // 9. Ensure KEDA HTTPScaledObject (scale-to-zero after 15m idle, max 1 replica)
     let hso_ar = ApiResource::from_gvk_with_plural(
         &kube::api::GroupVersionKind::gvk("http.keda.sh", "v1alpha1", "HTTPScaledObject"),
@@ -1051,7 +969,6 @@ process.stdout.write(JSON.stringify(result));
             "conditions": [
                 { "type": "NamespaceReady", "status": "True" },
                 { "type": "PVCBound", "status": "Unknown", "message": "Pending verification" },
-                argocd_condition,
                 keda_condition,
                 httproute_condition,
                 lrc_condition,
@@ -1091,26 +1008,6 @@ async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Res
     let oref = tenant.object_ref(&());
 
     info!("Cleaning up Tenant \"{name}\"");
-
-    // Delete ArgoCD Application first (stops sync before namespace deletion)
-    let app_ar = ApiResource::from_gvk_with_plural(
-        &kube::api::GroupVersionKind::gvk("argoproj.io", "v1alpha1", "Application"),
-        "applications",
-    );
-    let app_api: Api<DynamicObject> = Api::namespaced_with(client.clone(), "argocd", &app_ar);
-    let app_name = format!("tenant-{name}");
-    if app_api
-        .get_opt(&app_name)
-        .await
-        .map_err(Error::KubeError)?
-        .is_some()
-    {
-        app_api
-            .delete(&app_name, &Default::default())
-            .await
-            .map_err(Error::KubeError)?;
-        info!("Deleted ArgoCD Application {app_name}");
-    }
 
     // Delete namespace (cascades all resources inside)
     // PVC retention is handled by StorageClass reclaimPolicy

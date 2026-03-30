@@ -1,6 +1,0 @@
-# This file has been removed.
-# The Tenant Operator now creates ArgoCD Application CRs directly,
-# replacing the ApplicationSet git-file generator approach.
-# See operator/src/controller.rs for the new flow.
-#
-# To fully remove this directory, delete this placeholder after merge.
