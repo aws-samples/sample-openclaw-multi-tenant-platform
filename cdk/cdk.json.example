@@ -115,6 +115,7 @@
     "defaultTenantSkills": "weather,gog",
     "sesFromEmail": "noreply@your-domain.com",
     "albClientId": "YOUR_ALB_CLIENT_ID",
-    "openclawImage": "ghcr.io/openclaw/openclaw:latest"
+    "openclawImage": "ghcr.io/openclaw/openclaw:latest",
+    "allowedPublicCidrs": ["0.0.0.0/0"]
   }
 }

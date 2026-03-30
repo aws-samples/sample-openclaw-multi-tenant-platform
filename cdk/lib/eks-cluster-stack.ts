@@ -33,6 +33,13 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── EKS Cluster ─────────────────────────────────────────────────────────
+    // VPC Flow Logs — network forensics for all traffic
+    new ec2.FlowLog(this, 'VpcFlowLog', {
+      resourceType: ec2.FlowLogResourceType.fromVpc(vpc),
+      destination: ec2.FlowLogDestination.toCloudWatchLogs(),
+      trafficType: ec2.FlowLogTrafficType.ALL,
+    });
+
     const cluster = new eks.Cluster(this, 'Cluster', {
       vpc,
       version: eks.KubernetesVersion.V1_35,
@@ -40,6 +47,13 @@ export class EksClusterStack extends cdk.Stack {
       clusterName: 'openclaw-cluster',
       authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
       kubectlLayer: new KubectlV35Layer(this, 'KubectlLayer'),
+      clusterLogging: [
+        eks.ClusterLoggingTypes.API,
+        eks.ClusterLoggingTypes.AUDIT,
+        eks.ClusterLoggingTypes.AUTHENTICATOR,
+        eks.ClusterLoggingTypes.CONTROLLER_MANAGER,
+        eks.ClusterLoggingTypes.SCHEDULER,
+      ],
     });
 
     // ── Cluster Access: allow deployer's SSO role to use kubectl ─────────
@@ -139,9 +153,6 @@ export class EksClusterStack extends cdk.Stack {
       name: 'aws-load-balancer-controller',
       namespace: 'kube-system',
     });
-    lbcSa.role.addManagedPolicy(
-      iam.ManagedPolicy.fromAwsManagedPolicyName('ElasticLoadBalancingFullAccess'),
-    );
     lbcSa.role.addToPrincipalPolicy(new iam.PolicyStatement({
       actions: [
         // EC2 — read-only discovery
@@ -612,7 +623,10 @@ export class EksClusterStack extends cdk.Stack {
           // NOTE: If your cert is NOT in us-east-1, you must create one there.
           this.node.tryGetContext('cloudfrontCertificateArn') || certificate.certificateArn,
         ),
-        { aliases: [domainName] },
+        {
+          aliases: [domainName],
+          securityPolicy: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+        },
       ),
       originConfigs: [
         {
