@@ -55,6 +55,15 @@ pub struct TenantSpec {
     /// Whether the tenant is active. False suspends the tenant.
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Container image override (defaults to Operator env OPENCLAW_IMAGE)
+    #[serde(default)]
+    pub image: Option<TenantImage>,
+    /// Pod resource requests and limits
+    #[serde(default)]
+    pub resources: Option<TenantResources>,
+    /// Extra environment variables injected into the main container
+    #[serde(default)]
+    pub env: Option<BTreeMap<String, String>>,
 }
 
 fn default_enabled() -> bool {
@@ -70,6 +79,42 @@ pub struct TenantBudget {
 
 fn default_budget() -> i64 {
     100
+}
+
+/// Container image configuration for the tenant
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct TenantImage {
+    /// Image repository (defaults to Operator OPENCLAW_IMAGE env)
+    #[serde(default)]
+    pub repository: Option<String>,
+    /// Image tag override
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Pull policy (default: IfNotPresent)
+    #[serde(rename = "pullPolicy", default = "default_pull_policy")]
+    pub pull_policy: String,
+}
+
+fn default_pull_policy() -> String {
+    "IfNotPresent".to_string()
+}
+
+/// Resource requests and limits for the tenant pod
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct TenantResources {
+    #[serde(default)]
+    pub requests: Option<ResourceSpec>,
+    #[serde(default)]
+    pub limits: Option<ResourceSpec>,
+}
+
+/// CPU and memory specification
+#[derive(Deserialize, Serialize, Clone, Debug, Default, JsonSchema)]
+pub struct ResourceSpec {
+    #[serde(default)]
+    pub cpu: Option<String>,
+    #[serde(default)]
+    pub memory: Option<String>,
 }
 
 /// Status subresource for Tenant
