@@ -90,7 +90,7 @@ phase2_verify() {
 
 phase3_run() {
   bash scripts/setup-keda.sh
-  bash scripts/setup-cognito.sh
+  # Cognito triggers are now managed by CDK Custom Resource — no manual setup needed
 }
 phase3_verify() {
   kubectl get pods -n keda --no-headers 2>/dev/null | grep -q Running
