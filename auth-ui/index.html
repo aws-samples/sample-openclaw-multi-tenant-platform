@@ -149,7 +149,7 @@ document.getElementById('password').addEventListener('input',updateStrength);
 
 function showSection(id){document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active')}
 
-function pollWorkspace(url,isNewSignup){
+function pollWorkspace(url,isNewSignup,gwToken){
   const title=document.getElementById('loading-title');
   const msg=document.getElementById('loading-msg');
   const progress=document.getElementById('loading-progress');
@@ -166,7 +166,7 @@ function pollWorkspace(url,isNewSignup){
   const poll=async()=>{
     i++;
     if(isNewSignup){const p=Math.min(5+i*1.5,95);bar.style.width=p+'%';ptext.textContent=i<8?'Setting up account...':i<18?'Configuring AI assistant...':i<30?'Deploying workspace...':'Almost ready...';}
-    try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status===401){document.cookie='claw_id_token=; Path=/; Max-Age=0';window.location.href='/';return;}if(r.status!==404&&r.status!==502&&r.status!==503){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';setTimeout(()=>{window.location.href=url},800);return;}}catch(e){}
+    try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status===401){window.location.href='/';return;}if(r.status!==404&&r.status!==502&&r.status!==503){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';const dest=gwToken?url+(url.includes('#')?'':'#token=')+gwToken:url;setTimeout(()=>{window.location.href=dest},800);return;}}catch(e){}
     if(i>=max){title.textContent='Still setting up...';msg.textContent='Taking longer than expected. Try refreshing in a minute.';fallback.style.display='block';return;}
     setTimeout(poll,3000);
   };
@@ -177,7 +177,8 @@ function showMsg(id,t,c){const e=document.getElementById(id);e.textContent=t;e.c
 function hideMsg(id){document.getElementById(id).className='msg'}
 function setLoading(btn,v){btn.disabled=v;btn.classList.toggle('loading',v)}
 
-function setCookie(token){document.cookie='claw_id_token='+token+'; Secure; SameSite=Lax; Path=/; Max-Age=3600'}
+function decodeJwt(token){return JSON.parse(atob(token.split('.')[1]))}
+function getGatewayToken(idToken){return decodeJwt(idToken)['custom:gateway_token']||''}
 
 async function api(action,params){const r=await fetch(`https://cognito-idp.${C.region}.amazonaws.com/`,{method:'POST',headers:{'Content-Type':'application/x-amz-json-1.1','X-Amz-Target':`AWSCognitoIdentityProviderService.${action}`},body:JSON.stringify(params)});const d=await r.json();if(!r.ok)throw new Error(d.message||d.__type||'Request failed');return d}
 
@@ -185,15 +186,15 @@ async function handleSubmit(e){
   e.preventDefault();const email=document.getElementById('email').value,pw=document.getElementById('password').value,btn=document.getElementById('submit-btn');
   setLoading(btn,true);
   try{
-    if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}const signUpResp=await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});if(signUpResp.UserConfirmed){const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});setCookie(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);pollWorkspace(`https://${C.domain}/t/${t}/`,true)}else{pendingEmail=email;pendingPw=pw;showSection('verify-section')}}
-    else{const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});setCookie(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${C.domain}/t/${t}/`}
+    if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}const signUpResp=await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});if(signUpResp.UserConfirmed){const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);pollWorkspace(`https://${C.domain}/t/${t}/`,true,gw)}else{pendingEmail=email;pendingPw=pw;showSection('verify-section')}}
+    else{const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.href=`https://${C.domain}/t/${t}/#token=`+gw}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)
 }
 
 async function handleVerify(e){
   e.preventDefault();const btn=document.getElementById('verify-btn');setLoading(btn,true);
-  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});setCookie(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${C.domain}/t/${t}`;pollWorkspace(url,true)}
+  try{await api('ConfirmSignUp',{ClientId:C.clientId,Username:pendingEmail,ConfirmationCode:document.getElementById('code').value});showMsg('verify-msg','Email verified! Setting up your workspace...','success');const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:pendingEmail,PASSWORD:pendingPw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',pendingEmail);const t=pendingEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);const url=`https://${C.domain}/t/${t}`;pollWorkspace(url,true,gw)}
   catch(err){showMsg('verify-msg',err.message,'error')}
   setLoading(btn,false)
 }

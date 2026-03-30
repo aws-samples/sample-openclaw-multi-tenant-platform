@@ -72,11 +72,7 @@ config:
     mode: local
     bind: lan
     auth:
-      mode: trusted-proxy
-      trustedProxy:
-        userHeader: x-amzn-oidc-identity
-    trustedProxies:
-      - "10.0.0.0/16"
+      mode: token
     controlUi:
       allowedOrigins: []
   
