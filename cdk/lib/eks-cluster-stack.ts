@@ -16,6 +16,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { Construct } from 'constructs';
@@ -726,6 +727,19 @@ export class EksClusterStack extends cdk.Stack {
       ],
     });
 
+    // ── Auth UI: Deploy static files + generate config.js ───────────────────
+    const turnstileSiteKey = this.node.tryGetContext('turnstileSiteKey') || '';
+    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${domainName}',turnstileSiteKey:'${turnstileSiteKey}'};`;
+
+    new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
+      sources: [
+        s3deploy.Source.asset('../auth-ui'),
+        s3deploy.Source.data('config.js', configJs),
+      ],
+      destinationBucket: authUiBucket,
+      distribution,
+      distributionPaths: ['/*'],
+    });
 
     // ── Route53 + WAF + ALB Origin ──────────────────────────────────────────
     // These resources depend on the Kubernetes-managed ALB (dynamic).
