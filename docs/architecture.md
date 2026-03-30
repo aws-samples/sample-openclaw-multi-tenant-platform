@@ -15,8 +15,8 @@
 User ──► Browser ──► CloudFront #1 ──► S3 (custom auth UI)                           │
                      (your-domain.com)  (login/signup, Cognito SDK)                   │
                           │                                                          │
-                     CloudFront #2 ──► VPC Origin ──► Internal ALB ──► EKS Pod       │
-                     (claw.your-domain.com)            (WAF attached)                │
+                     CloudFront #2 ──► Internet-facing ALB ──► EKS Pod              │
+                     (claw.your-domain.com)  (WAF + CF-only SG)                      │
                           │                                │                         │
                           │                    ┌───────────┼─────────────────┐       │
                           │    │    ▼           ▼                 ▼                  │
@@ -85,7 +85,7 @@ graph TB
 
         NAT1[NAT Gateway<br/>AZ-a]
         NAT2[NAT Gateway<br/>AZ-b]
-        ALB[Internal ALB<br/>Gateway API<br/>path-based routing]
+        ALB[Internet-facing ALB<br/>Gateway API<br/>path-based routing<br/>CF-only SG + WAF]
 
         subgraph EKS["EKS Cluster (openclaw-cluster)"]
             MNG[Managed Node Group<br/>t4g.medium Graviton]
@@ -274,14 +274,14 @@ sequenceDiagram
     actor User
     participant Browser
     participant CloudFront
-    participant ALB as Internal ALB
+    participant ALB as Internet-facing ALB
     participant Pod as EKS Pod<br/>(OpenClaw Gateway)
 
     User->>Browser: Navigate to claw.your-domain.com/t/alice/
     Browser->>CloudFront: GET /t/alice/
-    CloudFront->>ALB: Forward via VPC Origin
+    CloudFront->>ALB: Forward (X-Verify-Origin header + CF prefix list SG)
     ALB->>Pod: Route via Gateway API HTTPRoute
-    Pod->>Pod: local auth mode<br/>(security via CloudFront + internal ALB)
+    Pod->>Pod: local auth mode<br/>(security via CloudFront + WAF + CF-only SG)
     Pod-->>ALB: Response
     ALB-->>CloudFront: Response
     CloudFront-->>Browser: Response
@@ -408,8 +408,8 @@ Lambda source: `cdk/lambda/pre-signup/index.py`, `cdk/lambda/post-confirmation/i
 │              │ • NetworkPolicy: default-deny + allow ALB ingress only       │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
 │ Auth         │ • Cognito User Pool for signup identity management            │
-│              │ • OpenClaw gateway auth mode: local                          │
-│              │ • Security via CloudFront + internal ALB (not internet-facing)│
+│              │ • OpenClaw gateway auth mode: local (token auth)             │
+│              │ • 3-layer origin protection: CF prefix list SG + WAF + HTTPS │
 │              │ • Path-based routing via Gateway API HTTPRoute               │
 ├──────────────┼──────────────────────────────────────────────────────────────┤
 │ IAM          │ • Pod Identity (no static credentials)                       │
