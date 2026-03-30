@@ -135,12 +135,18 @@ npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 
 Creates: EKS cluster, VPC (2 NAT Gateways), IAM roles, Lambda functions, S3 buckets, CloudFront, WAF, CloudWatch, SNS. Takes ~15-20 minutes.
 
-### 3. Post-Deploy Setup
+### 3. Build and Deploy Operator
 
 ```bash
-# Configure kubectl
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
+bash scripts/build-operator.sh
+```
 
+Creates ECR repo, builds the Tenant Operator Docker image, pushes to ECR, and deploys to EKS with config from `cdk.json`.
+
+### 4. Post-Deploy Setup
+
+```bash
 # Core setup
 ./scripts/setup-keda.sh                    # Scale-to-zero
 ./scripts/setup-cognito.sh                 # Auth configuration
@@ -156,7 +162,7 @@ aws eks update-kubeconfig --region <region> --name openclaw-cluster
 ./scripts/setup-alerts.sh <email>          # SNS email alerts
 ```
 
-### 4. Create First Tenant
+### 5. Create First Tenant
 
 ```bash
 export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
@@ -166,7 +172,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ./scripts/create-tenant.sh alice --display-name "Alice" --emoji "🤖"
 ```
 
-### 5. Finalize
+### 6. Finalize
 
 ```bash
 ./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF→ALB
@@ -174,7 +180,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ./scripts/setup-argocd-apps.sh    # ArgoCD Applications + ApplicationSets
 ```
 
-### 6. Access
+### 7. Access
 
 | URL | Purpose |
 |-----|---------|
@@ -215,6 +221,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | Script | Purpose |
 |--------|---------|
 | `post-deploy.sh` | CloudFront #2 + Route53 + WAF |
+| `build-operator.sh` | Build, push, deploy Tenant Operator |
 | `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
 | `upload-helm-chart.sh` | Package and upload Helm chart to S3 (for manual tenant creation) |
 | `setup-cognito.sh` | Cognito config (auth flows, triggers) |
