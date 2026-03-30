@@ -115,7 +115,7 @@ Before declaring any change complete:
 - [ ] `python3 -c "compile(...)"` — Lambda syntax OK
 - [ ] `helm template test helm/charts/openclaw-platform` — Helm renders
 - [ ] `cd operator && cargo clippy -- -D warnings` — Operator compiles clean
-- [ ] No sensitive data: `grep -rn "387671391109\|snese\.net" --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches (excluding cdk.json)
+- [ ] No sensitive data: `grep -rn "123456789012\|snese\.net" --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches (excluding cdk.json)
 - [ ] No CJK: `grep -Prn '[\x{4e00}-\x{9fff}]' --include="*.ts" --include="*.py" --include="*.md" --include="*.sh"` = 0 matches
 - [ ] Cognito triggers attached: `aws cognito-idp describe-user-pool --query 'UserPool.LambdaConfig'`
 

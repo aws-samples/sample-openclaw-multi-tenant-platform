@@ -60,7 +60,7 @@ spec:
       serviceAccountName: tenant-operator
       containers:
         - name: tenant-operator
-          image: 387671391109.dkr.ecr.us-west-2.amazonaws.com/openclaw-tenant-operator:latest
+          image: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openclaw-tenant-operator:latest  # Replace with your ECR image
           ports:
             - containerPort: 8080
               name: http

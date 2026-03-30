@@ -42,7 +42,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
 ## Architecture
 
-Path-based routing via Gateway API: `claw.snese.net/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
+Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
 
 ```
 Internet
@@ -232,7 +232,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ### Architecture
 
-Path-based routing via Gateway API: `claw.snese.net/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
+Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
 - [System Architecture](docs/architecture.md)
 - [Security Deep Dive](docs/security.md)
 
