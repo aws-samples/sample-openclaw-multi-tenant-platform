@@ -128,7 +128,8 @@ async function checkHealth(){
 
 function logout(){sessionStorage.removeItem('adminToken');location.reload()}
 
-if(sessionStorage.getItem('adminToken'))showDash();
+const token=sessionStorage.getItem('adminToken');if(token){try{const t=JSON.parse(atob(token.split('.')[1]));if(t.exp&&t.exp*1000>Date.now()){showDash()}else{sessionStorage.removeItem('adminToken')}}catch(e){sessionStorage.removeItem('adminToken')}}
+if(!C.clientId||!C.userPoolId){document.getElementById('msg').textContent='Admin UI not configured. Run deploy-auth-ui.sh first.';document.getElementById('msg').className='msg error';document.getElementById('login-btn').disabled=true}
 </script>
 </body>
 </html>
