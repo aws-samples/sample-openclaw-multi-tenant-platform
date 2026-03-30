@@ -1,0 +1,3 @@
+# Post-confirmation Lambda dependencies
+# boto3 is provided by Lambda runtime, listed here for local testing
+boto3>=1.34.0

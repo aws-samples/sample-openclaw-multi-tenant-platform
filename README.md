@@ -71,17 +71,33 @@ EKS Cluster
 
 ## Getting Started
 
-### Prerequisites
+### Quick Start
+
+```bash
+git clone https://github.com/snese/sample-openclaw-multi-tenant-platform.git
+cd sample-openclaw-multi-tenant-platform
+./setup.sh
+```
+
+`setup.sh` checks prerequisites, prompts for configuration, and deploys everything.
+Takes ~20 minutes. See [setup.sh options](#setupsh-options) for `--phase` and `--check`.
+
+### Step-by-Step
+
+For full control over each deployment phase:
+
+#### Prerequisites
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`)
 - kubectl + Helm 3
 - Node.js 22+
+- Docker
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** — public client for SPA)
 - AWS Identity Center (for ArgoCD EKS Capability)
 
-### 1. Configure
+#### 1. Configure
 
 ```bash
 cp cdk/cdk.json.example cdk/cdk.json
@@ -104,13 +120,9 @@ cp cdk/cdk.json.example cdk/cdk.json
 | `githubOwner` | GitHub org/user for ArgoCD source |
 | `githubRepo` | Repository name (default: `openclaw-platform`) |
 | `ssoRoleArn` | IAM SSO role ARN for kubectl access |
-| `selfSignupEnabled` | Allow users to self-register (default: `true`) |
-| `defaultTenantBudgetUsd` | Monthly Bedrock budget per tenant in USD (default: `100`) |
-| `defaultTenantSkills` | Default skills for new tenants (default: `weather,gog`) |
 | `sesFromEmail` | SES sender email for welcome emails (default: `noreply@<domain>`) |
 | `albClientId` | Cognito App Client ID for ALB auth |
 | `openclawImage` | Container image (e.g., `ghcr.io/openclaw/openclaw:latest`) |
-| `allowedPublicCidrs` | CIDR ranges for EKS API endpoint access (placeholder) |
 
 </details>
 
@@ -170,11 +182,21 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | `https://alice.your-domain.com` | Tenant AI assistant |
 | `https://your-domain.com/admin.html` | Admin dashboard |
 
-## Quick Start (Minimal)
+## setup.sh Options
 
-1. **Configure**: `cp cdk/cdk.json.example cdk/cdk.json` — fill in your values
-2. **Deploy**: `bash scripts/deploy.sh`
-3. **Visit**: `https://your-domain.com`
+```bash
+./setup.sh              # Run all phases
+./setup.sh --phase 2    # Start from Phase 2
+./setup.sh --check      # Pre-flight checks only
+./setup.sh --help       # Usage
+```
+
+| Phase | What | Time | Verification |
+|-------|------|------|-------------|
+| 1 | Infrastructure (CDK) | ~15 min | CloudFormation stack complete |
+| 2 | Operator (build + deploy) | ~3 min | Operator pod Running |
+| 3 | Platform (KEDA + Cognito) | ~2 min | KEDA pods Running |
+| 4 | Auth UI | ~1 min | CloudFront returns 200 |
 
 ## Tenant Management
 

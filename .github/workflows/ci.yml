@@ -69,7 +69,7 @@ jobs:
     name: "Rust: K8s integration"
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    continue-on-error: true  # k3d v5.4.6 incompatible with newer k3s — tracked in issue
+    continue-on-error: false
     needs: rust-lint-test
     steps:
       - uses: actions/checkout@v4
@@ -83,10 +83,10 @@ jobs:
         run: cargo build --release --bin tenant-operator
 
       - name: Create k3d cluster
-        uses: AbsaOSS/k3d-action@v2
-        with:
-          cluster-name: test
-          args: --no-lb --k3s-arg "--disable=traefik@server:0" --image rancher/k3s:v1.32.4-k3s1
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+          k3d cluster create test --no-lb --k3s-arg "--disable=traefik@server:0" --image rancher/k3s:v1.32.4-k3s1
+          kubectl cluster-info
 
       - name: Install CRD and run operator
         run: |
