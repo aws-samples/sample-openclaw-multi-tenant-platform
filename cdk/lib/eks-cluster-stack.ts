@@ -152,6 +152,20 @@ export class EksClusterStack extends cdk.Stack {
       allowVolumeExpansion: true,
     });
 
+    // ── Pod Security Standards ─────────────────────────────────────────────
+    cluster.addManifest('PodSecurityStandards', {
+      apiVersion: 'v1',
+      kind: 'Namespace',
+      metadata: {
+        name: 'openclaw-system',
+        labels: {
+          'pod-security.kubernetes.io/enforce': 'restricted',
+          'pod-security.kubernetes.io/warn': 'restricted',
+          'pod-security.kubernetes.io/audit': 'restricted',
+        },
+      },
+    });
+
     // ── AWS Load Balancer Controller ────────────────────────────────────────
     const lbcSa = cluster.addServiceAccount('LbcSa', {
       name: 'aws-load-balancer-controller',
@@ -505,10 +519,14 @@ export class EksClusterStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/pre-signup'),
-      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains },
+      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains, USER_POOL_ID: cognitoPoolId },
       timeout: cdk.Duration.seconds(10),
     });
     alertsTopic.grantPublish(preSignupFn);
+    preSignupFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:ListUsers'],
+      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+    }));
 
     // ── Lambda: Post-Confirmation ───────────────────────────────────────────
     // Layer removed (#41): Lambda only uses boto3 + stdlib for K8s API calls.
