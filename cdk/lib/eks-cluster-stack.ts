@@ -184,7 +184,7 @@ export class EksClusterStack extends cdk.Stack {
         'elasticloadbalancing:DescribeListeners', 'elasticloadbalancing:DescribeListenerCertificates',
         'elasticloadbalancing:DescribeListenerAttributes', 'elasticloadbalancing:ModifyListener',
         'elasticloadbalancing:CreateRule', 'elasticloadbalancing:DeleteRule',
-        'elasticloadbalancing:DescribeRules', 'elasticloadbalancing:ModifyRule',
+        'elasticloadbalancing:DescribeRules', 'elasticloadbalancing:ModifyRule', 'elasticloadbalancing:SetRulePriorities',
         // ELB — misc
         'elasticloadbalancing:AddTags', 'elasticloadbalancing:RemoveTags',
         'elasticloadbalancing:SetSecurityGroups', 'elasticloadbalancing:SetSubnets',
