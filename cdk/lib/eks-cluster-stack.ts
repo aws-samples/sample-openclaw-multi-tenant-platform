@@ -14,6 +14,7 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
@@ -501,6 +502,67 @@ export class EksClusterStack extends cdk.Stack {
       actions: ['iam:PassRole', 'iam:GetRole'],
       resources: [tenantRole.roleArn],
     }));
+
+    // ── Cognito: Lambda Triggers (survives cdk deploy) ──────────────────────
+    // update-user-pool wipes LambdaConfig if not included. This Custom Resource
+    // ensures triggers are always re-attached after every deployment.
+    const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
+
+    // Lambda invoke permissions for Cognito (must exist before Custom Resource)
+    preSignupFn.addPermission('CognitoInvoke', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`,
+    });
+    postConfirmFn.addPermission('CognitoInvoke', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`,
+    });
+
+    new cr.AwsCustomResource(this, 'CognitoTriggers', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignupFn.functionArn,
+            PostConfirmation: postConfirmFn.functionArn,
+          },
+          AutoVerifiedAttributes: ['email'],
+          AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
+      },
+      onUpdate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignupFn.functionArn,
+            PostConfirmation: postConfirmFn.functionArn,
+          },
+          AutoVerifiedAttributes: ['email'],
+          AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
+      },
+      onDelete: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          LambdaConfig: {},
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:UpdateUserPool'],
+          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+        }),
+      ]),
+    });
 
     // ── CodeBuild: Tenant Builder ────────────────────────────────────────────
     const tenantBuilder = new codebuild.Project(this, 'TenantBuilder', {
