@@ -21,7 +21,8 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` — one domai
 
 ```
 Cognito SignUp → Lambda (post-confirmation) → Tenant CR
-  → Operator reconciles: Namespace, PVC, SA, Deployment, HTTPRoute, KEDA HSO, NetworkPolicy
+  → Operator reconciles: Namespace, PVC, SA, Deployment, Service, ConfigMap,
+    HTTPRoute, TargetGroupConfiguration, NetworkPolicy, ResourceQuota, PDB, KEDA HSO
   → Pod + HTTPRoute + NetworkPolicy + scale-to-zero ready
 ```
 
@@ -34,11 +35,12 @@ EKS Cluster (v1.35)
 │  KEDA HTTP Add-on
 │
 ├── namespace: openclaw-{tenant}
-│   ├── Deployment + PVC (persists across scale-to-zero)
-│   ├── HTTPRoute (Gateway API, path-based routing)
+│   ├── Deployment + Service + ConfigMap + PVC (persists across scale-to-zero)
+│   ├── HTTPRoute + TargetGroupConfiguration (Gateway API, path-based routing)
 │   ├── HTTPScaledObject (KEDA, 15min idle → 0)
 │   ├── NetworkPolicy (cross-tenant blocked)
-│   └── ResourceQuota
+│   ├── ResourceQuota + PodDisruptionBudget
+│   └── ServiceAccount (Pod Identity → shared TenantRole)
 │
 ├── namespace: openclaw-system
 │   └── Tenant Operator (Rust/kube-rs)
@@ -86,7 +88,8 @@ User Request:
 Tenant Provisioning:
   Cognito SignUp → Pre-signup Lambda (email gate)
   Cognito Confirm → Post-confirmation Lambda → Tenant CR
-  Operator → Namespace + PVC + SA + Pod Identity + Deployment + HTTPRoute + NetworkPolicy
+  Operator → Namespace + PVC + SA + Pod Identity + Deployment + Service + ConfigMap
+           + HTTPRoute + TGC + NetworkPolicy + ResourceQuota + PDB + KEDA HSO
 ```
 
 ## Deployment

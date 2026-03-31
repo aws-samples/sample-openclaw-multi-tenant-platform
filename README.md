@@ -282,7 +282,6 @@ Learn how each component works:
 |-------|-------------|
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
 | [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
-| [Migration](docs/operations/migration.md) | v1 → v2 upgrade |
 | [Webhook Setup](docs/operations/webhook.md) | Slack/Discord integration |
 
 ## Project Structure
