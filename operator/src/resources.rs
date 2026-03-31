@@ -406,6 +406,12 @@ pub async fn ensure_deployment(
                                 "requests": { "cpu": "100m", "memory": "128Mi" }
                             },
                             "command": ["node", "dist/index.js", "doctor", "--fix", "--non-interactive"],
+                            "envFrom": [{
+                                "secretRef": {
+                                    "name": format!("{name}-gateway-token"),
+                                    "optional": true
+                                }
+                            }],
                             "securityContext": {
                                 "readOnlyRootFilesystem": true,
                                 "allowPrivilegeEscalation": false,

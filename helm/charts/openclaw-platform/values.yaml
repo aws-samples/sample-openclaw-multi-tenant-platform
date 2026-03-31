@@ -36,12 +36,6 @@ ingress:
     alb.ingress.kubernetes.io/group.name: openclaw-shared
     alb.ingress.kubernetes.io/scheme: internal
     alb.ingress.kubernetes.io/target-type: ip
-  cognito:
-    enabled: false
-    userPoolArn: ""
-    clientId: ""
-    domain: ""
-    sessionTimeout: "604800"
 
 networkPolicy:
   enabled: true
@@ -209,8 +203,3 @@ gateway:
   gatewayName: openclaw-gateway
   gatewayNamespace: openclaw-system
   domain: ""
-  cognito:
-    enabled: false
-    userPoolArn: ""
-    clientId: ""
-    domain: ""

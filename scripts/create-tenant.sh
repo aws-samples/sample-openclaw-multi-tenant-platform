@@ -44,9 +44,6 @@ if [[ -z "$VALUES_FILE" ]]; then
   get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null; }
   DOMAIN=$(get_output DomainName)
   CERT_ARN=$(get_output CertificateArn)
-  COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:$(aws sts get-caller-identity --query Account --output text):userpool/$(get_output CognitoPoolId)"
-  COGNITO_CLIENT_ID=$(get_output CognitoClientId)
-  COGNITO_DOMAIN=$(get_output CognitoDomain)
 
   echo "  → Generating ${TENANT_VALUES} from template"
   SKILLS_YAML=""
@@ -60,9 +57,6 @@ if [[ -z "$VALUES_FILE" ]]; then
       -e "s/{{TENANT_EMOJI}}/${EMOJI}/g" \
       -e "s|{{DOMAIN}}|${DOMAIN}|g" \
       -e "s|{{CERTIFICATE_ARN}}|${CERT_ARN}|g" \
-      -e "s|{{COGNITO_POOL_ARN}}|${COGNITO_POOL_ARN}|g" \
-      -e "s|{{COGNITO_CLIENT_ID}}|${COGNITO_CLIENT_ID}|g" \
-      -e "s|{{COGNITO_DOMAIN}}|${COGNITO_DOMAIN}|g" \
       "${TEMPLATE}" > "${TENANT_VALUES}"
   # Replace multiline placeholder with actual YAML list
   SKILLS_ESCAPED=$(echo "${SKILLS_YAML}" | sed 's/[&/\]/\\&/g; $!s/$/\\/')
@@ -92,23 +86,13 @@ aws eks create-pod-identity-association \
   --role-arn "${ROLE_ARN}" \
   --output text --query 'association.associationId'
 
-# 4. Add Cognito callback URL for this tenant
-echo "  → Adding Cognito callback URL"
-POOL_ID=$(get_output CognitoPoolId)
-CLIENT_ID_COGNITO=$(get_output CognitoClientId)
-EXISTING_CALLBACKS=$(aws cognito-idp describe-user-pool-client --user-pool-id "$POOL_ID" --client-id "$CLIENT_ID_COGNITO" --region "$REGION" --query 'UserPoolClient.CallbackURLs' --output json)
-NEW_CALLBACK="https://${TENANT}.${DOMAIN}/oauth2/idpresponse"
-UPDATED_CALLBACKS=$(echo "$EXISTING_CALLBACKS" | python3 -c "import json,sys; urls=json.load(sys.stdin); urls.append('$NEW_CALLBACK') if '$NEW_CALLBACK' not in urls else None; print(' '.join(urls))")
-aws cognito-idp update-user-pool-client \
-  --user-pool-id "$POOL_ID" \
-  --client-id "$CLIENT_ID_COGNITO" \
-  --callback-urls $UPDATED_CALLBACKS \
-  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH ALLOW_USER_SRP_AUTH \
-  --allowed-o-auth-flows code \
-  --allowed-o-auth-scopes openid email profile \
-  --allowed-o-auth-flows-user-pool-client \
-  --supported-identity-providers COGNITO \
-  --region "$REGION" > /dev/null
+# 4. Create K8s Secret with gateway token
+echo "  → Creating K8s Secret: ${TENANT}-gateway-token"
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic "${TENANT}-gateway-token" \
+  --namespace "${NAMESPACE}" \
+  --from-literal="OPENCLAW_GATEWAY_TOKEN=${TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 # 5. Helm install
 echo "  → Helm installing ${RELEASE}"
@@ -118,7 +102,7 @@ helm install "${RELEASE}" "${CHART_DIR}" \
   -f "${VALUES_FILE}" \
   --wait --timeout 120s
 
-# 5. Wait for pod Ready
+# 6. Wait for pod Ready
 echo "  → Waiting for pod Ready"
 kubectl wait pod \
   -n "${NAMESPACE}" \
@@ -126,7 +110,7 @@ kubectl wait pod \
   --for=condition=Ready \
   --timeout=120s
 
-# 6. Summary
+# 7. Summary
 POD=$(kubectl get pod -n "${NAMESPACE}" -l "app.kubernetes.io/instance=${RELEASE}" -o jsonpath='{.items[0].metadata.name}')
 echo ""
 echo "=== Tenant Created ==="
