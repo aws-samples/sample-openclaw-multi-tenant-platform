@@ -30,7 +30,7 @@ Key components:
 - `helm/` -- Helm chart (source of truth for tenant K8s resources, synced by ArgoCD)
 - `auth-ui/` -- Auth UI pages (vanilla JS, no framework) -- index.html, admin.html, terms, privacy
 - `cdk/lambda/` -- Cognito trigger functions (Python)
-- `operator/` -- Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application via SSA
+- `operator/` -- Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application + ReferenceGrant via SSA
 - `scripts/` -- Operational scripts (Bash)
 - `docs/` -- Architecture and operations documentation
 
@@ -43,7 +43,7 @@ These MUST be true at all times. Violating any = broken deployment.
 3. **Zero CJK characters** -- All code, comments, docs, issue titles, PR titles, and issue/PR bodies in English
 4. **Helm chart is source of truth** -- `helm/charts/openclaw-platform/` is the source of truth for tenant K8s resources, synced by ArgoCD with auto-prune and selfHeal
 5. **Cognito triggers survive `update-user-pool`** -- Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
-6. **Operator + ArgoCD split** -- Operator creates 2 resources via SSA (Namespace, ArgoCD Application). ArgoCD + Helm creates everything else (PVC, SA, Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TGC, KEDA HSO)
+6. **Operator + ArgoCD split** -- Operator creates 3 resources via SSA (Namespace, ArgoCD Application, ReferenceGrant). ArgoCD + Helm creates everything else (PVC, SA, Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TGC, KEDA HSO)
 7. **Operator stays distroless** -- `operator/Dockerfile` uses `gcr.io/distroless/cc-debian12`. No external binary dependencies (no helm, no aws CLI). All K8s operations via kube-rs API.
 
 ## File Relationships
@@ -54,7 +54,7 @@ cdk/lib/eks-cluster-stack.ts  <- Main CDK stack, references Lambda code
 cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (creates Tenant CR)
 operator/src/types.rs  <- Tenant CRD definition (TenantSpec, TenantStatus)
-operator/src/controller.rs  <- Reconciles Tenant CR -> creates Namespace + ArgoCD Application via SSA
+operator/src/controller.rs  <- Reconciles Tenant CR -> creates Namespace + ArgoCD Application + ReferenceGrant via SSA
 operator/src/resources.rs  <- ensure_namespace, ensure_argocd_app
 operator/yaml/deployment.yaml  <- Operator deployment + RBAC
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
@@ -113,7 +113,7 @@ cargo build --release
 cargo clippy -- -D warnings
 # Dockerfile is distroless -- do NOT add external binary dependencies
 # All K8s operations must use kube-rs API (no Command::new)
-# Operator creates: Namespace, ArgoCD Application
+# Operator creates: Namespace, ArgoCD Application, ReferenceGrant
 # Everything else is managed by ArgoCD + Helm chart
 # Image is pre-built via GitHub Actions and published to GHCR
 # Customers pull via ECR pull-through cache -- no local build needed

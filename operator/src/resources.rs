@@ -175,3 +175,52 @@ pub async fn ensure_argocd_app(
         json!({ "type": "ArgoAppReady", "status": "True", "message": format!("ArgoCD Application {app_name} synced") }),
     )
 }
+
+/// Create a ReferenceGrant in the keda namespace allowing this tenant's
+/// HTTPRoute to reference the KEDA interceptor Service (cross-namespace backendRef).
+pub async fn ensure_reference_grant(
+    client: Client,
+    name: &str,
+    tenant_ns: &str,
+    ssapply: &PatchParams,
+) -> Result<()> {
+    let ar = ApiResource {
+        group: "gateway.networking.k8s.io".into(),
+        version: "v1beta1".into(),
+        kind: "ReferenceGrant".into(),
+        api_version: "gateway.networking.k8s.io/v1beta1".into(),
+        plural: "referencegrants".into(),
+    };
+    let rg_api: Api<DynamicObject> = Api::namespaced_with(client, "keda", &ar);
+    let rg_name = format!("allow-{name}");
+    let rg_patch: Value = json!({
+        "apiVersion": "gateway.networking.k8s.io/v1beta1",
+        "kind": "ReferenceGrant",
+        "metadata": {
+            "name": &rg_name,
+            "namespace": "keda",
+            "labels": {
+                "openclaw.io/tenant": name,
+                "app.kubernetes.io/managed-by": "tenant-operator"
+            }
+        },
+        "spec": {
+            "from": [{
+                "group": "gateway.networking.k8s.io",
+                "kind": "HTTPRoute",
+                "namespace": tenant_ns
+            }],
+            "to": [{
+                "group": "",
+                "kind": "Service",
+                "name": "keda-add-ons-http-interceptor-proxy"
+            }]
+        }
+    });
+    rg_api
+        .patch(&rg_name, ssapply, &Patch::Apply(rg_patch))
+        .await
+        .map_err(Error::KubeError)?;
+    info!("Ensured ReferenceGrant {rg_name} in keda namespace");
+    Ok(())
+}
