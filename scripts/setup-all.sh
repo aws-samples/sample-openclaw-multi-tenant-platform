@@ -10,12 +10,10 @@ source "${SCRIPT_DIR}/lib/common.sh"
 require_cmd kubectl
 require_cmd helm
 require_cmd aws
-require_cmd docker
 
 STEPS=(
   "setup-keda.sh"
   "setup-cognito.sh"
-  "build-operator.sh"
   "post-deploy.sh"
   "setup-waf.sh"
 )
