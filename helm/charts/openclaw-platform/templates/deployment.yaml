@@ -13,12 +13,19 @@ spec:
     metadata:
       labels:
         {{- include "openclaw-helm.selectorLabels" . | nindent 8 }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "false"
+        instrumentation.opentelemetry.io/inject-nodejs: "false"
+        instrumentation.opentelemetry.io/inject-python: "false"
+        instrumentation.opentelemetry.io/inject-dotnet: "false"
     spec:
       serviceAccountName: {{ include "openclaw-helm.fullname" . }}
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
       - name: init-config
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
