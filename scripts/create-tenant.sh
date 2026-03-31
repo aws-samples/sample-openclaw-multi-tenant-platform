@@ -49,7 +49,12 @@ if [[ -z "$VALUES_FILE" ]]; then
   COGNITO_DOMAIN=$(get_output CognitoDomain)
 
   echo "  → Generating ${TENANT_VALUES} from template"
-  SKILLS_YAML=$(IFS=','; for s in ${SKILLS}; do echo "  - ${s}"; done)
+  SKILLS_YAML=""
+  IFS=',' read -ra SKILL_ARRAY <<< "${SKILLS}"
+  for s in "${SKILL_ARRAY[@]}"; do
+    SKILLS_YAML="${SKILLS_YAML}  - ${s}
+"
+  done
   sed -e "s/{{TENANT}}/${TENANT}/g" \
       -e "s/{{TENANT_DISPLAY_NAME}}/${DISPLAY_NAME}/g" \
       -e "s/{{TENANT_EMOJI}}/${EMOJI}/g" \

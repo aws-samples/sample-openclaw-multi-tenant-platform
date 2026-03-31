@@ -39,6 +39,10 @@ spec:
         spec:
           serviceAccountName: image-updater
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: updater
               image: bitnami/kubectl:latest

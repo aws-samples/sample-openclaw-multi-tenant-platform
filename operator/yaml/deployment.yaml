@@ -25,7 +25,7 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
@@ -70,6 +70,10 @@ spec:
         app: tenant-operator
     spec:
       serviceAccountName: tenant-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: tenant-operator
           image: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openclaw-tenant-operator:latest  # Replace with your ECR image
