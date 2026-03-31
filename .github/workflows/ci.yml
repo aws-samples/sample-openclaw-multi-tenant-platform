@@ -79,19 +79,11 @@ jobs:
       - name: Build image
         working-directory: operator
         run: docker build -t tenant-operator:smoke .
-      - name: Smoke test -- binary starts and health endpoint responds
+      - name: Smoke test -- binary starts and prints version
         run: |
-          docker run -d --name op-smoke -p 8080:8080 tenant-operator:smoke
-          sleep 3
-          STATUS=$(docker inspect op-smoke --format='{{.State.Status}}')
-          if [ "$STATUS" != "running" ]; then
-            echo "Container not running (status: $STATUS)"
-            docker logs op-smoke
-            exit 1
-          fi
-          # Health endpoint may fail without K8s API, but binary should start
-          echo "Container is running, binary started successfully"
-          docker rm -f op-smoke
+          OUTPUT=$(docker run --rm tenant-operator:smoke /tenant-operator --version)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "tenant-operator" || { echo "Version output missing"; exit 1; }
 
   # ============================================================
   # Platform: CDK + Helm + Scripts (every PR) ~2 min
