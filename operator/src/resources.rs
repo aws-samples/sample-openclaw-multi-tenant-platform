@@ -75,9 +75,12 @@ pub async fn ensure_argocd_app(
     ssapply: &PatchParams,
     spec: &TenantSpec,
 ) -> Result<Value> {
-    let repo_url = std::env::var("HELM_REPO_URL").unwrap_or_else(|_| {
-        "https://github.com/snese/sample-openclaw-multi-tenant-platform.git".into()
-    });
+    let repo_url = std::env::var("HELM_REPO_URL")
+        .ok()
+        .filter(|v| v != "https://github.com/ORG/REPO.git")
+        .unwrap_or_else(|| {
+            "https://github.com/snese/sample-openclaw-multi-tenant-platform.git".into()
+        });
     let target_revision = std::env::var("HELM_TARGET_REVISION").unwrap_or_else(|_| "main".into());
     let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
     let cognito_client_id = std::env::var("COGNITO_CLIENT_ID").unwrap_or_default();
