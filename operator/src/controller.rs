@@ -239,32 +239,6 @@ async fn check_deployment(client: &Client, name: &str, tenant_ns: &str) -> serde
     }
 }
 
-/// Best-effort: update Tenant CR status to Error phase.
-/// Called synchronously from error_policy context to avoid race conditions
-/// with subsequent reconciliations.
-async fn set_error_status(client: Client, name: &str, error_msg: &str) {
-    let tenants: Api<Tenant> = Api::default_namespaced(client);
-    let ssapply = PatchParams::apply("tenant-operator").force();
-    let status = json!({
-        "apiVersion": "openclaw.io/v1alpha1",
-        "kind": "Tenant",
-        "status": {
-            "phase": "Error",
-            "conditions": [{
-                "type": "ReconcileError",
-                "status": "True",
-                "message": error_msg
-            }]
-        }
-    });
-    if let Err(e) = tenants
-        .patch_status(name, &ssapply, &Patch::Apply(status))
-        .await
-    {
-        warn!("Failed to set Error phase for {name}: {e}");
-    }
-}
-
 /// Cleanup on tenant deletion
 async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Result<Action> {
     let client = ctx.client.clone();
@@ -306,16 +280,16 @@ async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Res
     Ok(Action::await_change())
 }
 
-fn error_policy(tenant: Arc<Tenant>, error: &Error, ctx: Arc<Context>) -> Action {
+fn error_policy(tenant: Arc<Tenant>, error: &Error, _ctx: Arc<Context>) -> Action {
     let name = tenant.name_any();
     warn!("Reconcile failed for {}: {:?}", name, error);
 
-    // Set Error phase synchronously via block_on to avoid race conditions
-    // with subsequent reconciliations that might succeed and set Ready.
-    let client = ctx.client.clone();
-    let error_msg = format!("{error}");
-    let rt = tokio::runtime::Handle::current();
-    rt.block_on(set_error_status(client, &name, &error_msg));
+    // Do NOT update status here. error_policy is a sync fn called on a tokio
+    // runtime thread — block_on() would deadlock, and tokio::spawn() races with
+    // the next reconcile. Instead, rely on apply() setting phase=Provisioning at
+    // the start of each attempt. If reconcile keeps failing, status stays
+    // Provisioning with stale/empty conditions, which is an accurate signal.
+    // The error is visible via: kubectl describe tenant (events) + operator logs.
 
     Action::requeue(Duration::from_secs(60))
 }
