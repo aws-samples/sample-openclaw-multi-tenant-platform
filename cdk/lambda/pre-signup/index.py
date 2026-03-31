@@ -78,7 +78,7 @@ def handler(event, context):
         _validate_url(TURNSTILE_VERIFY_URL)
         req = urllib.request.Request(TURNSTILE_VERIFY_URL,
                                      data=data, headers={'Content-Type': 'application/json'})
-        resp = json.loads(urllib.request.urlopen(req).read())
+        resp = json.loads(urllib.request.urlopen(req).read())  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310 -- URL scheme validated by _validate_url()
         if not resp.get('success'):
             raise Exception('CAPTCHA verification failed.')
 

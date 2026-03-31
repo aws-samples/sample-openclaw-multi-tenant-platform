@@ -71,4 +71,4 @@ check "PDB exists" kubectl get pdb -n "${NAMESPACE}" "${RELEASE}"
 echo ""
 echo "=== Results: ${PASS} passed, ${FAIL} failed ==="
 [[ $FAIL -eq 0 ]] && echo "🎉 Tenant ${TENANT} is healthy" || echo "⚠️  Tenant ${TENANT} has issues"
-exit $FAIL
+exit "$FAIL"
