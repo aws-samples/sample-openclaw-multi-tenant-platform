@@ -43,6 +43,24 @@ pub async fn ensure_namespace(
                     "restricted".to_string(),
                 ),
             ])),
+            annotations: Some(BTreeMap::from([
+                (
+                    "instrumentation.opentelemetry.io/inject-java".to_string(),
+                    "false".to_string(),
+                ),
+                (
+                    "instrumentation.opentelemetry.io/inject-nodejs".to_string(),
+                    "false".to_string(),
+                ),
+                (
+                    "instrumentation.opentelemetry.io/inject-python".to_string(),
+                    "false".to_string(),
+                ),
+                (
+                    "instrumentation.opentelemetry.io/inject-dotnet".to_string(),
+                    "false".to_string(),
+                ),
+            ])),
             ..Default::default()
         },
         ..Default::default()
