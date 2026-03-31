@@ -142,7 +142,7 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 - **`permissions: contents: read`** at workflow level -- least privilege by default
 - **`npm ci --ignore-scripts`** in security job -- blocks postinstall hook attacks
 - **cdk-nag integrated** -- `AwsSolutionsChecks` runs on every `cdk synth` via `cdk/bin/cdk.ts`
-- **PR jobs are fast (~5 min)**, heavy jobs (k3d integration, Docker build) only on merge to main
+- **PR jobs are fast (~5 min)**, Docker smoke test only on merge to main. Multi-arch image build + push via `operator-build.yml`
 
 ## Common Pitfalls
 
