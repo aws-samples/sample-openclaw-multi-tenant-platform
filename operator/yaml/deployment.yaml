@@ -101,15 +101,6 @@ spec:
             # Public domain for tenant gateway routing
             - name: GATEWAY_DOMAIN
               value: "DOMAIN"
-            # Cognito user pool ARN for tenant auth
-            - name: COGNITO_POOL_ARN
-              value: "arn:aws:cognito-idp:REGION:ACCOUNT_ID:userpool/POOL_ID"
-            # Cognito app client ID
-            - name: COGNITO_CLIENT_ID
-              value: "CLIENT_ID"
-            # Cognito hosted UI domain prefix
-            - name: COGNITO_DOMAIN
-              value: "COGNITO_PREFIX"
           livenessProbe:
             httpGet:
               path: /health

@@ -514,6 +514,13 @@ export class EksClusterStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
 
+    // S3: tenant pods read chart assets from error-pages bucket
+    tenantRole.addToPrincipalPolicy(new iam.PolicyStatement({
+      sid: 'S3ChartRead',
+      actions: ['s3:GetObject', 's3:HeadObject'],
+      resources: [errorPagesBucket.arnForObjects('*')],
+    }));
+
     // ── Lambda: Pre-Signup ──────────────────────────────────────────────────
     const preSignupFn = new lambda.Function(this, 'PreSignupFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
