@@ -43,11 +43,11 @@ cdk/                    # AWS CDK infrastructure (TypeScript)
   lib/eks-cluster-stack.ts   # Main stack (~700 lines)
   lambda/                    # Cognito trigger functions (Python)
   cdk.json.example           # Configuration template
-helm/                   # Kubernetes manifests (reference templates)
-  charts/openclaw-platform/  # Helm chart (reference only, not used by operator)
+helm/                   # Helm chart (source of truth, synced by ArgoCD)
+  charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
   tenants/values-template.yaml  # Per-tenant values template
 auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
-operator/               # Tenant Operator (Rust/kube-rs)
+operator/               # Tenant Operator (Rust/kube-rs) -- creates NS/PVC/SA + ArgoCD Application + KEDA HSO
 scripts/                # Operational scripts (Bash)
 docs/                   # Architecture and operations docs
 ```
@@ -89,27 +89,12 @@ grep -rn 'AKIA\|amazonaws\.com\|[0-9]\{12\}' \
 cd cdk && npx cdk diff  # Should show "no differences"
 
 # Signup flow
-# Open https://<your-domain> → Sign Up → Workspace loads at claw.<domain>/t/<tenant>/
+# Open https://<your-domain> -> Sign Up -> Workspace loads at claw.<domain>/t/<tenant>/
 ```
 
 ## Configuration
 
-All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk.json.example` for the full list:
-
-| Key | Description |
-|-----|-------------|
-| `hostedZoneId` | Route53 hosted zone ID |
-| `zoneName` | Domain name (e.g., `claw.example.com`) |
-| `certificateArn` | ACM certificate ARN (regional) |
-| `cloudfrontCertificateArn` | ACM certificate ARN (us-east-1, for CloudFront) |
-| `cognitoPoolId` | Cognito User Pool ID |
-| `cognitoClientId` | Cognito public client ID (for auth UI) |
-| `cognitoDomain` | Cognito domain prefix |
-| `allowedEmailDomains` | Comma-separated allowed email domains |
-| `ssoRoleArn` | IAM SSO role ARN for kubectl access |
-| `openclawImage` | Container image (e.g., `ghcr.io/openclaw/openclaw:2026.3.24`) |
-| `sesFromEmail` | SES sender email for welcome emails |
-| `albClientId` | Cognito App Client ID for ALB auth |
+All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk.json.example` for the full list.
 
 ## Coding Standards
 
@@ -127,40 +112,29 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 
 1. **Rust**: format check, clippy, unit tests, CRD generation verify
 2. **Rust**: cargo-deny (license + security advisory audit)
-3. **Platform**: CDK compile + synth with [cdk-nag](https://github.com/cdklabs/cdk-nag) (AWS Solutions checks), Helm lint, Python syntax, Shell syntax, ShellCheck
-4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit --audit-level=high`, Semgrep (JS/TS/Python), Trivy config + filesystem scan
+3. **Platform**: CDK compile + synth with cdk-nag, Helm lint, Python syntax, Shell syntax, ShellCheck
+4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit`, Semgrep, Trivy
 5. **Main-only**: K8s integration test (k3d), Docker build
 
 ### Supply Chain Hardening
 
-All GitHub Actions are **pinned to commit SHA** (not version tags) to prevent [tag poisoning attacks](https://www.microsoft.com/en-us/security/blog/2026/03/24/detecting-investigating-defending-against-trivy-supply-chain-compromise/). When updating an action version, always pin to the full SHA:
-
-```yaml
-# Good
-- uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-# Bad — vulnerable to tag poisoning
-- uses: actions/checkout@v4
-```
-
-npm dependencies are installed with `--ignore-scripts` in CI security jobs to prevent postinstall hook attacks.
+All GitHub Actions are **pinned to commit SHA** (not version tags). npm dependencies installed with `--ignore-scripts` in CI security jobs.
 
 All PR checks must pass before merge.
 
 ## Architecture Decisions
 
-Key design decisions and their rationale are documented in:
+Key design decisions documented in:
 
-- `docs/architecture.md` — System overview
-- `docs/security.md` — Security model (10 layers)
-- `docs/components/` — Per-component deep dives
+- `docs/architecture.md` -- System overview, Operator + ArgoCD flow
+- `docs/security.md` -- Security model (10 layers)
+- `docs/components/` -- Per-component deep dives
 
 ## Getting Help
 
 - Open an issue for bugs or feature requests
 - Check `docs/operations/admin-guide.md` for operational procedures
-- Check `docs/operations/user-guide.md` for end-user documentation
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT -- see [LICENSE](LICENSE).

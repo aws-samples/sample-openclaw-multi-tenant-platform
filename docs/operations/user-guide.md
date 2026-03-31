@@ -1,114 +1,85 @@
 # User Journey
 
-## Overview
-
-A company employee goes from zero to chatting with their personal AI assistant in under 5 minutes.
-
 ## Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                                                                 │
-│  1. Open https://your-domain.com                                │
-│     → CloudFront #1 → S3 → Custom auth UI                      │
-│                                                                 │
-│  2. Sign Up (email + password + CAPTCHA)                        │
-│     → Cognito SDK → Pre-signup Lambda (domain check)            │
-│                                                                 │
-│  3. Verify email (enter code from inbox)                        │
-│     → Cognito ConfirmSignUp                                     │
-│                                                                 │
-│  4. "Account Created — being set up"                  │
-│     → Post-confirmation Lambda:                                 │
-│       a. Secrets Manager secret                                 │
-│       b. Pod Identity Association                               │
-│       c. Tenant CR → Operator → ArgoCD → Helm                  │
-│       d. SES welcome email to user                              │
-│                                                                 │
-│  5. User receives email: "Your URL is claw.your-domain.com/t/alice/" │
-│                                                                 │
-│  6. Open https://claw.your-domain.com/t/alice/                  │
-│     → CloudFront → VPC Origin → Internal ALB                   │
-│     → Gateway API HTTPRoute → OpenClaw (local auth)             │
-│                                                                 │
-│  7. Chat with AI assistant (Bedrock, zero API keys)             │
-│                                                                 │
-│  8. Idle 15 min → KEDA scales pod to 0 (data preserved)        │
-│                                                                 │
-│  10. Return later → "Waking up..." (15-30s) → resume            │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+1. Open https://your-domain.com
+   -> CloudFront #1 -> S3 -> Custom auth UI
+
+2. Sign Up (email + password + CAPTCHA)
+   -> Cognito SDK -> Pre-signup Lambda (domain check)
+
+3. "Account Created -- being set up"
+   -> Post-confirmation Lambda:
+     a. Secrets Manager secret
+     b. Pod Identity Association
+     c. Tenant CR -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
+     d. SES welcome email
+
+4. User receives email: "Your URL is claw.your-domain.com/t/alice/"
+
+5. Open https://claw.your-domain.com/t/alice/
+   -> CloudFront -> Internet-facing ALB (CF prefix list SG)
+   -> Gateway API HTTPRoute -> OpenClaw gateway (token auth)
+
+6. Chat with AI assistant (Bedrock, zero API keys)
+
+7. Idle 15 min -> KEDA scales pod to 0 (data preserved on PVC)
+
+8. Return later -> "Waking up..." (15-30s) -> resume
 ```
 
 ## Step Details
 
-### 1. Landing Page
+### Landing Page
 
 - URL: `https://your-domain.com`
-- Served by CloudFront #1 → S3 bucket
-- Custom auth UI with AI-Native purple theme (#6366F1)
-- Tabbed interface: Sign In / Sign Up
+- CloudFront #1 -> S3 bucket
+- Custom auth UI with tabbed Sign In / Sign Up
 
-### 2. Sign Up
+### Sign Up
 
-- Email must match allowed domain (configured in Pre-signup Lambda)
-- Password: min 12 characters, uppercase, lowercase, numbers
-- Visual password strength meter (red → orange → green)
-- Cloudflare Turnstile CAPTCHA (optional, enabled via env var)
-- Cognito SDK `SignUp` API call (no redirect to Cognito Hosted UI)
+- Email must match allowed domain
+- Password: min 12 chars, uppercase, lowercase, numbers
+- Cloudflare Turnstile CAPTCHA (optional)
+- Cognito SDK `SignUp` API call (no Hosted UI redirect)
 
-### 3. Workspace Provisioning
+### Workspace Provisioning
 
 - Post-confirmation Lambda creates Tenant CR
-- Operator provisions namespace, PVC, ServiceAccount, ArgoCD Application
-- ArgoCD syncs Helm chart → pod ready (~2 min)
+- Operator provisions Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
+- ArgoCD syncs Helm chart -> Deployment, Service, ConfigMap, NetworkPolicy, etc.
 - User receives welcome email with workspace URL
 
-### 4. Welcome Email
+### First Login
 
-- Sent via Amazon SES directly to user's email
-- Contains tenant URL: `https://claw.<domain>/t/<tenant>/`
-- Sent within seconds of auto-provisioning
+- User opens their tenant URL (`claw.{domain}/t/{tenant}/`)
+- CloudFront -> internet-facing ALB (CF prefix list SG) -> Gateway API HTTPRoute
+- OpenClaw gateway handles auth locally (token mode via exec SecretRef -> Secrets Manager)
 
-### 5. First Login
-
-- User opens their tenant URL
-- CloudFront → VPC Origin → Internal ALB → Gateway API HTTPRoute
-- OpenClaw gateway (local auth mode)
-- User enters email + password
-- ALB validates token, sets 7-day session cookie
-- Forwarded to OpenClaw Control UI
-
-### 8. Daily Usage
+### Daily Usage
 
 - Chat with AI assistant powered by Amazon Bedrock
-- Available models: Opus 4.6, Sonnet 4.6, DeepSeek V3.2, GPT-OSS 120B, Qwen3 Coder, Kimi K2
-- Skills: configurable per tenant (default: weather, gog)
-- Session persists for 7 days (ALB auth session timeout)
+- Session persists until 60 minutes idle, then resets
+- No ALB session cookies -- session managed by gateway
 
-### 9. Scale to Zero
+### Scale to Zero
 
 - After 15 minutes of no HTTP requests, KEDA scales pod to 0
-- PVC (EBS volume) is NOT deleted — all data preserved
-- No cost for idle tenants (EC2 only charges for running pods)
+- PVC (EBS volume) is NOT deleted -- all data preserved
+- No cost for idle tenants
 
-### 10. Cold Start
+### Cold Start
 
-- User opens URL → CloudFront forwards to ALB → ALB returns 502/503
-- CloudFront custom error response shows branded loading page
-- Page auto-refreshes every 5 seconds
-- Pod starts in 15-30 seconds → next refresh loads OpenClaw
+- User opens URL -> KEDA interceptor holds request -> pod starts (15-30s)
+- Custom 503 page with auto-refresh every 5 seconds during cold start
 
 ### Forgot Password
 
-- Click "Forgot password?" on login page
-- Enter email → receive reset code
-- Enter code + new password → password reset
-- Redirect to login
+- Click "Forgot password?" -> receive reset code -> enter code + new password
 
 ## What the User Never Sees
 
 - AWS Cognito Hosted UI (all auth via custom UI + Cognito SDK)
-- Internal ALB (hidden behind CloudFront)
-- EKS, pods, namespaces (abstracted away)
+- ALB, EKS, pods, namespaces (abstracted away)
 - API keys (Bedrock via Pod Identity)

@@ -1,157 +1,75 @@
 # Networking
 
-The OpenClaw platform uses a layered network architecture: CloudFront → internal ALB → EKS pods, with WAF protection and per-tenant NetworkPolicy isolation.
-
-All CDK resources are in `cdk/lib/eks-cluster-stack.ts`. The ALB and some CloudFront/Route53 resources are created post-deploy by scripts (see notes below).
+Layered network architecture: CloudFront -> internet-facing ALB (CF prefix list SG) -> EKS pods, with WAF protection and per-tenant NetworkPolicy isolation.
 
 ## VPC
-
-```typescript
-// cdk/lib/eks-cluster-stack.ts — "VPC" section
-const vpc = new ec2.Vpc(this, 'Vpc', {
-  maxAzs: 2,
-  natGateways: 2,
-  subnetConfiguration: [
-    { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
-    { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 },
-  ],
-});
-```
 
 | Setting | Value | Why |
 |---------|-------|-----|
 | AZs | 2 | Sufficient for HA; keeps NAT costs down |
-| NAT Gateways | 2 (one per AZ) | HA — single NAT would be a SPOF |
-| Public subnets | `/24` × 2 | NAT Gateways, ALB public-facing (if needed) |
-| Private subnets | `/24` × 2 | EKS nodes, pods, internal ALB |
+| NAT Gateways | 2 (one per AZ) | HA -- single NAT would be a SPOF |
+| Public subnets | `/24` x 2 | NAT Gateways, ALB |
+| Private subnets | `/24` x 2 | EKS nodes, pods |
+
+**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `Vpc`
 
 ## Traffic Flow
 
 ```
-User → CloudFront #1 (root domain) → S3 (auth UI)
-User → CloudFront #2 (wildcard)    → VPC Origin → Internal ALB → Pod
+User -> CloudFront #1 (root domain) -> S3 (auth UI)
+User -> CloudFront #2 (wildcard)    -> Internet-facing ALB (CF prefix list SG) -> Pod
 ```
 
 ### CloudFront #1: Auth UI (CDK-managed)
 
-Serves the static auth UI (login, signup, welcome pages) from S3.
-
-```typescript
-// cdk/lib/eks-cluster-stack.ts — "CloudFront + WAF" section
-const distribution = new cloudfront.CloudFrontWebDistribution(this, 'Distribution', {
-  viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(cert, {
-    aliases: [domainName],  // root domain, e.g. example.com
-  }),
-  originConfigs: [{
-    s3OriginSource: {
-      s3BucketSource: authUiBucket,
-      originAccessIdentity: oai,
-    },
-    behaviors: [{
-      isDefaultBehavior: true,
-      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-    }],
-  }],
-  errorConfigurations: [
-    { errorCode: 404, responseCode: 200, responsePagePath: '/index.html' },
-    { errorCode: 403, responseCode: 200, responsePagePath: '/index.html' },
-  ],
-});
-```
-
-- S3 origin with OAI (Origin Access Identity) — bucket is not publicly accessible
-- SPA routing: 404/403 → `/index.html`
-- Certificate must be in `us-east-1` (CloudFront requirement)
+Serves the static auth UI from S3 with OAI. SPA routing: 404/403 -> `/index.html`. Certificate must be in `us-east-1`.
 
 ### CloudFront #2: Tenant Traffic (script-managed)
 
-Created by `scripts/post-deploy.sh` after the first tenant is provisioned (because the ALB ARN is dynamic).
+Created by `scripts/post-deploy.sh` after the first tenant is provisioned (ALB ARN is dynamic).
 
 | Setting | Value |
 |---------|-------|
 | Alias | `*.example.com` (wildcard) |
-| Origin | VPC Origin → internal ALB |
+| Origin | Internet-facing ALB |
 | Protocol | HTTPS only |
 
-**Why VPC Origin?** The ALB is internal (no public IP). CloudFront VPC Origin creates a private connection from CloudFront into the VPC, reaching the ALB without exposing it to the internet. This is a managed feature — no VPN, PrivateLink, or proxy needed.
+### Internet-Facing ALB (Gateway API)
 
-### Internal ALB
-
-The ALB is **not** created by CDK. It's created dynamically by the AWS Load Balancer Controller when the first Ingress resource is applied.
-
-From `helm/charts/openclaw-platform/values.yaml`:
+The ALB is created by the AWS Load Balancer Controller when the Gateway resource is applied. Defined in `helm/gateway.yaml`:
 
 ```yaml
-ingress:
-  className: alb
-  annotations:
-    alb.ingress.kubernetes.io/group.name: openclaw-shared
-    alb.ingress.kubernetes.io/scheme: internal
-    alb.ingress.kubernetes.io/target-type: ip
-```
-
-From `helm/charts/openclaw-platform/templates/ingress.yaml`:
-
-```yaml
+apiVersion: gateway.k8s.aws/v1beta1
+kind: LoadBalancerConfiguration
 spec:
-  ingressClassName: {{ .Values.ingress.className }}
-  rules:
-    - host: {{ .Values.ingress.host }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "openclaw-helm.fullname" . }}
-                port:
-                  number: {{ .Values.service.port }}
+  scheme: internet-facing
+  securityGroupPrefixes:
+    - "pl-82a045eb"    # CloudFront managed prefix list
+  manageBackendSecurityGroupRules: true
 ```
 
 Key design decisions:
-- **`scheme: internal`** — ALB has no public IP. All public traffic goes through CloudFront first, which provides DDoS protection, caching, and geographic distribution.
-- **`group.name: openclaw-shared`** — All tenant Ingresses share a single ALB. Each tenant gets a host-based rule (`tenant.example.com`).
-- **`target-type: ip`** — Routes directly to pod IPs (no NodePort needed).
-- **Cognito auth** — When enabled, the ALB handles OIDC authentication before forwarding to pods.
+- **`scheme: internet-facing`** -- ALB is public but restricted to CloudFront IPs only via the CF managed prefix list (`pl-82a045eb`)
+- **Gateway API** -- uses `Gateway` + `HTTPRoute` (not Ingress) for path-based routing (`/t/{tenant}/`)
+- **`target-type: ip`** -- routes directly to pod IPs via TargetGroupConfiguration
+
+### 3-Layer Origin Protection
+
+| Layer | Mechanism |
+|-------|-----------|
+| L3/L4 | ALB Security Group allows only CloudFront managed prefix list |
+| L7 | WAF validates `X-Verify-Origin` custom header from CloudFront |
+| Transport | HTTPS-only origin protocol |
 
 ## WAF
 
-```typescript
-// cdk/lib/eks-cluster-stack.ts — "CloudFront + WAF" section
-const wafAcl = new wafv2.CfnWebACL(this, 'WafAcl', {
-  defaultAction: { allow: {} },
-  scope: 'REGIONAL',
-  rules: [
-    {
-      name: 'AWSManagedRulesCommonRuleSet',
-      priority: 1,
-      overrideAction: { none: {} },
-      statement: {
-        managedRuleGroupStatement: {
-          vendorName: 'AWS',
-          name: 'AWSManagedRulesCommonRuleSet',
-        },
-      },
-    },
-    {
-      name: 'RateLimit',
-      priority: 2,
-      action: { block: {} },
-      statement: {
-        rateBasedStatement: { limit: 2000, aggregateKeyType: 'IP' },
-      },
-    },
-  ],
-});
-```
-
 | Rule | Priority | Action | Description |
 |------|----------|--------|-------------|
-| AWS Common Rules | 1 | None (use rule defaults) | OWASP Top 10 protections — XSS, SQLi, etc. |
+| AWS Common Rules | 1 | None (use rule defaults) | OWASP Top 10 -- XSS, SQLi, etc. |
 | Rate Limit | 2 | Block | 2000 requests per 5-min window per IP |
 
-- **Scope: REGIONAL** — attached to the ALB (not CloudFront)
-- WAF ↔ ALB association is done by `scripts/setup-waf.sh` because the ALB ARN is dynamic
+- **Scope: REGIONAL** -- attached to the ALB
+- WAF <-> ALB association done by `scripts/setup-waf.sh` (dynamic ALB ARN)
 
 ## Route53
 
@@ -162,62 +80,61 @@ Managed by `scripts/post-deploy.sh`:
 | `example.com` | A (alias) | CloudFront #1 (auth UI) |
 | `*.example.com` | A (alias) | CloudFront #2 (tenant traffic) |
 
-The hosted zone is imported in CDK (not created):
-
-```typescript
-const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
-  hostedZoneId: this.node.tryGetContext('hostedZoneId') || '',
-  zoneName: domainName,
-});
-```
-
 ## NetworkPolicy (Per-Tenant)
 
-Each tenant namespace gets a NetworkPolicy that enforces strict isolation.
-
-From `helm/charts/openclaw-platform/templates/networkpolicy.yaml`:
+Each tenant namespace gets a NetworkPolicy via the Helm chart template (`networkpolicy.yaml`):
 
 ```yaml
 spec:
-  podSelector: {}          # Applies to ALL pods in the namespace
+  podSelector: {}
   policyTypes: [Ingress, Egress]
 
   ingress:
+    # ALB health checks and traffic (IP target type -- traffic comes from VPC CIDR)
+    - ports:
+        - protocol: TCP
+          port: 18789
+    # Same namespace
     - from:
-        - podSelector: {}                    # Same namespace
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system   # ALB health checks
+        - podSelector: {}
 
   egress:
-    - to: [{ namespaceSelector: {} }]        # DNS (UDP+TCP 53)
+    # DNS
+    - to: [{ namespaceSelector: {} }]
       ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
-
-    - to: [{ ipBlock: { cidr: 169.254.170.23/32 } }]   # EKS Pod Identity Agent
+    # EKS Pod Identity Agent
+    - to: [{ ipBlock: { cidr: 169.254.170.23/32 } }]
       ports: [{ protocol: TCP, port: 80 }]
-
-    - to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]   # EC2 IMDS
+    # EC2 IMDS
+    - to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
       ports: [{ protocol: TCP, port: 80 }]
-
-    - to:                                    # HTTPS outbound (Bedrock, Secrets Manager, etc.)
+    # HTTPS outbound (Bedrock, Secrets Manager, etc.)
+    - to:
         - ipBlock:
             cidr: 0.0.0.0/0
-            except: [10.0.0.0/8]             # Block cross-tenant pod traffic
+            except: [10.0.0.0/8]    # Block cross-tenant pod traffic
       ports: [{ protocol: TCP, port: 443 }]
-
-    - to: [{ podSelector: {} }]              # Same namespace (any port)
+    # Same namespace (any port)
+    - to: [{ podSelector: {} }]
 ```
 
 ### Isolation Model
 
 | Direction | Allowed | Blocked |
 |-----------|---------|---------|
-| Ingress | Same namespace, kube-system | All other namespaces |
-| Egress DNS | Any namespace (port 53) | — |
-| Egress HTTPS | Internet (0.0.0.0/0) | VPC CIDR (10.0.0.0/8) — blocks pod-to-pod across namespaces |
-| Egress Pod Identity | 169.254.170.23:80 | — |
-| Egress IMDS | 169.254.169.254:80 | — |
-| Egress same NS | Any port | — |
+| Ingress | Service port from any source (ALB), same namespace | All other |
+| Egress DNS | Any namespace (port 53) | -- |
+| Egress HTTPS | Internet (0.0.0.0/0) | VPC CIDR (10.0.0.0/8) -- blocks cross-namespace pod traffic |
+| Egress Pod Identity | 169.254.170.23:80 | -- |
+| Egress IMDS | 169.254.169.254:80 | -- |
+| Egress same NS | Any port | -- |
 
-The `10.0.0.0/8` exclusion in the HTTPS egress rule is the key isolation mechanism: tenant pods can reach AWS services (via HTTPS through NAT) but cannot reach pods in other tenant namespaces.
+## Gateway API Resources
+
+| Resource | Location | Purpose |
+|----------|----------|---------|
+| GatewayClass | `helm/gateway.yaml` | Registers `gateway.k8s.aws/alb` controller |
+| LoadBalancerConfiguration | `helm/gateway.yaml` | Internet-facing ALB + CF prefix list SG |
+| Gateway | `helm/gateway.yaml` | HTTPS listener on `claw.{domain}` |
+| HTTPRoute | Helm template `httproute.yaml` | Per-tenant path-based routing (`/t/{tenant}/`) |
+| TargetGroupConfiguration | Helm template `targetgroupconfig.yaml` | Health check config per tenant |
