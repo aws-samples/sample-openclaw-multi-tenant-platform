@@ -12,6 +12,8 @@
 
 Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
+> **Important:** This is a sample project intended for demonstration and learning purposes. It is not intended for production use without thorough review and hardening. Use at your own risk. See [Security](docs/security.md) for known gaps.
+
 ## Table of Contents
 
 - [Features](#features)
@@ -24,6 +26,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - [Documentation](#documentation)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
+- [Cleanup](#cleanup)
 - [License](#license)
 
 ## Features
@@ -331,6 +334,28 @@ Learn how each component works:
 ALB is created dynamically by Kubernetes LB Controller — CDK cannot reference it at deploy time.
 
 </details>
+
+## Cleanup
+
+To tear down all resources:
+
+```bash
+# 1. Delete all tenants (removes namespaces, PVCs, Pod Identity associations)
+for tenant in $(kubectl get tenants -o jsonpath='{.items[*].metadata.name}'); do
+  ./scripts/delete-tenant.sh "$tenant" --yes
+done
+
+# 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh)
+#    These are not managed by CDK — delete manually via AWS Console or CLI
+
+# 3. Destroy CDK stack
+cd cdk && npx cdk destroy OpenClawEksStack
+
+# 4. Clean up orphan resources (S3 buckets with RETAIN policy, ECR images)
+./scripts/cleanup-test-resources.sh
+```
+
+> **Note:** S3 buckets with `RemovalPolicy.RETAIN` (error-pages) are not deleted by `cdk destroy`. Delete them manually if no longer needed.
 
 ## Contributing
 
