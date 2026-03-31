@@ -470,6 +470,12 @@ pub async fn ensure_deployment(
                             "limits": { "cpu": lim_cpu, "memory": lim_mem }
                         },
                         "env": container_env,
+                        "envFrom": [{
+                            "secretRef": {
+                                "name": format!("{name}-gateway-token"),
+                                "optional": true
+                            }
+                        }],
                         "securityContext": {
                             "readOnlyRootFilesystem": true
                         },
