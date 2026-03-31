@@ -1,6 +1,3 @@
-# checkov:skip=CKV2_K8S_6: NetworkPolicy for openclaw-system managed by CDK Pod Security Standards (restricted)
-# checkov:skip=CKV_K8S_43: Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
-# checkov:skip=CKV_K8S_14: Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -59,6 +56,8 @@ metadata:
   namespace: openclaw-system
   labels:
     app: tenant-operator
+  annotations:
+    checkov.io/skip1: CKV2_K8S_6=NetworkPolicy for openclaw-system managed by CDK Pod Security Standards
 spec:
   replicas: 1
   selector:
@@ -68,9 +67,12 @@ spec:
     metadata:
       labels:
         app: tenant-operator
+      annotations:
+        checkov.io/skip1: CKV_K8S_38=Operator requires SA token for K8s API access (kube-rs client)
+        checkov.io/skip2: CKV_K8S_43=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
+        checkov.io/skip3: CKV_K8S_14=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
     spec:
       serviceAccountName: tenant-operator
-      # checkov:skip=CKV_K8S_38: Operator requires SA token for K8s API access (kube-rs client)
       automountServiceAccountToken: true
       securityContext:
         runAsNonRoot: true
