@@ -27,7 +27,7 @@ Excludes: `node_modules`, `cdk.out`, `.git/`, `cdk.json`.
 
 ## Tenant Provisioning
 
-Tenant provisioning is handled by the Tenant Operator (Rust/kube-rs). The Post-Confirmation Lambda creates a Tenant CR, and the operator reconciles it into Namespace, PVC, ServiceAccount, ArgoCD Application, and KEDA HSO. ArgoCD then syncs the Helm chart into the tenant namespace. No CodeBuild or manual `helm install` required.
+Tenant provisioning is handled by the Tenant Operator (Rust/kube-rs). The Post-Confirmation Lambda creates a Tenant CR, and the operator reconciles it directly into all K8s resources: Namespace, PVC, ServiceAccount, Deployment, Service, ConfigMap, HTTPRoute, TargetGroupConfiguration, NetworkPolicy, ResourceQuota, PDB, and KEDA HTTPScaledObject. No ArgoCD, CodeBuild, or manual `helm install` required.
 
 ## Image Update CronJob
 
