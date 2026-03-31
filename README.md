@@ -3,6 +3,7 @@
   <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
   <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
+  <a href="https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator"><img src="https://img.shields.io/badge/GHCR-Operator_Image-blue?logo=github" alt="Operator Image"></a>
   <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
 </p>
 
@@ -102,7 +103,7 @@ kubectl apply -f operator/yaml/crd.yaml
 kubectl apply -f operator/yaml/deployment.yaml
 ```
 
-The Operator image is pre-built and published to GHCR (`ghcr.io/snese/openclaw-tenant-operator`). EKS pulls it automatically via ECR pull-through cache -- no local Docker or Rust toolchain needed.
+The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS pulls it automatically via ECR pull-through cache -- no local Docker or Rust toolchain needed.
 
 > **Customizing the Operator**: If you modify `operator/src/`, use `scripts/build-operator.sh` to build and push your own image to ECR.
 
