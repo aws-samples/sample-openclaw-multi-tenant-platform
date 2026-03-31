@@ -219,6 +219,23 @@ cd cdk && npx cdk destroy OpenClawEksStack
 ./scripts/cleanup-test-resources.sh
 ```
 
+## Upgrading
+
+After pulling new changes (`git pull`), update the deployed components:
+
+```bash
+# 1. Infrastructure + Lambda code + Auth UI (CDK deploys all three)
+cd cdk && npx cdk deploy OpenClawEksStack
+
+# 2. Tenant Operator (rebuild + push + restart)
+bash scripts/build-operator.sh
+
+# 3. Auth UI (if you use deploy-auth-ui.sh instead of CDK BucketDeployment)
+bash scripts/deploy-auth-ui.sh
+```
+
+Not all steps are needed for every update. Check the release notes for which components changed.
+
 ## Contributing
 
 Contributions welcome. Please open an issue first to discuss changes.
