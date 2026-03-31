@@ -95,12 +95,20 @@ spec:
               drop:
                 - ALL
           env:
-            # AWS region for SDK calls
             - name: AWS_REGION
               value: "REGION"
-            # Public domain for tenant gateway routing
             - name: GATEWAY_DOMAIN
               value: "DOMAIN"
+            - name: COGNITO_POOL_ARN
+              value: "COGNITO_POOL_ARN"
+            - name: COGNITO_CLIENT_ID
+              value: "COGNITO_CLIENT_ID"
+            - name: COGNITO_DOMAIN
+              value: "COGNITO_DOMAIN"
+            - name: HELM_REPO_URL
+              value: "https://github.com/ORG/REPO.git"
+            - name: HELM_TARGET_REVISION
+              value: "main"
           livenessProbe:
             httpGet:
               path: /health
