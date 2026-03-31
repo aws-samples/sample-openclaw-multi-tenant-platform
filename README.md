@@ -75,9 +75,10 @@ cd sample-openclaw-multi-tenant-platform
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`)
-- kubectl + Helm 3, Node.js 22+, Docker
+- kubectl + Helm 3, Node.js 22+
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** -- public client for SPA)
+- Docker (only if modifying Operator source code)
 
 #### 1. Configure
 
@@ -100,8 +101,21 @@ Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, S
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
 kubectl apply -f operator/yaml/crd.yaml
-kubectl apply -f operator/yaml/deployment.yaml
+
+# Replace placeholders with your account/region values
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+REGION=<region>
+DOMAIN=<your-domain>  # e.g. openclaw.example.com
+ECR="${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
+
+sed \
+  -e "s|ghcr.io/snese/openclaw-tenant-operator|${ECR}/ghcr/snese/openclaw-tenant-operator|g" \
+  -e "s|\"REGION\"|\"${REGION}\"|g" \
+  -e "s|value: \"DOMAIN\"|value: \"${DOMAIN}\"|g" \
+  operator/yaml/deployment.yaml | kubectl apply -f -
 ```
+
+> **Note**: `setup.sh` does this substitution automatically. The manual steps above are only needed if you're deploying step-by-step.
 
 The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS pulls it automatically via ECR pull-through cache -- no local Docker or Rust toolchain needed.
 
