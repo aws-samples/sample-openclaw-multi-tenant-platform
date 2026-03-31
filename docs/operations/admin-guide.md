@@ -5,10 +5,7 @@
 ```
 1. Configure    -> cp cdk.json.example cdk.json (fill context values)
 2. Deploy infra -> npx cdk deploy (~15-20 min)
-3. K8s setup    -> setup-keda.sh + setup-cognito.sh + setup-pvc-backup.sh
-                   + setup-image-update.sh + setup-usage-tracking.sh
-                   + setup-bedrock-latency.sh + setup-coldstart-alarm.sh
-                   + setup-audit-logging.sh
+3. K8s setup    -> setup-keda.sh
 4. Gateway API  -> kubectl apply -f helm/gateway.yaml
 5. First tenant -> create-tenant.sh alice
 6. ALB setup    -> post-deploy.sh (CloudFront #2, Route53, WAF)

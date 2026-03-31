@@ -191,7 +191,7 @@ Records all Bedrock API calls for compliance and forensics.
 - CloudWatch Container Insights for pod-level metrics
 - EKS control plane logging: all 5 types
 
-**Script**: `scripts/setup-audit-logging.sh`
+**Managed by**: CDK (CloudTrail + S3 in `eks-cluster-stack.ts`)
 
 ---
 
