@@ -46,9 +46,13 @@ spec:
         spec:
           serviceAccountName: pvc-backup
           restartPolicy: Never
-          automountServiceAccountToken: true  # needed for kubectl + aws cli
+          # checkov:skip=CKV_K8S_38: CronJob uses kubectl + aws-cli, requires SA token
+          # checkov:skip=CKV_K8S_43: Image tag pinned to minor version, digest changes on every release
+          automountServiceAccountToken: true
           securityContext:
             runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
             seccompProfile:
               type: RuntimeDefault
           containers:

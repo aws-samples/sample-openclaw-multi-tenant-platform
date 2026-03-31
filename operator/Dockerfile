@@ -3,7 +3,8 @@ FROM --platform=$BUILDPLATFORM rust:1.94-bookworm AS builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 # Install cross-compilation toolchain if needed
 RUN case "$TARGETPLATFORM" in \
       "linux/arm64") apt-get update && apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross && \

@@ -1,4 +1,6 @@
 # checkov:skip=CKV2_K8S_6: NetworkPolicy for openclaw-system managed by CDK Pod Security Standards (restricted)
+# checkov:skip=CKV_K8S_43: Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
+# checkov:skip=CKV_K8S_14: Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
 apiVersion: v1
 kind: Namespace
 metadata:
