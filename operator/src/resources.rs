@@ -152,6 +152,11 @@ pub async fn ensure_argocd_app(
                 "name": "in-cluster",
                 "namespace": tenant_ns
             },
+            "ignoreDifferences": [{
+                "group": "apps",
+                "kind": "Deployment",
+                "jsonPointers": ["/spec/replicas"]
+            }],
             "syncPolicy": {
                 "automated": {
                     "prune": true,

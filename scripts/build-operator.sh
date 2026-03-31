@@ -27,11 +27,17 @@ if [[ -f "$CDK_JSON" ]]; then
   DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')")
   GITHUB_OWNER=$(node -e "console.log(require('./$CDK_JSON').context.githubOwner || '')")
   GITHUB_REPO=$(node -e "console.log(require('./$CDK_JSON').context.githubRepo || '')")
+  COGNITO_POOL_ARN=$(node -e "const c=require('./$CDK_JSON').context; const id=c.cognitoPoolId||''; const r='${REGION}'; const a=c.accountId||'${ACCOUNT}'; console.log(id ? 'arn:aws:cognito-idp:'+r+':'+a+':userpool/'+id : '')")
+  COGNITO_CLIENT_ID=$(node -e "console.log(require('./$CDK_JSON').context.cognitoClientId || '')")
+  COGNITO_DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.cognitoDomain || '')")
 else
   echo "Warning: cdk/cdk.json not found, using placeholders for env vars"
   DOMAIN="DOMAIN"
   GITHUB_OWNER="ORG"
   GITHUB_REPO="REPO"
+  COGNITO_POOL_ARN="COGNITO_POOL_ARN"
+  COGNITO_CLIENT_ID="COGNITO_CLIENT_ID"
+  COGNITO_DOMAIN="COGNITO_DOMAIN"
 fi
 
 CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
@@ -41,10 +47,11 @@ kubectl apply -f operator/yaml/crd.yaml
 
 echo "==> Deploying operator (patching placeholders)"
 sed \
-  -e "s|ACCOUNT_ID\.dkr\.ecr\.REGION\.amazonaws\.com|${ECR}|g" \
-  -e "s|ACCOUNT_ID|${ACCOUNT}|g" \
   -e "s|\"REGION\"|\"${REGION}\"|g" \
   -e "s|value: \"DOMAIN\"|value: \"${DOMAIN}\"|g" \
+  -e "s|value: \"COGNITO_POOL_ARN\"|value: \"${COGNITO_POOL_ARN}\"|g" \
+  -e "s|value: \"COGNITO_CLIENT_ID\"|value: \"${COGNITO_CLIENT_ID}\"|g" \
+  -e "s|value: \"COGNITO_DOMAIN\"|value: \"${COGNITO_DOMAIN}\"|g" \
   -e "s|https://github.com/ORG/REPO.git|${CHART_REPO}|g" \
   operator/yaml/deployment.yaml | kubectl apply -f -
 
