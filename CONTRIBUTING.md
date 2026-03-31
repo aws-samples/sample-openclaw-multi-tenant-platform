@@ -124,7 +124,7 @@ The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 2. **Rust**: cargo-deny (license + security advisory audit)
 3. **Platform**: CDK compile + synth with cdk-nag, Helm lint, Python syntax, Shell syntax, ShellCheck
 4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit`, Semgrep, Trivy
-5. **Main-only**: K8s integration test (k3d), Docker build
+5. **Main-only**: Docker smoke test (build image + verify binary starts)
 
 ### Supply Chain Hardening
 
