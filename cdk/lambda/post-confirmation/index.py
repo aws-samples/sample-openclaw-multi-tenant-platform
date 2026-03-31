@@ -81,7 +81,7 @@ def _k8s_apply(endpoint, ssl_ctx, bearer, url, body):
             'Content-Type': 'application/apply-patch+yaml',
         })
     try:
-        urllib.request.urlopen(req, context=ssl_ctx)  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310 -- URL scheme validated by _validate_url()
+        urllib.request.urlopen(req, context=ssl_ctx)  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310  # nosec B310 -- URL scheme validated by _validate_url()
     except urllib.error.HTTPError as e:
         if e.code == 409:
             return  # Conflict, resource exists with different field manager -- acceptable
@@ -93,7 +93,7 @@ def _k8s_get(endpoint, ssl_ctx, bearer, url):
     _validate_url(url)
     req = urllib.request.Request(url, headers={'Authorization': f'Bearer {bearer}'})
     try:
-        resp = urllib.request.urlopen(req, context=ssl_ctx)  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310 -- URL scheme validated by _validate_url()
+        resp = urllib.request.urlopen(req, context=ssl_ctx)  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310  # nosec B310 -- URL scheme validated by _validate_url()
         return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         if e.code == 404:

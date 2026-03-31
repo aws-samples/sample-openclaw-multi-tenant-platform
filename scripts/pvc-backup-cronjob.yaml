@@ -54,9 +54,13 @@ spec:
           containers:
             - name: backup
               image: amazon/aws-cli:2.27.0
+              imagePullPolicy: Always
               securityContext:
                 runAsNonRoot: true
                 readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
               resources:
                 requests:
                   cpu: 50m
@@ -64,9 +68,6 @@ spec:
                 limits:
                   cpu: 200m
                   memory: 256Mi
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop: [ALL]
               volumeMounts:
               - name: tmp
                 mountPath: /tmp
