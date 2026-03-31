@@ -70,30 +70,70 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     let oref = tenant.object_ref(&());
     let ssapply = PatchParams::apply("tenant-operator").force();
 
+    // Set phase to Provisioning at the start of reconciliation
+    let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
+    let provisioning_status = json!({
+        "apiVersion": "openclaw.io/v1alpha1",
+        "kind": "Tenant",
+        "status": {
+            "phase": "Provisioning",
+            "conditions": []
+        }
+    });
+    tenants
+        .patch_status(&name, &ssapply, &Patch::Apply(provisioning_status))
+        .await
+        .map_err(Error::KubeError)?;
+
+    // Ensure resources — collect conditions as we go
+    let mut conditions = Vec::new();
+
     resources::ensure_namespace(client.clone(), &name, tenant_ns, &ssapply).await?;
+    conditions.push(json!({ "type": "NamespaceReady", "status": "True" }));
+
     let pvc_condition = resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
+    conditions.push(pvc_condition);
+
     resources::ensure_service_account(client.clone(), &name, tenant_ns, &ssapply).await?;
+
     let argocd_condition =
         resources::ensure_argocd_app(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
             .await?;
+    conditions.push(argocd_condition);
+
     let keda_condition =
         resources::ensure_keda_hso(client.clone(), &name, tenant_ns, &ssapply).await?;
+    conditions.push(keda_condition);
 
-    // Update status
+    // Check ArgoCD Application sync + health status
+    let argocd_ready = check_argocd_sync(&client, &name).await;
+    conditions.push(argocd_ready.clone());
+
+    // Check actual Deployment availability
+    let deploy_condition = check_deployment(&client, &name, tenant_ns).await;
+    conditions.push(deploy_condition.clone());
+
+    // Determine phase based on actual readiness
+    let argocd_ok = argocd_ready.get("status").and_then(|v| v.as_str()) == Some("True");
+    let deploy_ok = deploy_condition.get("status").and_then(|v| v.as_str()) == Some("True");
+
+    let phase = if !tenant.spec.enabled {
+        "Suspended"
+    } else if argocd_ok && deploy_ok {
+        "Ready"
+    } else {
+        "Provisioning"
+    };
+
+    // Update status with accurate phase
     let status = json!({
         "apiVersion": "openclaw.io/v1alpha1",
         "kind": "Tenant",
         "status": {
-            "phase": if tenant.spec.enabled { "Ready" } else { "Suspended" },
-            "conditions": [
-                { "type": "NamespaceReady", "status": "True" },
-                pvc_condition,
-                argocd_condition,
-                keda_condition
-            ]
+            "phase": phase,
+            "conditions": conditions
         }
     });
-    let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
     tenants
         .patch_status(&name, &ssapply, &Patch::Apply(status))
         .await
@@ -105,7 +145,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             &Event {
                 type_: EventType::Normal,
                 reason: "Reconciled".into(),
-                note: Some(format!("Tenant {name} reconciled successfully")),
+                note: Some(format!("Tenant {name} reconciled: phase={phase}")),
                 action: "Reconciling".into(),
                 secondary: None,
             },
@@ -114,8 +154,115 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
         .await
         .map_err(Error::KubeError)?;
 
-    // Requeue every 5 minutes for drift detection
-    Ok(Action::requeue(Duration::from_secs(300)))
+    // If not fully ready yet, requeue sooner for faster convergence
+    let requeue_secs = if phase == "Ready" { 300 } else { 30 };
+    Ok(Action::requeue(Duration::from_secs(requeue_secs)))
+}
+
+/// Check ArgoCD Application sync and health status.
+/// Reads ARGOCD_NAMESPACE env var (default: "argocd") for portability.
+async fn check_argocd_sync(client: &Client, name: &str) -> serde_json::Value {
+    use kube::api::{ApiResource, DynamicObject};
+
+    let argocd_ns = std::env::var("ARGOCD_NAMESPACE").unwrap_or_else(|_| "argocd".into());
+
+    let ar = ApiResource {
+        group: "argoproj.io".into(),
+        version: "v1alpha1".into(),
+        kind: "Application".into(),
+        api_version: "argoproj.io/v1alpha1".into(),
+        plural: "applications".into(),
+    };
+    let app_api: Api<DynamicObject> = Api::namespaced_with(client.clone(), &argocd_ns, &ar);
+    let app_name = format!("tenant-{name}");
+
+    match app_api.get(&app_name).await {
+        Ok(app) => {
+            let status = app.data.get("status");
+            let sync_status = status
+                .and_then(|s| s.get("sync"))
+                .and_then(|s| s.get("status"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown");
+            let health_status = status
+                .and_then(|s| s.get("health"))
+                .and_then(|s| s.get("status"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown");
+
+            let ok = sync_status == "Synced" && health_status == "Healthy";
+            json!({
+                "type": "ArgoSyncHealthy",
+                "status": if ok { "True" } else { "False" },
+                "message": format!("sync={sync_status}, health={health_status}")
+            })
+        }
+        Err(e) => {
+            json!({
+                "type": "ArgoSyncHealthy",
+                "status": "False",
+                "message": format!("Failed to get ArgoCD Application: {e}")
+            })
+        }
+    }
+}
+
+/// Check if the tenant Deployment has available replicas
+async fn check_deployment(client: &Client, name: &str, tenant_ns: &str) -> serde_json::Value {
+    use k8s_openapi::api::apps::v1::Deployment;
+
+    let deploy_api: Api<Deployment> = Api::namespaced(client.clone(), tenant_ns);
+    match deploy_api.get(name).await {
+        Ok(deploy) => {
+            let available = deploy
+                .status
+                .as_ref()
+                .and_then(|s| s.available_replicas)
+                .unwrap_or(0);
+            let (status, message) = if available >= 1 {
+                ("True", "Deployment has available replicas".to_string())
+            } else {
+                (
+                    "False",
+                    "Deployment has no available replicas yet".to_string(),
+                )
+            };
+            json!({ "type": "DeploymentAvailable", "status": status, "message": message })
+        }
+        Err(_) => {
+            json!({
+                "type": "DeploymentAvailable",
+                "status": "False",
+                "message": "Deployment not found (ArgoCD may not have synced yet)"
+            })
+        }
+    }
+}
+
+/// Best-effort: update Tenant CR status to Error phase.
+/// Called synchronously from error_policy context to avoid race conditions
+/// with subsequent reconciliations.
+async fn set_error_status(client: Client, name: &str, error_msg: &str) {
+    let tenants: Api<Tenant> = Api::default_namespaced(client);
+    let ssapply = PatchParams::apply("tenant-operator").force();
+    let status = json!({
+        "apiVersion": "openclaw.io/v1alpha1",
+        "kind": "Tenant",
+        "status": {
+            "phase": "Error",
+            "conditions": [{
+                "type": "ReconcileError",
+                "status": "True",
+                "message": error_msg
+            }]
+        }
+    });
+    if let Err(e) = tenants
+        .patch_status(name, &ssapply, &Patch::Apply(status))
+        .await
+    {
+        warn!("Failed to set Error phase for {name}: {e}");
+    }
 }
 
 /// Cleanup on tenant deletion
@@ -159,8 +306,17 @@ async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Res
     Ok(Action::await_change())
 }
 
-fn error_policy(tenant: Arc<Tenant>, error: &Error, _ctx: Arc<Context>) -> Action {
-    warn!("Reconcile failed for {}: {:?}", tenant.name_any(), error);
+fn error_policy(tenant: Arc<Tenant>, error: &Error, ctx: Arc<Context>) -> Action {
+    let name = tenant.name_any();
+    warn!("Reconcile failed for {}: {:?}", name, error);
+
+    // Set Error phase synchronously via block_on to avoid race conditions
+    // with subsequent reconciliations that might succeed and set Ready.
+    let client = ctx.client.clone();
+    let error_msg = format!("{error}");
+    let rt = tokio::runtime::Handle::current();
+    rt.block_on(set_error_status(client, &name, &error_msg));
+
     Action::requeue(Duration::from_secs(60))
 }
 
