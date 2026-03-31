@@ -237,6 +237,31 @@ async fn cleanup(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Res
 
     info!("Cleaning up Tenant \"{name}\"");
 
+    // Delete ArgoCD Application first (so ArgoCD can clean up its managed resources)
+    let argocd_ns = std::env::var("ARGOCD_NAMESPACE").unwrap_or_else(|_| "argocd".into());
+    let ar = kube::api::ApiResource {
+        group: "argoproj.io".into(),
+        version: "v1alpha1".into(),
+        kind: "Application".into(),
+        api_version: "argoproj.io/v1alpha1".into(),
+        plural: "applications".into(),
+    };
+    let app_api: Api<kube::api::DynamicObject> =
+        Api::namespaced_with(client.clone(), &argocd_ns, &ar);
+    let app_name = format!("tenant-{name}");
+    if app_api
+        .get_opt(&app_name)
+        .await
+        .map_err(Error::KubeError)?
+        .is_some()
+    {
+        app_api
+            .delete(&app_name, &Default::default())
+            .await
+            .map_err(Error::KubeError)?;
+        info!("Deleted ArgoCD Application {app_name}");
+    }
+
     // Delete namespace (cascades all resources inside)
     // PVC retention is handled by StorageClass reclaimPolicy
     let ns_api: Api<k8s_openapi::api::core::v1::Namespace> = Api::all(client.clone());
