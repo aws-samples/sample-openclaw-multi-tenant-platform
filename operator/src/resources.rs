@@ -364,15 +364,34 @@ pub async fn ensure_deployment(
                     },
                     "initContainers": [
                         {
-                            "name": "init-config",
+                            "name": "init-setup",
                             "image": &full_image,
                             "resources": {
-                                "limits": { "cpu": "500m", "memory": "256Mi" },
-                                "requests": { "cpu": "100m", "memory": "128Mi" }
+                                "limits": { "cpu": "1", "memory": "1Gi" },
+                                "requests": { "cpu": "200m", "memory": "256Mi" }
                             },
-                            "command": ["sh", "-c",
-                                "mkdir -p /home/node/.openclaw && cp /config/openclaw.json /home/node/.openclaw/openclaw.json"
-                            ],
+                            "command": ["sh", "-c"],
+                            "args": [concat!(
+                                "mkdir -p /home/node/.openclaw /home/node/.openclaw/workspace/bin\n",
+                                "cp /config/openclaw.json /home/node/.openclaw/openclaw.json\n",
+                                "if [ ! -f /home/node/.openclaw/workspace/node_modules/@aws-sdk/client-secrets-manager/dist-cjs/index.js ]; then\n",
+                                "  cd /home/node/.openclaw/workspace && npm install --no-save @aws-sdk/client-secrets-manager 2>/dev/null\n",
+                                "fi\n",
+                                "for IMDS_FILE in \\\n",
+                                "  /home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js \\\n",
+                                "  /app/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js; do\n",
+                                "  if [ -f \"$IMDS_FILE\" ] && ! grep -q \"169.254.170.23\" \"$IMDS_FILE\"; then\n",
+                                "    sed -i 's/\"127.0.0.1\": true,/\"127.0.0.1\": true, \"169.254.170.23\": true,/' \"$IMDS_FILE\"\n",
+                                "  fi\n",
+                                "done\n",
+                                "cp /config/fetch-secret.mjs /home/node/.openclaw/workspace/bin/fetch-secret.mjs\n",
+                                "chmod 700 /home/node/.openclaw/workspace/bin/fetch-secret.mjs"
+                            )],
+                            "securityContext": {
+                                "readOnlyRootFilesystem": true,
+                                "allowPrivilegeEscalation": false,
+                                "capabilities": { "drop": ["ALL"] }
+                            },
                             "volumeMounts": [
                                 { "name": "config", "mountPath": "/config" },
                                 { "name": "data", "mountPath": "/home/node/.openclaw" },
@@ -387,6 +406,11 @@ pub async fn ensure_deployment(
                                 "requests": { "cpu": "100m", "memory": "128Mi" }
                             },
                             "command": ["node", "dist/index.js", "doctor", "--fix", "--non-interactive"],
+                            "securityContext": {
+                                "readOnlyRootFilesystem": true,
+                                "allowPrivilegeEscalation": false,
+                                "capabilities": { "drop": ["ALL"] }
+                            },
                             "volumeMounts": [
                                 { "name": "data", "mountPath": "/home/node/.openclaw" },
                                 { "name": "tmp", "mountPath": "/tmp" }
@@ -404,36 +428,12 @@ pub async fn ensure_deployment(
                                 { "name": "HOME", "value": "/tmp" },
                                 { "name": "NPM_CONFIG_CACHE", "value": "/tmp/.npm" }
                             ],
-                            "volumeMounts": [
-                                { "name": "data", "mountPath": "/home/node/.openclaw" },
-                                { "name": "tmp", "mountPath": "/tmp" }
-                            ]
-                        },
-                        {
-                            "name": "init-tools",
-                            "image": &full_image,
-                            "resources": {
-                                "limits": { "cpu": "1", "memory": "1Gi" },
-                                "requests": { "cpu": "200m", "memory": "256Mi" }
+                            "securityContext": {
+                                "readOnlyRootFilesystem": true,
+                                "allowPrivilegeEscalation": false,
+                                "capabilities": { "drop": ["ALL"] }
                             },
-                            "command": ["sh", "-c"],
-                            "args": [concat!(
-                                "mkdir -p /home/node/.openclaw/workspace/bin\n",
-                                "if [ ! -f /home/node/.openclaw/workspace/node_modules/@aws-sdk/client-secrets-manager/dist-cjs/index.js ]; then\n",
-                                "  cd /home/node/.openclaw/workspace && npm install --no-save @aws-sdk/client-secrets-manager 2>/dev/null\n",
-                                "fi\n",
-                                "for IMDS_FILE in \\\n",
-                                "  /home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js \\\n",
-                                "  /app/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js; do\n",
-                                "  if [ -f \"$IMDS_FILE\" ] && ! grep -q \"169.254.170.23\" \"$IMDS_FILE\"; then\n",
-                                "    sed -i 's/\"127.0.0.1\": true,/\"127.0.0.1\": true, \"169.254.170.23\": true,/' \"$IMDS_FILE\"\n",
-                                "  fi\n",
-                                "done\n",
-                                "cp /config/fetch-secret.mjs /home/node/.openclaw/workspace/bin/fetch-secret.mjs\n",
-                                "chmod 700 /home/node/.openclaw/workspace/bin/fetch-secret.mjs"
-                            )],
                             "volumeMounts": [
-                                { "name": "config", "mountPath": "/config" },
                                 { "name": "data", "mountPath": "/home/node/.openclaw" },
                                 { "name": "tmp", "mountPath": "/tmp" }
                             ]

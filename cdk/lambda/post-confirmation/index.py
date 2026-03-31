@@ -66,26 +66,26 @@ def get_eks_token():
     return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
 
 
-def _k8s_apply(endpoint, ssl_ctx, bearer, url, body, method='PUT'):
-    """Apply a K8s resource via PUT, falling back to POST on 404."""
+def _k8s_apply(endpoint, ssl_ctx, bearer, url, body):
+    """Apply a K8s resource using server-side apply (PATCH).
+
+    Server-side apply avoids the 422 error from PUT without resourceVersion
+    on existing resources, and handles create-or-update in a single call.
+    """
     _validate_url(url)
     data = json.dumps(body).encode()
-    # Try PUT (update), fall back to POST (create)
-    post_url = url.rsplit('/', 1)[0]  # Remove resource name for POST
-    for m in [method, 'POST'] if method == 'PUT' else [method]:
-        req_url = url if m == 'PUT' else post_url
-        _validate_url(req_url)
-        req = urllib.request.Request(req_url, data=data, method=m,
-            headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
-        try:
-            urllib.request.urlopen(req, context=ssl_ctx)
-            return
-        except urllib.error.HTTPError as e:
-            if m == 'PUT' and e.code == 404:
-                continue
-            if e.code == 409:
-                return  # Already exists
-            raise
+    req = urllib.request.Request(url + '?fieldManager=post-confirmation-lambda&force=true',
+        data=data, method='PATCH',
+        headers={
+            'Authorization': f'Bearer {bearer}',
+            'Content-Type': 'application/apply-patch+yaml',
+        })
+    try:
+        urllib.request.urlopen(req, context=ssl_ctx)
+    except urllib.error.HTTPError as e:
+        if e.code == 409:
+            return  # Conflict, resource exists with different field manager — acceptable
+        raise
 
 
 def create_tenant_cr(tenant, email):
