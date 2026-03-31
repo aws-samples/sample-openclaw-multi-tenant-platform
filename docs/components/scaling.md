@@ -75,6 +75,29 @@ During cold start, the KEDA interceptor holds the request. Custom 503 page with 
 
 EBS volumes ($0.08/GB/mo for gp3) always charged: $0.80/mo per tenant at 10Gi.
 
+## Always-On Mode
+
+By default, tenant Pods scale to zero after 15 minutes of no HTTP traffic. This is ideal for interactive workspaces but breaks background tasks like OpenClaw cron jobs, which run inside the gateway process and don't generate external HTTP requests.
+
+Set `alwaysOn: true` in the Tenant CR spec to keep the Pod running 24/7:
+
+```yaml
+apiVersion: openclaw.io/v1alpha1
+kind: Tenant
+metadata:
+  name: my-tenant
+spec:
+  alwaysOn: true   # keeps minReplicas=1, Pod never scales to zero
+  # ...
+```
+
+| Mode | minReplicas | Cron jobs | Cost |
+|------|-------------|-----------|------|
+| `alwaysOn: false` (default) | 0 | Stop when Pod scales down | Pay per use |
+| `alwaysOn: true` | 1 | Run 24/7 | ~$15-30/mo per tenant |
+
+The Operator passes `alwaysOn` to `ensure_keda_hso`, which sets `replicas.min` accordingly. No changes to the Helm chart or KEDA configuration are needed.
+
 ## Manual Override
 
 > Note: For ArgoCD-managed tenants, direct `helm upgrade` changes will be reverted by ArgoCD's selfHeal. To change scale-to-zero settings, update the Operator's KEDA HSO logic or the ArgoCD Application values.

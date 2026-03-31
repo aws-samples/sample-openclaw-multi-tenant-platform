@@ -23,6 +23,9 @@ spec:
     - jsonPath: .spec.budget.monthlyUSD
       name: Budget
       type: integer
+    - jsonPath: .spec.alwaysOn
+      name: AlwaysOn
+      type: boolean
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -31,6 +34,10 @@ spec:
           spec:
             description: Tenant CRD spec — the desired state for one OpenClaw tenant
             properties:
+              alwaysOn:
+                default: false
+                description: Keep Pod running 24/7 (skip scale-to-zero). For tenants with cron jobs.
+                type: boolean
               budget:
                 description: Budget configuration
                 nullable: true
