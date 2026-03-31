@@ -285,13 +285,6 @@ Learn how each component works:
 | [Migration](docs/operations/migration.md) | v1 → v2 upgrade |
 | [Webhook Setup](docs/operations/webhook.md) | Slack/Discord integration |
 
-### Design (Future)
-| Design | Description |
-|--------|-------------|
-| [Tenant CRD](docs/design/tenant-crd.md) | Kubernetes Operator |
-| [Multi-Region](docs/design/multi-region.md) | DR architecture |
-| [Terraform](docs/design/terraform.md) | IaC alternative |
-
 ## Project Structure
 
 ```
@@ -311,7 +304,6 @@ Learn how each component works:
 │   ├── security.md
 │   ├── components/             # Per-component deep dives
 │   ├── operations/             # Admin, user, migration, webhook guides
-│   └── design/                 # Future: Tenant CRD, multi-region, Terraform
 ├── scripts/                    # 20+ operations scripts
 ├── .github/workflows/ci.yml   # CI pipeline
 └── LICENSE                     # MIT
