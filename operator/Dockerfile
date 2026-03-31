@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM --platform=$BUILDPLATFORM rust:1.94-slim AS builder
+FROM --platform=$BUILDPLATFORM rust:1.94-bookworm AS builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 WORKDIR /app
