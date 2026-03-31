@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import base64
 import secrets
 import urllib.request
 import urllib.parse
@@ -30,9 +31,25 @@ def _validate_url(url):
         raise ValueError(f'URL scheme {parsed.scheme!r} not allowed, must be one of {ALLOWED_URL_SCHEMES}')
 
 
+def _get_eks_context():
+    """Get EKS endpoint, CA cert SSL context, and bearer token."""
+    import ssl
+    import tempfile
+    cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
+    endpoint = cluster['endpoint']
+    ca_data = cluster['certificateAuthority']['data']
+    _validate_url(endpoint)
+
+    ca_file = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
+    ca_file.write(base64.b64decode(ca_data))
+    ca_file.close()
+    ctx = ssl.create_default_context(cafile=ca_file.name)
+
+    return endpoint, ctx, get_eks_token()
+
+
 def get_eks_token():
     """Generate EKS bearer token using STS presigned URL."""
-    import base64
     from botocore.signers import RequestSigner
     session = boto3.session.Session()
     client = session.client('sts', region_name=REGION)
@@ -49,21 +66,33 @@ def get_eks_token():
     return 'k8s-aws-v1.' + base64.urlsafe_b64encode(signed_url.encode()).decode().rstrip('=')
 
 
+def _k8s_apply(endpoint, ssl_ctx, bearer, url, body, method='PUT'):
+    """Apply a K8s resource via PUT, falling back to POST on 404."""
+    _validate_url(url)
+    data = json.dumps(body).encode()
+    # Try PUT (update), fall back to POST (create)
+    post_url = url.rsplit('/', 1)[0]  # Remove resource name for POST
+    for m in [method, 'POST'] if method == 'PUT' else [method]:
+        req_url = url if m == 'PUT' else post_url
+        _validate_url(req_url)
+        req = urllib.request.Request(req_url, data=data, method=m,
+            headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
+        try:
+            urllib.request.urlopen(req, context=ssl_ctx)
+            return
+        except urllib.error.HTTPError as e:
+            if m == 'PUT' and e.code == 404:
+                continue
+            if e.code == 409:
+                return  # Already exists
+            raise
+
+
 def create_tenant_cr(tenant, email):
-    """Create a Tenant CR via K8s API (single attempt, must complete within Cognito 5s limit)."""
-    return _create_tenant_cr_inner(tenant, email)
-
-
-def _create_tenant_cr_inner(tenant, email):
-    import base64
-    cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
-    endpoint = cluster['endpoint']
-    ca_data = cluster['certificateAuthority']['data']
-
-    # Validate EKS endpoint URL scheme
-    _validate_url(endpoint)
-
-    tenant_cr = json.dumps({
+    """Create a Tenant CR via K8s API."""
+    endpoint, ssl_ctx, bearer = _get_eks_context()
+    url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{tenant}"
+    body = {
         "apiVersion": "openclaw.io/v1alpha1",
         "kind": "Tenant",
         "metadata": {"name": tenant, "namespace": "openclaw-system"},
@@ -75,32 +104,29 @@ def _create_tenant_cr_inner(tenant, email):
             "budget": {"monthlyUSD": 100},
             "enabled": True,
         }
-    }).encode()
+    }
+    _k8s_apply(endpoint, ssl_ctx, bearer, url, body)
 
-    import ssl, tempfile
-    ca_file = tempfile.NamedTemporaryFile(delete=False, suffix='.crt')
-    ca_file.write(base64.b64decode(ca_data))
-    ca_file.close()
-    ctx = ssl.create_default_context(cafile=ca_file.name)
 
-    url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{tenant}"
-    bearer = get_eks_token()
-
-    # Try PUT (update), fall back to POST (create)
-    for method in ['PUT', 'POST']:
-        req_url = url if method == 'PUT' else f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants"
-        _validate_url(req_url)
-        req = urllib.request.Request(req_url, data=tenant_cr, method=method,
-            headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
-        try:
-            urllib.request.urlopen(req, context=ctx)
-            return
-        except urllib.error.HTTPError as e:
-            if method == 'PUT' and e.code == 404:
-                continue  # Not found, try POST
-            if e.code == 409:
-                return  # Already exists
-            raise
+def create_gateway_secret(tenant, ns, token):
+    """Create K8s Secret with gateway token so pod and auth-ui use the same token."""
+    endpoint, ssl_ctx, bearer = _get_eks_context()
+    secret_name = f"{tenant}-openclaw-helm-gateway-token"
+    url = f"{endpoint}/api/v1/namespaces/{ns}/secrets/{secret_name}"
+    body = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": secret_name,
+            "namespace": ns,
+            "labels": {"app.kubernetes.io/managed-by": "post-confirmation-lambda"},
+        },
+        "type": "Opaque",
+        "data": {
+            "OPENCLAW_GATEWAY_TOKEN": base64.b64encode(token.encode()).decode(),
+        }
+    }
+    _k8s_apply(endpoint, ssl_ctx, bearer, url, body)
 
 
 def handler(event, context):
@@ -109,7 +135,11 @@ def handler(event, context):
     tenant = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
     ns = f'openclaw-{tenant}'
 
-    # 1. Pod Identity Association
+    # 1. Validate tenant name (defense in depth)
+    if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
+        raise Exception(f'Invalid tenant name: {tenant}')
+
+    # 2. Pod Identity Association
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
@@ -119,17 +149,14 @@ def handler(event, context):
         if 'already exists' not in str(e).lower():
             raise
 
-    # 2. Validate tenant name (defense in depth)
-    if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
-        raise Exception(f'Invalid tenant name: {tenant}')
-
-    # 3. Gateway token -> SM + Cognito attribute
+    # 3. Gateway token -> SM + Cognito attribute + K8s Secret
     username = event['userName']
     token = secrets.token_urlsafe(32)
     secret_name = f'openclaw/{tenant}/gateway-token'
     try:
         sm.create_secret(Name=secret_name, SecretString=token,
-                         Tags=[{'Key': 'tenant', 'Value': tenant}])
+                         Tags=[{'Key': 'tenant', 'Value': tenant},
+                               {'Key': 'tenant-namespace', 'Value': ns}])
     except ClientError as e:
         code = e.response['Error']['Code']
         if code == 'InvalidRequestException':
@@ -146,7 +173,10 @@ def handler(event, context):
     # 4. Create Tenant CR -> Operator handles the rest
     create_tenant_cr(tenant, email)
 
-    # 5. Notify admin
+    # 5. Create K8s Secret with gateway token (single source of truth from SM)
+    create_gateway_secret(tenant, ns, token)
+
+    # 6. Notify admin
     sns.publish(
         TopicArn=TOPIC_ARN, Subject='New Tenant Created',
         Message=f'Tenant: {tenant} ({email})\nURL: https://{DOMAIN}/t/{tenant}',
