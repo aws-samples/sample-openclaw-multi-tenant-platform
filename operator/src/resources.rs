@@ -680,7 +680,6 @@ pub async fn ensure_httproute(
     name: &str,
     tenant_ns: &str,
     ssapply: &PatchParams,
-    cognito_pool_arn: &str,
 ) -> Result<Value> {
     let httproute_ar = ApiResource::from_gvk_with_plural(
         &kube::api::GroupVersionKind::gvk("gateway.networking.k8s.io", "v1", "HTTPRoute"),
@@ -688,20 +687,10 @@ pub async fn ensure_httproute(
     );
     let httproute_api: Api<DynamicObject> = Api::namespaced_with(client, tenant_ns, &httproute_ar);
 
-    let mut httproute_rules = vec![json!({
+    let httproute_rules = vec![json!({
         "matches": [{ "path": { "type": "PathPrefix", "value": format!("/t/{name}") } }],
         "backendRefs": [{ "name": name, "port": 18789 }]
     })];
-    if !cognito_pool_arn.is_empty() {
-        httproute_rules[0]["filters"] = json!([{
-            "type": "ExtensionRef",
-            "extensionRef": {
-                "group": "gateway.k8s.aws",
-                "kind": "ListenerRuleConfiguration",
-                "name": format!("{name}-cognito")
-            }
-        }]);
-    }
 
     let httproute_patch: Value = json!({
         "apiVersion": "gateway.networking.k8s.io/v1",
@@ -737,74 +726,6 @@ pub async fn ensure_httproute(
             warn!("HTTPRoute {name} failed: {e}");
             Ok(json!({ "type": "HTTPRouteReady", "status": "False", "message": e.to_string() }))
         }
-    }
-}
-
-pub async fn ensure_lrc(
-    client: Client,
-    name: &str,
-    tenant_ns: &str,
-    ssapply: &PatchParams,
-    cognito_pool_arn: &str,
-    cognito_client_id: &str,
-    cognito_domain: &str,
-) -> Result<Value> {
-    let lrc_ar = ApiResource::from_gvk_with_plural(
-        &kube::api::GroupVersionKind::gvk(
-            "gateway.k8s.aws",
-            "v1beta1",
-            "ListenerRuleConfiguration",
-        ),
-        "listenerruleconfigurations",
-    );
-    let lrc_api: Api<DynamicObject> = Api::namespaced_with(client, tenant_ns, &lrc_ar);
-    let lrc_name = format!("{name}-cognito");
-
-    if !cognito_pool_arn.is_empty() {
-        let lrc_patch: Value = json!({
-            "apiVersion": "gateway.k8s.aws/v1beta1",
-            "kind": "ListenerRuleConfiguration",
-            "metadata": {
-                "name": &lrc_name,
-                "namespace": tenant_ns,
-                "labels": {
-                    "openclaw.io/tenant": name,
-                    "app.kubernetes.io/managed-by": "tenant-operator"
-                }
-            },
-            "spec": {
-                "actions": [{
-                    "type": "authenticate-cognito",
-                    "authenticateCognitoConfig": {
-                        "userPoolArn": cognito_pool_arn,
-                        "userPoolClientId": cognito_client_id,
-                        "userPoolDomain": cognito_domain,
-                        "onUnauthenticatedRequest": "authenticate",
-                        "scope": "openid email profile",
-                        "sessionTimeout": 604800
-                    }
-                }]
-            }
-        });
-        match lrc_api
-            .patch(&lrc_name, ssapply, &Patch::Apply(lrc_patch))
-            .await
-        {
-            Ok(_) => {
-                info!("Ensured ListenerRuleConfiguration {lrc_name} in {tenant_ns}");
-                Ok(json!({ "type": "CognitoAuthReady", "status": "True" }))
-            }
-            Err(e) => {
-                warn!("ListenerRuleConfiguration {lrc_name} failed: {e}");
-                Ok(
-                    json!({ "type": "CognitoAuthReady", "status": "False", "message": e.to_string() }),
-                )
-            }
-        }
-    } else {
-        Ok(
-            json!({ "type": "CognitoAuthReady", "status": "True", "message": "Cognito not configured, skipped" }),
-        )
     }
 }
 

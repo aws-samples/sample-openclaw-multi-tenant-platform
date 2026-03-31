@@ -183,10 +183,8 @@ skills:
   - weather
   - gog
 
-gateway:
-  token:
-    generate: false
-    secretName: ""
+# Gateway token is created by PostConfirmation Lambda as a K8s Secret
+# named {tenant}-gateway-token. See docs/naming-convention.md.
 
 env: {}
 
