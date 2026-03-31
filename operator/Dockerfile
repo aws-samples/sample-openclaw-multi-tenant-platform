@@ -23,8 +23,10 @@ RUN case "$TARGETPLATFORM" in \
 
 # Stage 2: Runtime (distroless -- minimal attack surface, multi-arch)
 FROM gcr.io/distroless/cc-debian12
+LABEL org.opencontainers.image.source="https://github.com/snese/sample-openclaw-multi-tenant-platform"
+LABEL org.opencontainers.image.description="OpenClaw Tenant Operator -- manages tenant lifecycle on EKS"
+LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=builder /app/target/release/tenant-operator /
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/tenant-operator"]
-# trigger operator build
