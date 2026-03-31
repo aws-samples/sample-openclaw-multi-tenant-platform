@@ -84,8 +84,42 @@ def _k8s_apply(endpoint, ssl_ctx, bearer, url, body):
         urllib.request.urlopen(req, context=ssl_ctx)
     except urllib.error.HTTPError as e:
         if e.code == 409:
-            return  # Conflict, resource exists with different field manager — acceptable
+            return  # Conflict, resource exists with different field manager -- acceptable
         raise
+
+
+def _k8s_get(endpoint, ssl_ctx, bearer, url):
+    """GET a K8s resource. Returns parsed JSON or None if 404."""
+    _validate_url(url)
+    req = urllib.request.Request(url, headers={'Authorization': f'Bearer {bearer}'})
+    try:
+        resp = urllib.request.urlopen(req, context=ssl_ctx)
+        return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+
+
+def _resolve_tenant_name(base_name, email):
+    """Resolve a unique tenant name by checking existing Tenant CRs.
+
+    If base_name is not taken (or is owned by the same email), return it.
+    Otherwise, append -2, -3, ... up to -9 to find a free name.
+    Raises if no free name found within 9 attempts.
+    """
+    endpoint, ssl_ctx, bearer = _get_eks_context()
+
+    for suffix in ['', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']:
+        candidate = f'{base_name}{suffix}'[:63]  # K8s name limit
+        url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{candidate}"
+        existing = _k8s_get(endpoint, ssl_ctx, bearer, url)
+        if existing is None:
+            return candidate  # Name is free
+        existing_email = existing.get('spec', {}).get('email', '')
+        if existing_email == email:
+            return candidate  # Same user re-confirming, reuse existing tenant
+    raise Exception(f'Could not find a unique tenant name for {base_name} after 9 attempts')
 
 
 def create_tenant_cr(tenant, email):
@@ -132,14 +166,17 @@ def create_gateway_secret(tenant, ns, token):
 def handler(event, context):
     email = event['request']['userAttributes']['email']
     local = email.split('@')[0].lower()
-    tenant = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
+    base_name = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
+
+    # 1. Validate base tenant name (defense in depth)
+    if not base_name or len(base_name) > 63 or not all(c.isalnum() or c == '-' for c in base_name):
+        raise Exception(f'Invalid tenant name: {base_name}')
+
+    # 2. Resolve unique tenant name (check for collisions)
+    tenant = _resolve_tenant_name(base_name, email)
     ns = f'openclaw-{tenant}'
 
-    # 1. Validate tenant name (defense in depth)
-    if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
-        raise Exception(f'Invalid tenant name: {tenant}')
-
-    # 2. Pod Identity Association
+    # 3. Pod Identity Association
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
@@ -149,7 +186,7 @@ def handler(event, context):
         if 'already exists' not in str(e).lower():
             raise
 
-    # 3. Gateway token -> SM + Cognito attribute + K8s Secret
+    # 4. Gateway token -> SM + Cognito attribute + K8s Secret
     username = event['userName']
     token = secrets.token_urlsafe(32)
     secret_name = f'openclaw/{tenant}/gateway-token'
@@ -166,17 +203,22 @@ def handler(event, context):
             sm.update_secret(SecretId=secret_name, SecretString=token)
         else:
             raise
+
+    # 5. Store tenant name in Cognito so frontend can look it up on sign-in
     cognito.admin_update_user_attributes(
         UserPoolId=USER_POOL_ID, Username=username,
-        UserAttributes=[{'Name': 'custom:gateway_token', 'Value': token}])
+        UserAttributes=[
+            {'Name': 'custom:gateway_token', 'Value': token},
+            {'Name': 'custom:tenant_name', 'Value': tenant},
+        ])
 
-    # 4. Create Tenant CR -> Operator handles the rest
+    # 6. Create Tenant CR -> Operator handles the rest
     create_tenant_cr(tenant, email)
 
-    # 5. Create K8s Secret with gateway token (single source of truth from SM)
+    # 7. Create K8s Secret with gateway token (single source of truth from SM)
     create_gateway_secret(tenant, ns, token)
 
-    # 6. Notify admin
+    # 8. Notify admin
     sns.publish(
         TopicArn=TOPIC_ARN, Subject='New Tenant Created',
         Message=f'Tenant: {tenant} ({email})\nURL: https://{DOMAIN}/t/{tenant}',
