@@ -76,7 +76,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: tenant-operator
-          image: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openclaw-tenant-operator:latest  # Replace with your ECR image
+          image: ghcr.io/snese/openclaw-tenant-operator:latest  # Pulled via ECR pull-through cache
           ports:
             - containerPort: 8080
               name: http
