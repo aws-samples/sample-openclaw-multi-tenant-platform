@@ -11,7 +11,7 @@ Thank you for your interest in contributing to OpenClaw Platform!
 - Helm 3
 - Python 3.12+
 - Docker (for CDK asset bundling)
-- Rust toolchain (for operator development)
+- Rust toolchain (only if modifying operator code)
 
 ## Quick Setup
 
@@ -29,11 +29,21 @@ cp cdk/cdk.json.example cdk/cdk.json
 
 ## Operator Build
 
+The Operator image is pre-built via GitHub Actions and published to GHCR (`ghcr.io/snese/openclaw-tenant-operator`). Customers pull it via ECR pull-through cache -- no local build needed.
+
+If you modify `operator/src/`, the image is automatically rebuilt on push to main. For local development:
+
 ```bash
 cd operator
 cargo build --release
-# For ARM64 (Graviton):
-CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc cargo build --release --target aarch64-unknown-linux-gnu
+cargo clippy -- -D warnings
+cargo test --lib
+```
+
+To build and push a custom image to your own ECR:
+
+```bash
+bash scripts/build-operator.sh
 ```
 
 ## Project Structure

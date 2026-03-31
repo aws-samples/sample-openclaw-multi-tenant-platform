@@ -115,6 +115,9 @@ cargo clippy -- -D warnings
 # All K8s operations must use kube-rs API (no Command::new)
 # Operator creates: NS, PVC, SA, ArgoCD Application, KEDA HSO
 # Everything else is managed by ArgoCD + Helm chart
+# Image is pre-built via GitHub Actions and published to GHCR
+# Customers pull via ECR pull-through cache -- no local build needed
+# Only run build-operator.sh if you modify operator/src/
 ```
 
 ## Testing Checklist
