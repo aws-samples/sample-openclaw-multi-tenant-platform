@@ -179,7 +179,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 | URL | Purpose |
 |-----|---------|
 | `https://your-domain.com` | Landing page (custom auth UI) |
-| `https://alice.your-domain.com` | Tenant AI assistant |
+| `https://claw.your-domain.com/t/alice/` | Tenant AI assistant (path-based routing) |
 | `https://your-domain.com/admin.html` | Admin dashboard |
 
 ## setup.sh Options
