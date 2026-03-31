@@ -36,6 +36,8 @@ for f in auth-ui/*.html; do
   cp "$f" "${TMPDIR}/"
 done
 cp auth-ui/manifest.json "${TMPDIR}/"
+cp auth-ui/logo.svg "${TMPDIR}/"
+[ -f auth-ui/config.js ] && cp auth-ui/config.js "${TMPDIR}/"
 
 # Upload
 aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --content-type "text/html" --region "$REGION"
