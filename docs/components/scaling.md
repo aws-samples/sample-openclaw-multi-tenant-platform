@@ -19,7 +19,7 @@ Client -> ALB -> KEDA HTTP Interceptor Proxy -> Pod (0->1)
 
 ## HTTPScaledObject
 
-The Operator creates the KEDA HTTPScaledObject directly via `ensure_keda_hso` (not via ArgoCD/Helm).
+The KEDA HTTPScaledObject is created by the Helm chart (`templates/httpscaledobject.yaml`), synced by ArgoCD. The Operator passes `scaleToZero` settings via the ArgoCD Application helm values.
 
 The Helm chart also has a template (`httpscaledobject.yaml`) for `scaleToZero.enabled = true`, but for ArgoCD-managed tenants the Operator's HSO takes precedence.
 
@@ -96,7 +96,7 @@ spec:
 | `alwaysOn: false` (default) | 0 | Stop when Pod scales down | Pay per use |
 | `alwaysOn: true` | 1 | Run 24/7 | ~$15-30/mo per tenant |
 
-The Operator passes `alwaysOn` to `ensure_keda_hso`, which sets `replicas.min` accordingly. No changes to the Helm chart or KEDA configuration are needed.
+The Operator passes `scaleToZero.enabled` and `scaleToZero.minReplicas` to the Helm chart via ArgoCD Application values, based on the Tenant CR `alwaysOn` field.
 
 ## Manual Override
 

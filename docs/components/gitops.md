@@ -9,10 +9,7 @@ Tenant Provisioning:
   Cognito SignUp -> PostConfirmation Lambda -> Tenant CR
     -> Operator reconciles:
          ensure_namespace    -> Namespace
-         ensure_pvc          -> PVC
-         ensure_service_account -> ServiceAccount
          ensure_argocd_app   -> ArgoCD Application (in argocd namespace)
-         ensure_keda_hso     -> KEDA HTTPScaledObject
     -> ArgoCD syncs Helm chart:
          Deployment, Service, ConfigMap, NetworkPolicy,
          ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
@@ -23,10 +20,7 @@ Tenant Provisioning:
 | Resource | Function |
 |----------|----------|
 | Namespace (`openclaw-{tenant}`) | `ensure_namespace` |
-| PVC | `ensure_pvc` |
-| ServiceAccount | `ensure_service_account` |
 | ArgoCD Application (`tenant-{name}` in `argocd` ns) | `ensure_argocd_app` |
-| KEDA HTTPScaledObject | `ensure_keda_hso` |
 
 ### What ArgoCD Syncs (Helm Chart)
 
