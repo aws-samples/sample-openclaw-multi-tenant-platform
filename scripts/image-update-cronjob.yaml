@@ -39,16 +39,24 @@ spec:
         spec:
           serviceAccountName: image-updater
           restartPolicy: Never
+          automountServiceAccountToken: true  # needed for kubectl
           securityContext:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
           containers:
             - name: updater
-              image: bitnami/kubectl:latest
+              image: bitnami/kubectl:1.35.0
               securityContext:
                 runAsNonRoot: true
                 readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop: [ALL]

@@ -141,6 +141,7 @@ input::placeholder{color:#555}
      its script content without versioned URLs, making SRI hashes impractical.
      See: https://community.cloudflare.com/t/subresource-integrity-cors-for-turnstile-javascript-link/440769
      Mitigations: crossorigin="anonymous" + referrerpolicy="no-referrer" applied. -->
+<!-- nosemgrep: missing-integrity -- Cloudflare Turnstile script is dynamically updated; SRI would break on every update -->
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" crossorigin="anonymous" referrerpolicy="no-referrer" async defer></script>
 <script>
 // Config — values injected by deploy-auth-ui.sh via sed

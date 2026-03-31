@@ -28,5 +28,6 @@ LABEL org.opencontainers.image.description="OpenClaw Tenant Operator -- manages 
 LABEL org.opencontainers.image.licenses="MIT"
 COPY --from=builder /app/target/release/tenant-operator /
 EXPOSE 8080
+# checkov:skip=CKV_DOCKER_2: K8s liveness/readiness probes handle health checks; distroless has no shell for HEALTHCHECK
 USER nonroot
 ENTRYPOINT ["/tenant-operator"]

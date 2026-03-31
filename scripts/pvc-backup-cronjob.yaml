@@ -46,16 +46,24 @@ spec:
         spec:
           serviceAccountName: pvc-backup
           restartPolicy: Never
+          automountServiceAccountToken: true  # needed for kubectl + aws cli
           securityContext:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
           containers:
             - name: backup
-              image: amazon/aws-cli:latest
+              image: amazon/aws-cli:2.27.0
               securityContext:
                 runAsNonRoot: true
                 readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop: [ALL]
