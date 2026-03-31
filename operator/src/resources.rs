@@ -796,6 +796,7 @@ pub async fn ensure_keda_hso(
     name: &str,
     tenant_ns: &str,
     ssapply: &PatchParams,
+    always_on: bool,
 ) -> Result<Value> {
     let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
 
@@ -805,6 +806,7 @@ pub async fn ensure_keda_hso(
     );
     let hso_api: Api<DynamicObject> = Api::namespaced_with(client, tenant_ns, &hso_ar);
     let hso_name = format!("{name}-hso");
+    let min_replicas = if always_on { 1 } else { 0 };
     let hso_patch: Value = json!({
         "apiVersion": "http.keda.sh/v1alpha1",
         "kind": "HTTPScaledObject",
@@ -820,7 +822,7 @@ pub async fn ensure_keda_hso(
             "hosts": [if gateway_domain.is_empty() { name.to_string() } else { format!("{name}.{gateway_domain}") }],
             "targetPendingRequests": 1,
             "scaledownPeriod": 900,
-            "replicas": { "min": 0, "max": 1 },
+            "replicas": { "min": min_replicas, "max": 1 },
             "scaleTargetRef": {
                 "name": name,
                 "kind": "Deployment",

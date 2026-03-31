@@ -18,7 +18,8 @@ pub static TENANT_FINALIZER: &str = "tenants.openclaw.io";
     shortname = "tn",
     printcolumn = r#"{"name":"Phase","type":"string","jsonPath":".status.phase"}"#,
     printcolumn = r#"{"name":"Email","type":"string","jsonPath":".spec.email"}"#,
-    printcolumn = r#"{"name":"Budget","type":"integer","jsonPath":".spec.budget.monthlyUSD"}"#
+    printcolumn = r#"{"name":"Budget","type":"integer","jsonPath":".spec.budget.monthlyUSD"}"#,
+    printcolumn = r#"{"name":"AlwaysOn","type":"boolean","jsonPath":".spec.alwaysOn"}"#
 )]
 pub struct TenantSpec {
     /// Tenant email, must be unique across the cluster
@@ -47,6 +48,9 @@ pub struct TenantSpec {
     /// Extra environment variables injected into the main container
     #[serde(default)]
     pub env: Option<BTreeMap<String, String>>,
+    /// Keep Pod running 24/7 (skip scale-to-zero). For tenants with cron jobs.
+    #[serde(rename = "alwaysOn", default)]
+    pub always_on: bool,
 }
 
 pub fn default_enabled() -> bool {

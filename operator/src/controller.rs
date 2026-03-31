@@ -101,8 +101,14 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             .await?;
     conditions.push(argocd_condition);
 
-    let keda_condition =
-        resources::ensure_keda_hso(client.clone(), &name, tenant_ns, &ssapply).await?;
+    let keda_condition = resources::ensure_keda_hso(
+        client.clone(),
+        &name,
+        tenant_ns,
+        &ssapply,
+        tenant.spec.always_on,
+    )
+    .await?;
     conditions.push(keda_condition);
 
     // Check ArgoCD Application sync + health status
