@@ -18,14 +18,6 @@ spec:
         - path:
             type: PathPrefix
             value: /t/{{ .Values.tenant.name }}
-      {{- if and .Values.gateway.cognito.enabled .Values.gateway.cognito.userPoolArn }}
-      filters:
-        - type: ExtensionRef
-          extensionRef:
-            group: gateway.k8s.aws
-            kind: ListenerRuleConfiguration
-            name: {{ include "openclaw-helm.fullname" . }}-cognito
-      {{- end }}
       backendRefs:
         - name: {{ include "openclaw-helm.fullname" . }}
           port: {{ .Values.service.port }}

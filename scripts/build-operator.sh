@@ -25,22 +25,15 @@ echo "==> Reading config from cdk.json"
 CDK_JSON="cdk/cdk.json"
 if [[ -f "$CDK_JSON" ]]; then
   DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')")
-  COGNITO_POOL_ID=$(node -e "console.log(require('./$CDK_JSON').context.cognitoPoolId || '')")
-  COGNITO_CLIENT_ID=$(node -e "console.log(require('./$CDK_JSON').context.cognitoClientId || '')")
-  COGNITO_DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.cognitoDomain || '')")
   GITHUB_OWNER=$(node -e "console.log(require('./$CDK_JSON').context.githubOwner || '')")
   GITHUB_REPO=$(node -e "console.log(require('./$CDK_JSON').context.githubRepo || '')")
 else
   echo "Warning: cdk/cdk.json not found, using placeholders for env vars"
   DOMAIN="DOMAIN"
-  COGNITO_POOL_ID="POOL_ID"
-  COGNITO_CLIENT_ID="CLIENT_ID"
-  COGNITO_DOMAIN="COGNITO_PREFIX"
   GITHUB_OWNER="ORG"
   GITHUB_REPO="REPO"
 fi
 
-COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:${ACCOUNT}:userpool/${COGNITO_POOL_ID}"
 CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
 
 echo "==> Applying CRD"
@@ -52,9 +45,6 @@ sed \
   -e "s|ACCOUNT_ID|${ACCOUNT}|g" \
   -e "s|\"REGION\"|\"${REGION}\"|g" \
   -e "s|value: \"DOMAIN\"|value: \"${DOMAIN}\"|g" \
-  -e "s|userpool/POOL_ID|userpool/${COGNITO_POOL_ID}|g" \
-  -e "s|value: \"CLIENT_ID\"|value: \"${COGNITO_CLIENT_ID}\"|g" \
-  -e "s|value: \"COGNITO_PREFIX\"|value: \"${COGNITO_DOMAIN}\"|g" \
   -e "s|https://github.com/ORG/REPO.git|${CHART_REPO}|g" \
   operator/yaml/deployment.yaml | kubectl apply -f -
 
