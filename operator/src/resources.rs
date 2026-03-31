@@ -843,3 +843,99 @@ pub async fn ensure_keda_hso(
         }
     }
 }
+
+pub async fn ensure_argocd_app(
+    client: Client,
+    name: &str,
+    tenant_ns: &str,
+    ssapply: &PatchParams,
+    spec: &TenantSpec,
+) -> Result<Value> {
+    let repo_url = std::env::var("HELM_REPO_URL").unwrap_or_else(|_| {
+        "https://github.com/snese/sample-openclaw-multi-tenant-platform.git".into()
+    });
+    let target_revision = std::env::var("HELM_TARGET_REVISION").unwrap_or_else(|_| "main".into());
+    let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
+    let cognito_client_id = std::env::var("COGNITO_CLIENT_ID").unwrap_or_default();
+    let cognito_domain = std::env::var("COGNITO_DOMAIN").unwrap_or_default();
+    let cognito_pool_arn = std::env::var("COGNITO_POOL_ARN").unwrap_or_default();
+
+    let budget = spec.budget.as_ref().map(|b| b.monthly_usd).unwrap_or(100);
+
+    let helm_values = serde_yaml::to_string(&json!({
+        "fullnameOverride": name,
+        "tenant": {
+            "name": name,
+            "email": &spec.email,
+            "enabled": spec.enabled,
+            "budget": budget
+        },
+        "skills": &spec.skills,
+        "gateway": {
+            "enabled": !gateway_domain.is_empty(),
+            "domain": &gateway_domain,
+            "gatewayName": "openclaw-gateway",
+            "gatewayNamespace": "openclaw-system",
+            "cognito": {
+                "enabled": !cognito_client_id.is_empty(),
+                "clientId": &cognito_client_id,
+                "domain": &cognito_domain,
+                "userPoolArn": &cognito_pool_arn
+            }
+        }
+    }))
+    .map_err(|e| Error::HelmError(e.to_string()))?;
+
+    let ar = ApiResource {
+        group: "argoproj.io".into(),
+        version: "v1alpha1".into(),
+        kind: "Application".into(),
+        api_version: "argoproj.io/v1alpha1".into(),
+        plural: "applications".into(),
+    };
+    let app_api: Api<DynamicObject> = Api::namespaced_with(client, "argocd", &ar);
+
+    let app_name = format!("tenant-{name}");
+    let app_patch: Value = json!({
+        "apiVersion": "argoproj.io/v1alpha1",
+        "kind": "Application",
+        "metadata": {
+            "name": &app_name,
+            "namespace": "argocd",
+            "labels": {
+                "openclaw.io/tenant": name,
+                "app.kubernetes.io/managed-by": "tenant-operator"
+            }
+        },
+        "spec": {
+            "project": "default",
+            "source": {
+                "repoURL": &repo_url,
+                "targetRevision": &target_revision,
+                "path": "helm/charts/openclaw-platform",
+                "helm": {
+                    "values": &helm_values
+                }
+            },
+            "destination": {
+                "name": "in-cluster",
+                "namespace": tenant_ns
+            },
+            "syncPolicy": {
+                "automated": {
+                    "prune": true,
+                    "selfHeal": true
+                },
+                "syncOptions": ["CreateNamespace=false"]
+            }
+        }
+    });
+    app_api
+        .patch(&app_name, ssapply, &Patch::Apply(app_patch))
+        .await
+        .map_err(Error::KubeError)?;
+    info!("Ensured ArgoCD Application {app_name}");
+    Ok(
+        json!({ "type": "ArgoAppReady", "status": "True", "message": format!("ArgoCD Application {app_name} synced") }),
+    )
+}

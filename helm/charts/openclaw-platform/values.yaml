@@ -1,3 +1,8 @@
+# Override the Helm fullname (default: {release}-{chart}).
+# The Operator sets this to the tenant name so that resource names
+# (Deployment, ConfigMap, Secret ref) match the Lambda naming convention.
+fullnameOverride: ""
+
 image:
   # ECR pull-through cache — auto-mirrors from ghcr.io/openclaw/openclaw
   # Replace ACCOUNT_ID and REGION with your values (from CDK output OpenClawImageUri)
@@ -71,6 +76,10 @@ config:
       - "10.0.0.0/16"
     auth:
       mode: token
+      token:
+        source: exec
+        provider: aws-sm
+        id: gateway-token
     controlUi:
       allowedOrigins: []
       dangerouslyDisableDeviceAuth: true

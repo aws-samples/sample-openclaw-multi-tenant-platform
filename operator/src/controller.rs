@@ -73,18 +73,9 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     resources::ensure_namespace(client.clone(), &name, tenant_ns, &ssapply).await?;
     let pvc_condition = resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_service_account(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_config_map(client.clone(), &name, tenant_ns, &ssapply).await?;
-    let deploy_condition =
-        resources::ensure_deployment(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
+    let argocd_condition =
+        resources::ensure_argocd_app(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
             .await?;
-    resources::ensure_service(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_network_policy(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_resource_quota(client.clone(), &name, tenant_ns, &ssapply).await?;
-    resources::ensure_pdb(client.clone(), &name, tenant_ns, &ssapply).await?;
-
-    let httproute_condition =
-        resources::ensure_httproute(client.clone(), &name, tenant_ns, &ssapply).await?;
-    let tgc_condition = resources::ensure_tgc(client.clone(), &name, tenant_ns, &ssapply).await?;
     let keda_condition =
         resources::ensure_keda_hso(client.clone(), &name, tenant_ns, &ssapply).await?;
 
@@ -97,10 +88,8 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
             "conditions": [
                 { "type": "NamespaceReady", "status": "True" },
                 pvc_condition,
-                deploy_condition,
-                keda_condition,
-                httproute_condition,
-                tgc_condition
+                argocd_condition,
+                keda_condition
             ]
         }
     });
