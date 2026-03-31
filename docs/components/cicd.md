@@ -50,7 +50,7 @@ Reads CDK stack outputs, injects config into `auth-ui/*.html`, syncs to S3.
 ## Audit Logging
 
 ```bash
-./scripts/setup-audit-logging.sh us-west-2
+# Audit logging is managed by CDK -- no manual script needed
 ```
 
 Sets up CloudTrail + S3 + Athena for Bedrock API audit.
@@ -62,4 +62,3 @@ Sets up CloudTrail + S3 + Athena for Bedrock API audit.
 | `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
 | `scripts/image-update-cronjob.yaml` | Image update CronJob manifest |
 | `scripts/deploy-auth-ui.sh` | S3 + CloudFront auth UI deployment |
-| `scripts/setup-audit-logging.sh` | CloudTrail + S3 + Athena setup |

@@ -17,8 +17,8 @@ All alarms publish to the `OpenClawAlerts` SNS topic.
 | Alarm | Metric | Condition | Setup |
 |---|---|---|---|
 | `OpenClaw-PodRestartCount` | `ContainerInsights/pod_number_of_container_restarts` | Sum > 0 in 5 min | CDK (automatic) |
-| `openclaw-bedrock-p95-latency` | `OpenClaw/Bedrock/BedrockResponseTimeMs` | P95 > 10s for 2x 5-min | `setup-bedrock-latency.sh` |
-| `openclaw-pod-coldstart-slow` | `OpenClaw/ColdStart/PodStartupDurationSeconds` | Max > 60s in 5 min | `setup-coldstart-alarm.sh` |
+| `openclaw-bedrock-p95-latency` | `OpenClaw/Bedrock/BedrockResponseTimeMs` | P95 > 10s for 2x 5-min | CDK `BedrockLatencyAlarm` |
+| `openclaw-pod-coldstart-slow` | `OpenClaw/ColdStart/PodStartupDurationSeconds` | Max > 60s in 5 min | CDK `ColdStartAlarm` |
 
 ## Usage Tracking
 
@@ -54,9 +54,9 @@ OpenClaw Pod (stdout) -> Container Insights -> CloudWatch Logs
 |---|---|
 | `health-check.sh` | JSON health report (KEDA, PVCs, ALB, CloudFront, WAF) |
 | `usage-report.sh --month YYYY-MM` | Monthly per-tenant cost report |
-| `setup-usage-tracking.sh` | Metric filters + dashboard |
-| `setup-bedrock-latency.sh` | Bedrock P95 latency alarm |
-| `setup-coldstart-alarm.sh` | Cold start alarm |
+| CDK metric filters | Metric filters + dashboard |
+| CDK `BedrockLatencyAlarm` | Bedrock P95 latency alarm |
+| CDK `ColdStartAlarm` | Cold start alarm |
 
 ## Cost
 

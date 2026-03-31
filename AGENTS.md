@@ -77,7 +77,7 @@ npx tsc --noEmit          # Must pass
 npx cdk diff              # Review changes
 npx cdk deploy OpenClawEksStack --require-approval broadening
 # IMPORTANT: re-run after deploy (triggers get wiped)
-cd .. && bash scripts/setup-cognito.sh
+# Cognito triggers are managed by CDK -- no manual script needed
 ```
 
 ### Helm Chart
@@ -103,7 +103,7 @@ bash scripts/deploy-auth-ui.sh
 # Edit cdk/lambda/*/index.py
 python3 -c "compile(open('cdk/lambda/<fn>/index.py').read(), 'x', 'exec')"  # Syntax check
 cd cdk && npx cdk deploy OpenClawEksStack --require-approval broadening
-bash scripts/setup-cognito.sh  # Re-attach triggers
+# Cognito triggers managed by CDK CognitoTriggers custom resource
 ```
 
 ### Operator
@@ -148,7 +148,7 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 
 | Pitfall | Cause | Fix |
 |---------|-------|-----|
-| Cognito triggers disappear | `update-user-pool` without `--lambda-config` | Always run `setup-cognito.sh` after any Cognito change |
+| Cognito triggers disappear | `update-user-pool` without `--lambda-config` | CDK CognitoTriggers custom resource re-attaches on every deploy |
 | `deploy-auth-ui.sh` sed fails silently | Spaces in minified JS patterns | Match exact minified format: `clientId:''` not `clientId: ''` |
 | CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
 | Namespace stuck in Terminating | TargetGroupBinding finalizer | Recreate ns -> delete TGB -> delete ns |

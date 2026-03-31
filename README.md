@@ -111,12 +111,9 @@ The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-
 
 ```bash
 ./scripts/setup-keda.sh                    # Scale-to-zero
-./scripts/setup-cognito.sh                 # Auth configuration
-./scripts/setup-pvc-backup.sh              # Daily PVC backups
-./scripts/setup-image-update.sh            # Auto image updates
-./scripts/setup-usage-tracking.sh          # Usage dashboard
-./scripts/setup-alerts.sh <email>          # SNS email alerts
 ```
+
+Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all managed by CDK -- no manual setup needed.
 
 #### 5. Create First Tenant
 
