@@ -88,7 +88,7 @@ aws eks create-pod-identity-association \
   --region "${REGION}" \
   --cluster-name "${CLUSTER}" \
   --namespace "${NAMESPACE}" \
-  --service-account "${RELEASE}" \
+  --service-account "${TENANT}" \
   --role-arn "${ROLE_ARN}" \
   --output text --query 'association.associationId'
 

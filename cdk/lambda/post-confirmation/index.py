@@ -111,7 +111,7 @@ def create_tenant_cr(tenant, email):
 def create_gateway_secret(tenant, ns, token):
     """Create K8s Secret with gateway token so pod and auth-ui use the same token."""
     endpoint, ssl_ctx, bearer = _get_eks_context()
-    secret_name = f"{tenant}-openclaw-helm-gateway-token"
+    secret_name = f"{tenant}-gateway-token"
     url = f"{endpoint}/api/v1/namespaces/{ns}/secrets/{secret_name}"
     body = {
         "apiVersion": "v1",
@@ -143,7 +143,7 @@ def handler(event, context):
     try:
         eks_client.create_pod_identity_association(
             clusterName=CLUSTER_NAME, namespace=ns,
-            serviceAccount=f'{tenant}-openclaw-helm', roleArn=TENANT_ROLE_ARN,
+            serviceAccount=f'{tenant}', roleArn=TENANT_ROLE_ARN,
         )
     except ClientError as e:
         if 'already exists' not in str(e).lower():
