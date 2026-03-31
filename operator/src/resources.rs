@@ -149,7 +149,10 @@ pub async fn ensure_config_map(
             "mode": "local",
             "bind": "lan",
             "trustedProxies": ["10.0.0.0/16"],
-            "auth": { "mode": "token" },
+            "auth": {
+                "mode": "token",
+                "token": { "source": "exec", "provider": "aws-sm", "id": "gateway-token" }
+            },
             "controlUi": {
                 "basePath": &base_path,
                 "allowedOrigins": if allowed_origin.is_empty() { vec![] } else { vec![&allowed_origin] },
