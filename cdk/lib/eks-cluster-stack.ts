@@ -8,7 +8,6 @@ import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
-import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as cw_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -547,7 +546,6 @@ export class EksClusterStack extends cdk.Stack {
         CLUSTER_NAME: cluster.clusterName,
         CERTIFICATE_ARN: certificate.certificateArn,
         DOMAIN: domainName,
-        CODEBUILD_PROJECT: 'openclaw-tenant-builder',
         OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || `${openclawImageUri}:latest`,
         TENANT_ROLE_ARN: tenantRole.roleArn,
         USER_POOL_ID: cognitoPoolId,
@@ -566,10 +564,6 @@ export class EksClusterStack extends cdk.Stack {
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
       resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
-    }));
-    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['codebuild:StartBuild'],
-      resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/openclaw-tenant-builder`],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['iam:PassRole', 'iam:GetRole'],
@@ -671,63 +665,9 @@ export class EksClusterStack extends cdk.Stack {
       ]),
     });
 
-    // ── CodeBuild: Tenant Builder ────────────────────────────────────────────
-    const tenantBuilder = new codebuild.Project(this, 'TenantBuilder', {
-      projectName: 'openclaw-tenant-builder',
-      environment: {
-        buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
-        computeType: codebuild.ComputeType.SMALL,
-      },
-      environmentVariables: {
-        CLUSTER_NAME: { value: cluster.clusterName },
-        TENANT_ROLE_ARN: { value: tenantRole.roleArn },
-        REGION: { value: this.region },
-        CHART_BUCKET: { value: errorPagesBucket.bucketName },
-        DOMAIN: { value: domainName },
-        CERTIFICATE_ARN: { value: certificate.certificateArn },
-        COGNITO_POOL_ID: { value: cognitoPoolId },
-        ALB_CLIENT_ID: { value: albClientId },
-        COGNITO_DOMAIN: { value: cognitoDomain },
-        COGNITO_CLIENT_ID: { value: cognitoClientId },
-      },
-      buildSpec: codebuild.BuildSpec.fromObject({
-        version: '0.2',
-        phases: {
-          install: {
-            commands: [
-              'curl -LO https://dl.k8s.io/release/v1.35.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/',
-              'curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash',
-              `aws eks update-kubeconfig --region ${this.region} --name ${cluster.clusterName}`,
-            ],
-          },
-          build: {
-            commands: [
-              'NAMESPACE="openclaw-${TENANT_NAME}"',
-              'RELEASE="openclaw-${TENANT_NAME}"',
-              'aws s3 cp s3://${CHART_BUCKET}/provision-tenant.sh /tmp/provision-tenant.sh',
-              'bash /tmp/provision-tenant.sh',
-            ],
-          },
-        },
-      }),
-      source: codebuild.Source.s3({ bucket: errorPagesBucket, path: 'codebuild/source.zip' }),
-    });
-    errorPagesBucket.grantRead(tenantBuilder.role!);
-    tenantBuilder.role!.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['cognito-idp:DescribeUserPoolClient', 'cognito-idp:UpdateUserPoolClient'],
-      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
-    }));
-    tenantBuilder.role!.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['eks:DescribeCluster'],
-      resources: [`arn:aws:eks:${this.region}:${this.account}:cluster/${cluster.clusterName}`],
-    }));
     cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
       groups: ['system:masters'],
       username: 'lambda-post-confirm',
-    });
-    cluster.awsAuth.addRoleMapping(tenantBuilder.role!, {
-      groups: ['system:masters'],
-      username: 'codebuild-tenant-builder',
     });
 
     // ── IAM: EBS Snapshot (for PVC backup CronJob) ──────────────────────────

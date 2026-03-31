@@ -94,14 +94,17 @@ npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 
 Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
 
-#### 3. Build and Deploy Operator
+#### 3. Deploy Operator
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
-bash scripts/build-operator.sh
+kubectl apply -f operator/yaml/crd.yaml
+kubectl apply -f operator/yaml/deployment.yaml
 ```
 
-The operator requires env vars in `operator/yaml/deployment.yaml`: `HELM_REPO_URL` (ArgoCD source), `GATEWAY_DOMAIN`, `COGNITO_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_DOMAIN`.
+The Operator image is pre-built and published to GHCR (`ghcr.io/snese/openclaw-tenant-operator`). EKS pulls it automatically via ECR pull-through cache -- no local Docker or Rust toolchain needed.
+
+> **Customizing the Operator**: If you modify `operator/src/`, use `scripts/build-operator.sh` to build and push your own image to ECR.
 
 #### 4. Post-Deploy Setup
 
