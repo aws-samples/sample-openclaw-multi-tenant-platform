@@ -29,7 +29,7 @@ cp cdk/cdk.json.example cdk/cdk.json
 
 ## Operator Build
 
-The Operator image is pre-built via GitHub Actions and published to GHCR (`ghcr.io/snese/openclaw-tenant-operator`). Customers pull it via ECR pull-through cache -- no local build needed.
+The Operator image is pre-built via GitHub Actions and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). Customers pull it via ECR pull-through cache -- no local build needed.
 
 If you modify `operator/src/`, the image is automatically rebuilt on push to main. For local development:
 
