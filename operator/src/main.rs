@@ -25,6 +25,12 @@ async fn index(state: Data<State>) -> HttpResponse {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // --version flag: print version and exit (no K8s connection needed)
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("tenant-operator {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     telemetry::init();
     info!("Starting tenant-operator v{}", env!("CARGO_PKG_VERSION"));
 
