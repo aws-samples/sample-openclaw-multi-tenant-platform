@@ -647,7 +647,7 @@ export class EksClusterStack extends cdk.Stack {
         parameters: {
           UserPoolId: cognitoPoolId,
           ClientId: cognitoClientId,
-          ReadAttributes: ['email', 'custom:gateway_token'],
+          ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
           WriteAttributes: ['email'],
         },
         physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
@@ -658,7 +658,7 @@ export class EksClusterStack extends cdk.Stack {
         parameters: {
           UserPoolId: cognitoPoolId,
           ClientId: cognitoClientId,
-          ReadAttributes: ['email', 'custom:gateway_token'],
+          ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
           WriteAttributes: ['email'],
         },
         physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
