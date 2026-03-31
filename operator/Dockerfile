@@ -27,3 +27,4 @@ COPY --from=builder /app/target/release/tenant-operator /
 EXPOSE 8080
 USER nonroot
 ENTRYPOINT ["/tenant-operator"]
+# trigger operator build
