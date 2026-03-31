@@ -63,7 +63,7 @@ async fn reconcile(tenant: Arc<Tenant>, ctx: Arc<Context>) -> Result<Action> {
     .map_err(|e| Error::FinalizerError(Box::new(e)))
 }
 
-/// Apply desired state: ensure namespace, PVC, ServiceAccount, K8s resources, KEDA HSO
+/// Apply desired state: ensure namespace + ArgoCD Application
 async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Result<Action> {
     let client = ctx.client.clone();
     let name = tenant.name_any();
@@ -77,23 +77,10 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     resources::ensure_namespace(client.clone(), &name, tenant_ns, &ssapply).await?;
     conditions.push(json!({ "type": "NamespaceReady", "status": "True" }));
 
-    let pvc_condition = resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
-    conditions.push(pvc_condition);
-
     let argocd_condition =
         resources::ensure_argocd_app(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
             .await?;
     conditions.push(argocd_condition);
-
-    let keda_condition = resources::ensure_keda_hso(
-        client.clone(),
-        &name,
-        tenant_ns,
-        &ssapply,
-        tenant.spec.always_on,
-    )
-    .await?;
-    conditions.push(keda_condition);
 
     // Check ArgoCD Application sync + health status
     let argocd_ready = check_argocd_sync(&client, &name).await;

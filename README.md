@@ -23,7 +23,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **3-layer origin protection** -- internet-facing ALB with CF-only SG + WAF + HTTPS
 - **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
 - **Self-service signup** -- Cognito + Lambda auto-provisions tenants
-- **Operator + ArgoCD managed** -- Operator creates NS/PVC/SA/ArgoCD App/KEDA HSO; ArgoCD syncs Helm chart for remaining resources ([details](docs/architecture.md))
+- **Operator + ArgoCD managed** -- Operator creates Namespace + ArgoCD Application; ArgoCD syncs Helm chart for remaining resources ([details](docs/architecture.md))
 - **Cost control** -- per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** -- 20% cheaper compute with t4g instances
 
@@ -49,11 +49,11 @@ EKS Cluster
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   Operator-managed (SSA):        ArgoCD-managed (Helm chart):
-|     Namespace                      Deployment + Service + ConfigMap
-|     PVC (10Gi gp3)                 HTTPRoute + TargetGroupConfiguration
-|     ServiceAccount (Pod Identity)  NetworkPolicy + ResourceQuota + PDB
-|     KEDA HSO
+|   Operator-managed:               ArgoCD-managed (Helm chart):
+|     Namespace                      PVC (10Gi gp3)
+|     ArgoCD Application            ServiceAccount (Pod Identity)
+|                                    Deployment + Service + ConfigMap
+|                                    HTTPRoute + TGC + NetworkPolicy + PDB + KEDA HSO
 |   ArgoCD Application (in argocd namespace, points to helm/charts/openclaw-platform)
 ```
 
@@ -210,7 +210,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 |   +-- gateway.yaml            # Gateway API resource
 |   +-- tenants/values-template.yaml  # Example values
 +-- operator/                   # Tenant Operator (Rust/kube-rs)
-|   +-- src/                    # Creates NS/PVC/SA + ArgoCD Application + KEDA HSO
+|   +-- src/                    # Creates Namespace + ArgoCD Application
 |   +-- yaml/                   # CRD manifest, operator deployment
 +-- docs/                       # Architecture, security, components, operations
 +-- scripts/                    # 20+ operations scripts

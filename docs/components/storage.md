@@ -8,7 +8,7 @@ Each tenant gets a 10Gi gp3 EBS PVC that persists across pod restarts and scale-
 
 **Helm chart template**: `helm/charts/openclaw-platform/templates/pvc.yaml`
 
-The Operator creates the PVC via `ensure_pvc`. For ArgoCD-managed tenants, the Helm chart also includes a PVC template.
+The PVC is created by the Helm chart (`templates/pvc.yaml`), synced by ArgoCD.
 
 ```yaml
 spec:

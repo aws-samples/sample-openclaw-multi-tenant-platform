@@ -113,7 +113,7 @@ Prevents one tenant from accessing another tenant's resources.
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
 
-**Operator**: `ensure_namespace`, `ensure_pvc`, `ensure_service_account` (creates NS, PVC, SA)
+**Operator**: `ensure_namespace` (creates Namespace). PVC and SA are managed by Helm/ArgoCD.
 
 **Helm chart templates**: `resourcequota.yaml`, `networkpolicy.yaml`, `pdb.yaml`
 
@@ -175,7 +175,7 @@ Ensures tenant data survives pod restarts, scale-to-zero, and failures.
 - Container runs as non-root (UID 1000) with `fsGroup: 1000`
 - `runAsNonRoot: true`, `readOnlyRootFilesystem: true`
 
-**Operator**: `ensure_pvc` (creates PVC)
+**Helm chart**: `templates/pvc.yaml` (synced by ArgoCD)
 
 **Helm chart template**: `deployment.yaml` (securityContext)
 
