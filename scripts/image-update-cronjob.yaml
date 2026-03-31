@@ -47,9 +47,13 @@ spec:
           containers:
             - name: updater
               image: bitnami/kubectl:1.35.0
+              imagePullPolicy: Always
               securityContext:
                 runAsNonRoot: true
                 readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
               resources:
                 requests:
                   cpu: 50m
@@ -57,9 +61,6 @@ spec:
                 limits:
                   cpu: 100m
                   memory: 128Mi
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop: [ALL]
               env:
                 - name: ECR_REPO
                   value: "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw"

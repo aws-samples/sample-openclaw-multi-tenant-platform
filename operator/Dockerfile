@@ -22,7 +22,8 @@ RUN case "$TARGETPLATFORM" in \
     esac
 
 # Stage 2: Runtime (distroless -- minimal attack surface, multi-arch)
-FROM gcr.io/distroless/cc-debian12
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
+# checkov:skip=CKV_DOCKER_7: distroless only provides latest/nonroot tags, no dated versions
 LABEL org.opencontainers.image.source="https://github.com/snese/sample-openclaw-multi-tenant-platform"
 LABEL org.opencontainers.image.description="OpenClaw Tenant Operator -- manages tenant lifecycle on EKS"
 LABEL org.opencontainers.image.licenses="MIT"
