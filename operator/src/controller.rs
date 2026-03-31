@@ -84,7 +84,7 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
 
     // ReferenceGrant in keda namespace for KEDA interceptor cross-namespace routing
     // Only needed when scale-to-zero is enabled (HTTPRoute routes through interceptor)
-    let gateway_domain = std::env::var("GATEWAY_DOMAIN").unwrap_or_default();
+    let gateway_domain = resources::env_or_default("GATEWAY_DOMAIN", "");
     let scale_to_zero = !tenant.spec.always_on && !gateway_domain.is_empty();
     if scale_to_zero {
         // ? propagates error — condition is only pushed on success
