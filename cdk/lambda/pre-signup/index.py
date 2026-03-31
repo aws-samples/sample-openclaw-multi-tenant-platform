@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.request
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import boto3
@@ -10,7 +11,17 @@ TURNSTILE_SECRET = os.environ.get('TURNSTILE_SECRET', '')
 USER_POOL_ID = os.environ.get('USER_POOL_ID', '')
 RATE_LIMIT = int(os.environ.get('SIGNUP_RATE_LIMIT', '5'))
 
+ALLOWED_URL_SCHEMES = {'https'}
+TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+
 cognito_client = boto3.client('cognito-idp') if USER_POOL_ID else None
+
+
+def _validate_url(url):
+    """Validate URL scheme is in the allowlist."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ALLOWED_URL_SCHEMES:
+        raise ValueError(f'URL scheme {parsed.scheme!r} not allowed, must be one of {ALLOWED_URL_SCHEMES}')
 
 
 def _count_recent_signups(domain):
@@ -64,7 +75,8 @@ def handler(event, context):
         if not token:
             raise Exception('CAPTCHA verification required.')
         data = json.dumps({'secret': TURNSTILE_SECRET, 'response': token}).encode()
-        req = urllib.request.Request('https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        _validate_url(TURNSTILE_VERIFY_URL)
+        req = urllib.request.Request(TURNSTILE_VERIFY_URL,
                                      data=data, headers={'Content-Type': 'application/json'})
         resp = json.loads(urllib.request.urlopen(req).read())
         if not resp.get('success'):

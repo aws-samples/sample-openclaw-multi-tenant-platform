@@ -3,6 +3,7 @@ import re
 import json
 import secrets
 import urllib.request
+import urllib.parse
 import boto3
 from botocore.exceptions import ClientError
 
@@ -18,6 +19,15 @@ TENANT_ROLE_ARN = os.environ['TENANT_ROLE_ARN']
 DOMAIN = os.environ.get('DOMAIN', 'example.com')
 REGION = os.environ.get('AWS_REGION', 'us-west-2')
 USER_POOL_ID = os.environ['USER_POOL_ID']
+
+ALLOWED_URL_SCHEMES = {'https'}
+
+
+def _validate_url(url):
+    """Validate URL scheme is in the allowlist."""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ALLOWED_URL_SCHEMES:
+        raise ValueError(f'URL scheme {parsed.scheme!r} not allowed, must be one of {ALLOWED_URL_SCHEMES}')
 
 
 def get_eks_token():
@@ -50,6 +60,9 @@ def _create_tenant_cr_inner(tenant, email):
     endpoint = cluster['endpoint']
     ca_data = cluster['certificateAuthority']['data']
 
+    # Validate EKS endpoint URL scheme
+    _validate_url(endpoint)
+
     tenant_cr = json.dumps({
         "apiVersion": "openclaw.io/v1alpha1",
         "kind": "Tenant",
@@ -76,6 +89,7 @@ def _create_tenant_cr_inner(tenant, email):
     # Try PUT (update), fall back to POST (create)
     for method in ['PUT', 'POST']:
         req_url = url if method == 'PUT' else f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants"
+        _validate_url(req_url)
         req = urllib.request.Request(req_url, data=tenant_cr, method=method,
             headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
         try:
@@ -109,7 +123,7 @@ def handler(event, context):
     if not tenant or len(tenant) > 63 or not all(c.isalnum() or c == '-' for c in tenant):
         raise Exception(f'Invalid tenant name: {tenant}')
 
-    # 3. Gateway token → SM + Cognito attribute
+    # 3. Gateway token -> SM + Cognito attribute
     username = event['userName']
     token = secrets.token_urlsafe(32)
     secret_name = f'openclaw/{tenant}/gateway-token'
@@ -129,7 +143,7 @@ def handler(event, context):
         UserPoolId=USER_POOL_ID, Username=username,
         UserAttributes=[{'Name': 'custom:gateway_token', 'Value': token}])
 
-    # 4. Create Tenant CR → Operator handles the rest
+    # 4. Create Tenant CR -> Operator handles the rest
     create_tenant_cr(tenant, email)
 
     # 5. Notify admin
