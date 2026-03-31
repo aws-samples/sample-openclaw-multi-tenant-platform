@@ -57,7 +57,7 @@ helm/                   # Helm chart (source of truth, synced by ArgoCD)
   charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
   tenants/values-template.yaml  # Per-tenant values template
 auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
-operator/               # Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application
+operator/               # Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application + ReferenceGrant
 scripts/                # Operational scripts (Bash)
 docs/                   # Architecture and operations docs
 ```

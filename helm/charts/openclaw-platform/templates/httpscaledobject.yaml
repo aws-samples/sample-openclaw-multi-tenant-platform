@@ -9,7 +9,7 @@ spec:
   hosts:
     - {{ required "ingress.host is required when scaleToZero is enabled" .Values.ingress.host }}
   pathPrefixes:
-    - /
+    - /t/{{ .Values.tenant.name }}
   scaleTargetRef:
     name: {{ include "openclaw-helm.fullname" . }}
     kind: Deployment
