@@ -177,13 +177,9 @@ spec:
           value: {{ $value | quote }}
         {{- end }}
         envFrom:
-        {{- if and .Values.gateway .Values.gateway.token .Values.gateway.token.generate }}
         - secretRef:
-            name: {{ include "openclaw-helm.fullname" . }}-gateway-token
-        {{- else if and .Values.gateway .Values.gateway.token .Values.gateway.token.secretName }}
-        - secretRef:
-            name: {{ .Values.gateway.token.secretName }}
-        {{- end }}
+            name: {{ if and .Values.gateway .Values.gateway.token .Values.gateway.token.secretName }}{{ .Values.gateway.token.secretName }}{{ else }}{{ include "openclaw-helm.fullname" . }}-gateway-token{{ end }}
+            optional: true
         {{- with .Values.envFrom }}
           {{- toYaml . | nindent 8 }}
         {{- end }}

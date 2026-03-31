@@ -630,6 +630,40 @@ export class EksClusterStack extends cdk.Stack {
       ]),
     });
 
+    // ── Cognito: App Client ReadAttributes (include custom:gateway_token) ───
+    // Without explicit ReadAttributes, custom attributes are NOT included in
+    // ID token claims. This ensures auth-ui can read the gateway token.
+    new cr.AwsCustomResource(this, 'CognitoClientAttributes', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPoolClient',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          ClientId: cognitoClientId,
+          ReadAttributes: ['email', 'custom:gateway_token'],
+          WriteAttributes: ['email'],
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
+      },
+      onUpdate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPoolClient',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          ClientId: cognitoClientId,
+          ReadAttributes: ['email', 'custom:gateway_token'],
+          WriteAttributes: ['email'],
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:UpdateUserPoolClient'],
+          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+        }),
+      ]),
+    });
+
     // ── CodeBuild: Tenant Builder ────────────────────────────────────────────
     const tenantBuilder = new codebuild.Project(this, 'TenantBuilder', {
       projectName: 'openclaw-tenant-builder',
