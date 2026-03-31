@@ -154,7 +154,6 @@ Key design decisions and their rationale are documented in:
 - `docs/architecture.md` — System overview
 - `docs/security.md` — Security model (10 layers)
 - `docs/components/` — Per-component deep dives
-- `docs/design/` — Future design proposals
 
 ## Getting Help
 
