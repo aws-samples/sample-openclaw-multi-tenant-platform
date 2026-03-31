@@ -17,18 +17,20 @@ User -> CloudFront -> Internet-facing ALB (CF-only SG + WAF) -> EKS Pod (per-ten
 Tenant lifecycle:
 ```
 Cognito SignUp -> Lambda (post-confirmation) -> Tenant CR
-  -> Operator reconciles via Server-Side Apply (SSA):
-    Namespace, PVC, SA, ConfigMap, Deployment, Service,
-    HTTPRoute, TargetGroupConfig, NetworkPolicy, ResourceQuota, PDB, KEDA HSO
+  -> Operator reconciles via SSA:
+       Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
+  -> ArgoCD auto-syncs helm/charts/openclaw-platform:
+       Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota,
+       PDB, HTTPRoute, TargetGroupConfiguration
   -> Pod + HTTPRoute + NetworkPolicy + scale-to-zero ready
 ```
 
 Key components:
 - `cdk/` -- AWS CDK infrastructure (TypeScript)
-- `helm/` -- Reference Helm templates (NOT used by Operator at runtime -- for docs and manual debugging)
+- `helm/` -- Helm chart (source of truth for tenant K8s resources, synced by ArgoCD)
 - `auth-ui/` -- Auth UI pages (vanilla JS, no framework) -- index.html, admin.html, terms, privacy
 - `cdk/lambda/` -- Cognito trigger functions (Python)
-- `operator/` -- Tenant Operator (Rust/kube-rs) -- creates all K8s resources directly via SSA
+- `operator/` -- Tenant Operator (Rust/kube-rs) -- creates NS/PVC/SA + ArgoCD Application + KEDA HSO via SSA
 - `scripts/` -- Operational scripts (Bash)
 - `docs/` -- Architecture and operations documentation
 
@@ -39,9 +41,9 @@ These MUST be true at all times. Violating any = broken deployment.
 1. **`cdk diff` = no differences** -- CDK code must match deployed stack
 2. **Zero sensitive data in repo** -- No account IDs, Cognito IDs, domains, ARNs. All via `cdk.json` context (gitignored)
 3. **Zero CJK characters** -- All code, comments, docs, issue titles, PR titles, and issue/PR bodies in English
-4. **Helm is reference only** -- `helm/` templates exist for documentation and manual debugging. The Operator does NOT use Helm at runtime -- it creates all resources via kube-rs SSA.
+4. **Helm chart is source of truth** -- `helm/charts/openclaw-platform/` is the source of truth for tenant K8s resources, synced by ArgoCD with auto-prune and selfHeal
 5. **Cognito triggers survive `update-user-pool`** -- Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
-6. **Gateway API + Tenant Operator** -- Path-based routing via HTTPRoute + URLRewrite, tenant lifecycle managed by CRD Operator. Operator creates all 12 K8s resources directly via Server-Side Apply.
+6. **Operator + ArgoCD split** -- Operator creates 5 resources via SSA (Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO). ArgoCD + Helm creates the rest (Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration)
 7. **Operator stays distroless** -- `operator/Dockerfile` uses `gcr.io/distroless/cc-debian12`. No external binary dependencies (no helm, no aws CLI). All K8s operations via kube-rs API.
 
 ## File Relationships
@@ -52,14 +54,15 @@ cdk/lib/eks-cluster-stack.ts  <- Main CDK stack, references Lambda code
 cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (creates Tenant CR)
 operator/src/types.rs  <- Tenant CRD definition (TenantSpec, TenantStatus)
-operator/src/controller.rs  <- Reconciles Tenant CR -> calls resources.rs via SSA
-operator/src/resources.rs  <- Creates all 12 K8s resources (NS, PVC, SA, ConfigMap, Deployment, Service, HTTPRoute, TGC, NetworkPolicy, ResourceQuota, PDB, KEDA HSO)
+operator/src/controller.rs  <- Reconciles Tenant CR -> creates NS/PVC/SA/ArgoCD App/KEDA HSO via SSA
+operator/src/resources.rs  <- ensure_namespace, ensure_pvc, ensure_service_account, ensure_argocd_app, ensure_keda_hso
 operator/yaml/deployment.yaml  <- Operator deployment + RBAC
+helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
 setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
 scripts/lib/preflight.sh  <- Pre-flight checks (tools, AWS, cdk.json)
 scripts/lib/generate-config.sh  <- Interactive cdk.json generator
 scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
-helm/tenants/values-template.yaml  <- Reference tenant Helm values (for documentation)
+helm/tenants/values-template.yaml  <- Reference tenant Helm values
 auth-ui/index.html  <- SPA, config injected by deploy-auth-ui.sh via sed
 auth-ui/admin.html  <- Admin dashboard, same sed injection pattern
 ```
@@ -77,13 +80,13 @@ npx cdk deploy OpenClawEksStack --require-approval broadening
 cd .. && bash scripts/setup-cognito.sh
 ```
 
-### Helm Chart (Reference Templates)
+### Helm Chart
 ```bash
 # Edit helm/charts/openclaw-platform/templates/*.yaml or values.yaml
 helm template test helm/charts/openclaw-platform -f helm/tenants/values-template.yaml  # Dry run
 helm lint helm/charts/openclaw-platform/  # Lint check
-# NOTE: These templates are reference only. The Operator creates resources via SSA.
-# Changes here do NOT auto-deploy. Update operator/src/resources.rs for runtime changes.
+# Changes auto-deploy via ArgoCD selfHeal -- no manual apply needed.
+# ArgoCD syncs with prune + selfHeal enabled.
 ```
 
 ### Auth UI
@@ -110,7 +113,8 @@ cargo build --release
 cargo clippy -- -D warnings
 # Dockerfile is distroless -- do NOT add external binary dependencies
 # All K8s operations must use kube-rs API (no Command::new)
-# Resources are created via Server-Side Apply in src/resources.rs
+# Operator creates: NS, PVC, SA, ArgoCD Application, KEDA HSO
+# Everything else is managed by ArgoCD + Helm chart
 ```
 
 ## Testing Checklist
@@ -146,7 +150,7 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 | CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
 | Namespace stuck in Terminating | TargetGroupBinding finalizer | Recreate ns -> delete TGB -> delete ns |
 | Operator binary not found | Dockerfile changed from distroless | Keep `gcr.io/distroless/cc-debian12`, use kube-rs API only |
-| Helm changes not taking effect | Helm is reference only | Edit `operator/src/resources.rs` for runtime resource changes |
+| ArgoCD sync conflict | Manual kubectl edit conflicts with ArgoCD selfHeal | Never manually edit ArgoCD-managed resources; change Helm chart instead |
 
 ## Conventions
 

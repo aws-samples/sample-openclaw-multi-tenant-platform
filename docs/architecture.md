@@ -20,73 +20,44 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain
 ## Tenant Lifecycle
 
 ```
-Cognito SignUp -> Lambda (post-confirmation) -> Tenant CR
-  -> Operator reconciles: Namespace, PVC, SA, Deployment, Service, ConfigMap,
-    HTTPRoute, TargetGroupConfiguration, NetworkPolicy, ResourceQuota, PDB, KEDA HSO
-  -> Pod + HTTPRoute + NetworkPolicy + scale-to-zero ready
+Cognito SignUp
+  -> Pre-signup Lambda (email domain gate)
+  -> Post-confirmation Lambda (creates Tenant CR)
+  -> Operator reconciles via SSA:
+       1. Namespace (openclaw-{tenant})
+       2. PVC (10Gi gp3)
+       3. ServiceAccount (Pod Identity)
+       4. ArgoCD Application (points to helm/charts/openclaw-platform, auto-sync prune+selfHeal)
+       5. KEDA HTTPScaledObject (15min idle -> 0)
+  -> ArgoCD detects Application, syncs Helm chart:
+       Deployment, Service, ConfigMap, NetworkPolicy,
+       ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
+  -> Pod ready, HTTPRoute active, scale-to-zero armed
 ```
 
-## Tenant Operator -- How It Works
+## Operator + ArgoCD Split
 
-The Tenant Operator is a Rust controller built with [kube-rs](https://kube.rs/). It watches `Tenant` CRDs and uses **Server-Side Apply (SSA)** to create and reconcile all K8s resources directly -- no Helm, no GitOps layer for tenant provisioning.
+The Tenant Operator (Rust/kube-rs) creates 5 bootstrap resources via Server-Side Apply, then delegates workload resources to ArgoCD + Helm.
 
 ```
-+------------------------------------------------------------------+
-|                    OPERATOR RECONCILE LOOP                        |
-+------------------------------------------------------------------+
-
-  Tenant CR created/updated
-      |
-      v
-  +---------------------+
-  |  Tenant Operator     |  (openclaw-system namespace)
-  |  Rust / kube-rs      |
-  |  watches: Tenant CRD |
-  +---------+-----------+
-            |
-            |  Server-Side Apply (SSA)
-            |  PatchParams::apply("tenant-operator").force()
-            v
-  +---------------------------------------------+
-  |  For each Tenant, creates in order:         |
-  |                                             |
-  |  1. Namespace      (openclaw-{name})        |
-  |  2. PVC            (10Gi gp3)               |
-  |  3. ServiceAccount (Pod Identity)           |
-  |  4. ConfigMap      (gateway config)         |
-  |  5. Deployment     (OpenClaw container)     |
-  |  6. Service        (ClusterIP)              |
-  |  7. NetworkPolicy  (cross-tenant blocked)   |
-  |  8. ResourceQuota  (cpu/mem/pods cap)       |
-  |  9. PDB            (minAvailable: 1)        |
-  | 10. HTTPRoute      (Gateway API routing)    |
-  | 11. TargetGroupConfig (ALB health check)    |
-  | 12. KEDA HSO       (scale-to-zero)          |
-  +---------------------+-----------------------+
-                        |
-                        v
-  +---------------------------------------------+
-  |  Update Tenant CR status:                   |
-  |    phase: Ready | Suspended                 |
-  |    conditions: NamespaceReady, PVCBound,    |
-  |      DeploymentAvailable, KEDAReady,        |
-  |      HTTPRouteReady, TGCReady               |
-  +---------------------+-----------------------+
-                        |
-                        |  Requeue every 5 min
-                        |  (drift detection)
-                        v
-                   [next reconcile]
+Tenant CR
+  |
+  v
+Operator (SSA)                    ArgoCD (Helm sync)
+  |                                 |
+  +-- Namespace                     +-- Deployment
+  +-- PVC                           +-- Service
+  +-- ServiceAccount                +-- ConfigMap
+  +-- ArgoCD Application ---------> +-- NetworkPolicy
+  +-- KEDA HSO                      +-- ResourceQuota
+                                    +-- PDB
+                                    +-- HTTPRoute
+                                    +-- TargetGroupConfiguration
 ```
 
-**Cleanup:** On Tenant CR deletion, the operator deletes the namespace -- Kubernetes cascades all resources inside. PVC retention is handled by StorageClass `reclaimPolicy`.
+The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync enabled (prune + selfHeal), pointing to `helm/charts/openclaw-platform`.
 
-### Why Not Helm?
-
-The `helm/` directory contains reference templates for documentation and manual debugging. The operator does **not** shell out to `helm install` -- it uses kube-rs SSA directly for:
-- Atomic reconciliation (all-or-nothing per resource)
-- Drift detection on every 5-minute requeue
-- No external binary dependency in the operator container
+**Cleanup:** On Tenant CR deletion, the operator deletes the namespace. Kubernetes cascades all resources inside. The ArgoCD Application is also deleted, stopping sync.
 
 ## EKS Cluster
 
@@ -97,21 +68,16 @@ EKS Cluster (v1.35)
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   +-- Deployment + Service + ConfigMap + PVC (persists across scale-to-zero)
-|   +-- HTTPRoute + TargetGroupConfiguration (Gateway API, path-based routing)
-|   +-- HTTPScaledObject (KEDA, 15min idle -> 0)
-|   +-- NetworkPolicy (cross-tenant blocked)
-|   +-- ResourceQuota + PodDisruptionBudget
-|   +-- ServiceAccount (Pod Identity -> shared TenantRole)
+|   +-- Operator: Namespace, PVC, ServiceAccount, KEDA HSO
+|   +-- ArgoCD/Helm: Deployment, Service, ConfigMap, HTTPRoute,
+|       TargetGroupConfiguration, NetworkPolicy, ResourceQuota, PDB
 |
 +-- namespace: openclaw-system
 |   +-- Tenant Operator (Rust/kube-rs)
 |
-+-- namespace: karpenter
-|   +-- Karpenter controller
-|
-+-- namespace: kube-system
-    +-- ALB Controller, EBS CSI, CoreDNS, VPC CNI
++-- namespace: argocd
+|   +-- ArgoCD (EKS add-on)
+|   +-- ArgoCD Application per tenant
 ```
 
 ## Key Components
@@ -119,13 +85,26 @@ EKS Cluster (v1.35)
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
 | Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, WAF |
-| Operator | Rust / kube-rs (SSA) | Tenant CR -> all K8s resources directly |
-| Helm chart | Reference only | Templates for documentation and manual debugging |
+| Operator | Rust / kube-rs (SSA) | Creates NS/PVC/SA + ArgoCD Application + KEDA HSO |
+| Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
 | Auth | Cognito + custom UI | Signup, login, email domain gate |
 | Scaling | KEDA HTTP Add-on | Scale-to-zero (15min idle) |
 | LLM | Amazon Bedrock | Model access via Pod Identity (zero API keys) |
-| GitOps | ArgoCD (EKS Capability) | Platform components only (KEDA, monitoring) |
+| Secrets | exec SecretRef | aws-sm provider, fetched on-demand, never persisted |
 | Observability | CloudWatch Container Insights | Metrics, logs, alarms |
+
+## Status Conditions
+
+The operator updates `Tenant.status.conditions` during reconciliation:
+
+| Condition | Meaning |
+|-----------|---------|
+| `NamespaceReady` | Namespace exists and is active |
+| `PVCBound` | PVC is bound to a volume |
+| `ArgoAppReady` | ArgoCD Application is synced and healthy |
+| `KEDAReady` | HTTPScaledObject is active |
+
+`Tenant.status.phase`: `Ready` (all conditions true) or `Suspended` (tenant disabled).
 
 ## Security Layers
 
@@ -133,10 +112,10 @@ EKS Cluster (v1.35)
 |-------|--------|
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
 | Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
-| Network | Internet-facing ALB with CF-only SG + WAF + HTTPS |
+| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + WAF + HTTPS |
 | Auth | Cognito + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
-| Secrets | exec SecretRef -- fetched on-demand, never persisted |
+| Secrets | exec SecretRef -- fetched on-demand via aws-sm provider |
 | LLM | Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero; daily EBS snapshots |
@@ -152,18 +131,14 @@ User Request:
 Tenant Provisioning:
   Cognito SignUp -> Pre-signup Lambda (email gate)
   Cognito Confirm -> Post-confirmation Lambda -> Tenant CR
-  Operator (SSA) -> Namespace + PVC + SA + Pod Identity + Deployment + Service
-                 + ConfigMap + HTTPRoute + TGC + NetworkPolicy + ResourceQuota
-                 + PDB + KEDA HSO
+  Operator (SSA) -> Namespace + PVC + SA + ArgoCD App + KEDA HSO
+  ArgoCD -> Helm sync -> Deployment + Service + ConfigMap + HTTPRoute
+            + TGC + NetworkPolicy + ResourceQuota + PDB
 ```
-
-## Deployment
-
-See [README.md](../README.md) for quick start (`./setup.sh`) and step-by-step instructions.
 
 ## Related Docs
 
 - [Security Deep Dive](security.md)
-- [GitOps (ArgoCD)](components/gitops.md) -- platform components only, not tenant provisioning
+- [GitOps (ArgoCD)](components/gitops.md)
 - [Component docs](components/)
 - [Operations guides](operations/)

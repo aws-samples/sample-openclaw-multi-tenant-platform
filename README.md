@@ -12,22 +12,7 @@
 
 Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
-> **Important:** This is a sample project intended for demonstration and learning purposes. It is not intended for production use without thorough review and hardening. Use at your own risk. See [Security](docs/security.md) for known gaps.
-
-## Table of Contents
-
-- [Features](#features)
-- [Architecture](#architecture)
-- [Getting Started](#getting-started)
-- [Tenant Management](#tenant-management)
-- [Operations](#operations)
-- [Security](#security)
-- [Cost](#cost)
-- [Documentation](#documentation)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [Cleanup](#cleanup)
-- [License](#license)
+> **Important:** This is a sample project for demonstration and learning. Not intended for production without thorough review and hardening. See [Security](docs/security.md) for known gaps.
 
 ## Features
 
@@ -36,11 +21,10 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s
 - **3-layer origin protection** -- internet-facing ALB with CF-only SG + WAF + HTTPS
 - **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
-- **Self-service signup** -- Cognito + Lambda auto-provisions tenants on auto-provisioning
-- **Operator-managed** -- Tenant Operator (Rust/kube-rs) creates all K8s resources via SSA ([details](docs/architecture.md#tenant-operator----how-it-works))
+- **Self-service signup** -- Cognito + Lambda auto-provisions tenants
+- **Operator + ArgoCD managed** -- Operator creates NS/PVC/SA/ArgoCD App/KEDA HSO; ArgoCD syncs Helm chart for remaining resources ([details](docs/architecture.md))
 - **Cost control** -- per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** -- 20% cheaper compute with t4g instances
-- **Security deep-dive** -- 10 layers, threat model, compliance considerations
 
 ## Architecture
 
@@ -64,11 +48,12 @@ EKS Cluster
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   +-- Deployment + PVC (persists across scale-to-zero)
-|   +-- HTTPRoute (Gateway API, path-based routing)
-|   +-- HTTPScaledObject (KEDA, 15min idle -> 0)
-|   +-- NetworkPolicy (cross-tenant blocked)
-|   +-- ResourceQuota
+|   Operator-managed (SSA):        ArgoCD-managed (Helm chart):
+|     Namespace                      Deployment + Service + ConfigMap
+|     PVC (10Gi gp3)                 HTTPRoute + TargetGroupConfiguration
+|     ServiceAccount (Pod Identity)  NetworkPolicy + ResourceQuota + PDB
+|     KEDA HSO
+|   ArgoCD Application (in argocd namespace, points to helm/charts/openclaw-platform)
 ```
 
 ## Getting Started
@@ -81,20 +66,15 @@ cd sample-openclaw-multi-tenant-platform
 ./setup.sh
 ```
 
-`setup.sh` checks prerequisites, prompts for configuration, and deploys everything.
-Takes ~20 minutes. See [setup.sh options](#setupsh-options) for `--phase` and `--check`.
+`setup.sh` checks prerequisites, prompts for configuration, and deploys everything (~20 min).
 
 ### Step-by-Step
-
-For full control over each deployment phase:
 
 #### Prerequisites
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`)
-- kubectl + Helm 3
-- Node.js 22+
-- Docker
+- kubectl + Helm 3, Node.js 22+, Docker
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** -- public client for SPA)
 
@@ -102,129 +82,55 @@ For full control over each deployment phase:
 
 ```bash
 cp cdk/cdk.json.example cdk/cdk.json
-# Edit cdk/cdk.json -- fill in context values
+# Edit cdk/cdk.json -- fill in context values (see cdk.json.example for full list)
 ```
 
-<details>
-<summary>Context values reference</summary>
-
-| Key | Description |
-|-----|-------------|
-| `hostedZoneId` | Route53 hosted zone ID |
-| `zoneName` | Your domain (e.g., `platform.company.com`) |
-| `certificateArn` | ACM cert in deployment region (`domain` + `*.domain`) |
-| `cloudfrontCertificateArn` | ACM cert in us-east-1 (`domain` + `*.domain`) |
-| `cognitoPoolId` | Cognito User Pool ID |
-| `cognitoClientId` | Cognito App Client ID (**no secret**) |
-| `cognitoDomain` | Cognito domain prefix |
-| `allowedEmailDomains` | Comma-separated allowed email domains |
-| `ssoRoleArn` | IAM SSO role ARN for kubectl access |
-| `sesFromEmail` | SES sender email for welcome emails (default: `noreply@<domain>`) |
-| `albClientId` | Cognito App Client ID for ALB auth |
-| `openclawImage` | Container image (e.g., `ghcr.io/openclaw/openclaw:latest`) |
-
-</details>
-
-### 2. Deploy Infrastructure
+#### 2. Deploy Infrastructure
 
 ```bash
 cd cdk && npm install
 npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
-Creates: EKS cluster, VPC (2 NAT Gateways), IAM roles, Lambda functions, S3 buckets, CloudFront, WAF, CloudWatch, SNS. Takes ~15-20 minutes.
+Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
 
-### 3. Build and Deploy Operator
+#### 3. Build and Deploy Operator
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
 bash scripts/build-operator.sh
 ```
 
-Creates ECR repo, builds the Tenant Operator Docker image, pushes to ECR, and deploys to EKS with config from `cdk.json`.
+The operator requires env vars in `operator/yaml/deployment.yaml`: `HELM_REPO_URL` (ArgoCD source), `GATEWAY_DOMAIN`, `COGNITO_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_DOMAIN`.
 
-### 4. Post-Deploy Setup
+#### 4. Post-Deploy Setup
 
 ```bash
-# Core setup
 ./scripts/setup-keda.sh                    # Scale-to-zero
 ./scripts/setup-cognito.sh                 # Auth configuration
-
-# Monitoring
 ./scripts/setup-pvc-backup.sh              # Daily PVC backups
 ./scripts/setup-image-update.sh            # Auto image updates
 ./scripts/setup-usage-tracking.sh          # Usage dashboard
-./scripts/setup-bedrock-latency.sh         # Latency alarms
-./scripts/setup-coldstart-alarm.sh         # Cold start alarms
-./scripts/setup-audit-logging.sh           # CloudTrail + Athena
 ./scripts/setup-alerts.sh <email>          # SNS email alerts
 ```
 
-### 5. Create First Tenant
+#### 5. Create First Tenant
 
 ```bash
-export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
-  --stack-name OpenClawEksStack \
-  --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
-
 ./scripts/create-tenant.sh alice --display-name "Alice" --emoji "robot"
 ```
 
-<details>
-<summary>All create-tenant options (maps to Tenant CRD spec)</summary>
-
-| Flag | CRD Field | Description |
-|------|-----------|-------------|
-| `--display-name` | `spec.displayName` | Human-readable name |
-| `--emoji` | `spec.emoji` | Emoji for dashboards and logs |
-| `--skills` | `spec.skills` | Comma-separated skill names |
-| `--budget` | `spec.budget.monthlyUSD` | Monthly spend cap in USD (default: 100) |
-| `--image` | `spec.image.repository` | Container image override |
-| `--image-tag` | `spec.image.tag` | Image tag override |
-| `--cpu-request` | `spec.resources.requests.cpu` | CPU request |
-| `--memory-request` | `spec.resources.requests.memory` | Memory request |
-| `--cpu-limit` | `spec.resources.limits.cpu` | CPU limit |
-| `--memory-limit` | `spec.resources.limits.memory` | Memory limit |
-| `--env` | `spec.env` | Extra env vars (KEY=VALUE, repeatable) |
-| `--disabled` | `spec.enabled=false` | Create in suspended state |
-
-</details>
-
-### 6. Finalize
+#### 6. Finalize
 
 ```bash
 ./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF->ALB
 ./scripts/deploy-auth-ui.sh       # Upload auth UI to S3
 ```
 
-### 7. Access
-
-| URL | Purpose |
-|-----|--------|
-| `https://your-domain.com` | Landing page (custom auth UI) |
-| `https://claw.your-domain.com/t/alice/` | Tenant AI assistant (path-based routing) |
-| `https://your-domain.com/admin.html` | Admin dashboard |
-
-## setup.sh Options
-
-```bash
-./setup.sh              # Run all phases
-./setup.sh --phase 2    # Start from Phase 2
-./setup.sh --check      # Pre-flight checks only
-./setup.sh --help       # Usage
-```
-
-| Phase | What | Time | Verification |
-|-------|------|------|-------------|
-| 1 | Infrastructure (CDK) | ~15 min | CloudFormation stack complete |
-| 2 | Operator (build + deploy) | ~3 min | Operator pod Running |
-| 3 | Platform (KEDA + Cognito) | ~2 min | KEDA pods Running |
-| 4 | Auth UI | ~1 min | CloudFront returns 200 |
-
 ## Tenant Management
 
 ```bash
-./scripts/create-tenant.sh <name> [options]    # Create (see options above)
+./scripts/create-tenant.sh <name> [options]    # Create
 ./scripts/delete-tenant.sh <name>              # Delete (with confirmation)
 ./scripts/verify-tenant.sh <name>              # Health check
 ./scripts/check-all-tenants.sh                 # Check all tenants
@@ -233,27 +139,13 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ./scripts/admin-list-tenants.sh                # List tenants + cost
 ```
 
-## Operations
-
-| Script | Purpose |
-|--------|--------|
-| `post-deploy.sh` | CloudFront #2 + Route53 + WAF |
-| `build-operator.sh` | Build, push, deploy Tenant Operator |
-| `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
-| `setup-cognito.sh` | Cognito config (auth flows, triggers) |
-| `setup-keda.sh` | Install KEDA for scale-to-zero |
-| `setup-guardduty.sh` | Enable GuardDuty EKS protection |
-| `cleanup-test-resources.sh` | Clean up orphan S3 buckets and test secrets |
-| `health-check.sh` | Platform health (JSON output) |
-| `usage-report.sh --month YYYY-MM` | Monthly per-tenant cost report |
-
 ## Security
 
 | Layer | Control |
 |-------|--------|
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
 | Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
-| Network | Internet-facing ALB with CF-only SG + WAF + HTTPS |
+| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + WAF + HTTPS |
 | Auth | Cognito signup + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
@@ -278,101 +170,54 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ## Documentation
 
-### Architecture
-
-Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain, one ALB, no wildcard DNS needed.
-- [System Architecture](docs/architecture.md) -- includes Operator SSA flow diagram
-- [Security Deep Dive](docs/security.md)
-
-### Components
-Learn how each component works:
-| Component | Description |
-|-----------|-------------|
+| Doc | Description |
+|-----|-------------|
+| [Architecture](docs/architecture.md) | Operator + ArgoCD flow, tenant lifecycle |
+| [Security](docs/security.md) | 10-layer security model |
 | [EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
 | [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, WAF |
 | [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
-| [IAM](docs/components/iam.md) | Pod Identity, ABAC, tenant isolation |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
-| [Observability](docs/components/observability.md) | CloudWatch, alarms, cost tracking |
-| [CI/CD](docs/components/cicd.md) | GitHub Actions, Tenant Operator, image updates |
-| [Storage](docs/components/storage.md) | PVC, EBS snapshots, backup/restore |
-| [GitOps](docs/components/gitops.md) | ArgoCD (EKS Capability) -- platform components only |
-
-### Operations
-| Guide | Description |
-|-------|-------------|
+| [GitOps](docs/components/gitops.md) | ArgoCD manages tenant resources via Helm chart |
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
 | [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
-| [Webhook Setup](docs/operations/webhook.md) | Slack/Discord integration |
 
 ## Project Structure
 
 ```
 +-- auth-ui/                    # Custom login/signup (S3 + CloudFront)
-|   +-- index.html              # Auth UI (Cognito SDK, CAPTCHA, PWA)
-|   +-- admin.html              # Admin dashboard
-|   +-- terms.html, privacy.html, manifest.json
-+-- cdk/                        # AWS CDK infrastructure
++-- cdk/                        # AWS CDK infrastructure (TypeScript)
 |   +-- lib/eks-cluster-stack.ts
 |   +-- lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
 |   +-- cdk.json.example        # Config template
-+-- helm/                       # Reference Helm templates (NOT used by Operator at runtime)
-|   +-- charts/openclaw-platform/  # Templates for docs and manual debugging
++-- helm/                       # Helm chart (source of truth, synced by ArgoCD)
+|   +-- charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, etc.)
 |   +-- gateway.yaml            # Gateway API resource
-|   +-- tenants/values-template.yaml  # Example values for reference
-+-- operator/                   # Tenant Operator (Rust/kube-rs) -- creates all K8s resources via SSA
-|   +-- src/                    # controller.rs, resources.rs, types.rs (CRD)
+|   +-- tenants/values-template.yaml  # Example values
++-- operator/                   # Tenant Operator (Rust/kube-rs)
+|   +-- src/                    # Creates NS/PVC/SA + ArgoCD Application + KEDA HSO
 |   +-- yaml/                   # CRD manifest, operator deployment
-|   +-- Dockerfile
 +-- docs/                       # Architecture, security, components, operations
-|   +-- architecture.md         # Includes Operator SSA flow diagram
-|   +-- security.md
-|   +-- components/             # Per-component deep dives
-|   +-- operations/             # Admin, user, webhook guides
 +-- scripts/                    # 20+ operations scripts
 +-- .github/workflows/ci.yml   # CI pipeline
-+-- LICENSE                     # MIT
 ```
-
-<details>
-<summary>What CDK manages vs post-deploy scripts</summary>
-
-| CDK (`cdk deploy`) | Scripts (post-deploy) |
-|--------------------|-----------------------|
-| EKS + VPC + IAM | KEDA installation |
-| Lambda functions | Cognito configuration |
-| S3 buckets | CloudFront #2 (tenants) |
-| CloudFront #1 (auth UI) | Route53 records |
-| WAF WebACL | WAF -> ALB association |
-| CloudWatch + SNS | CronJobs + dashboards |
-| VPC Flow Logs | GuardDuty EKS protection |
-| EKS cluster logging | Tenant Operator |
-
-ALB is created dynamically by Kubernetes LB Controller -- CDK cannot reference it at deploy time.
-
-</details>
 
 ## Cleanup
 
-To tear down all resources:
-
 ```bash
-# 1. Delete all tenants (removes namespaces, PVCs, Pod Identity associations)
+# 1. Delete all tenants
 for tenant in $(kubectl get tenants -o jsonpath='{.items[*].metadata.name}'); do
   ./scripts/delete-tenant.sh "$tenant" --yes
 done
 
-# 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh)
-#    These are not managed by CDK -- delete manually via AWS Console or CLI
+# 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh, not CDK-managed)
 
 # 3. Destroy CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack
 
-# 4. Clean up orphan resources (S3 buckets with RETAIN policy, ECR images)
+# 4. Clean up orphan resources
 ./scripts/cleanup-test-resources.sh
 ```
-
-> **Note:** S3 buckets with `RemovalPolicy.RETAIN` (error-pages) are not deleted by `cdk destroy`. Delete them manually if no longer needed.
 
 ## Contributing
 

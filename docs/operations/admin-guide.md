@@ -1,36 +1,32 @@
-# Admin Journey
-
-## Overview
-
-A platform admin deploys, manages, and monitors the OpenClaw multi-tenant platform.
+# Admin Guide
 
 ## Initial Deployment (One-Time)
 
 ```
-1. Configure    → cp cdk.json.example cdk.json (fill 11 context values)
-2. Deploy infra → npx cdk deploy (~15-20 min)
-3. K8s setup    → setup-keda.sh + setup-cognito.sh + setup-pvc-backup.sh
+1. Configure    -> cp cdk.json.example cdk.json (fill context values)
+2. Deploy infra -> npx cdk deploy (~15-20 min)
+3. K8s setup    -> setup-keda.sh + setup-cognito.sh + setup-pvc-backup.sh
                    + setup-image-update.sh + setup-usage-tracking.sh
                    + setup-bedrock-latency.sh + setup-coldstart-alarm.sh
                    + setup-audit-logging.sh
-4. First tenant → create-tenant.sh alice
-5. ALB setup    → post-deploy.sh (VPC Origin, CloudFront #2, Route53, WAF)
-6. Auth UI      → deploy-auth-ui.sh
-7. ArgoCD       → setup-argocd.sh + setup-argocd-apps.sh
-8. Verify       → health-check.sh
+4. Gateway API  -> kubectl apply -f helm/gateway.yaml
+5. First tenant -> create-tenant.sh alice
+6. ALB setup    -> post-deploy.sh (CloudFront #2, Route53, WAF)
+7. Auth UI      -> deploy-auth-ui.sh
+8. ArgoCD       -> setup-argocd.sh + setup-argocd-apps.sh
+9. Verify       -> health-check.sh
 ```
 
-## User Signup Approval
+## User Signup (Automated)
 
-```
 1. Receive SNS email: "New signup: user@company.com"
 2. Post-confirmation Lambda runs automatically:
    a. Creates Secrets Manager secret (gateway token)
    b. Creates EKS Pod Identity Association
-   c. Creates Tenant CR (operator reconciles → ArgoCD syncs Helm)
-   d. Sends SES welcome email to user
+   c. Creates Tenant CR -> Operator reconciles (NS, PVC, SA, ArgoCD App, KEDA HSO)
+   d. ArgoCD syncs Helm chart -> tenant resources created
+   e. Sends SES welcome email
 3. ~2 minutes later, tenant pod is running
-```
 
 ## Daily Operations
 
@@ -40,21 +36,13 @@ A platform admin deploys, manages, and monitors the OpenClaw multi-tenant platfo
 | View usage | CloudWatch Dashboard: OpenClaw-Usage | On demand |
 | Cost report | `./scripts/usage-report.sh --month YYYY-MM` | Monthly |
 | List tenants | `./scripts/admin-list-tenants.sh` | On demand |
-| Check alerts | Email (SNS) — pod restart, latency, cold start, budget | Automatic |
-
-## Alerts (Automatic)
-
-| Alert | Trigger | Action |
-|-------|---------|--------|
-| Pod restart | CloudWatch Alarm: restart count > 0 | Check pod logs |
-| Bedrock latency | P95 > 10 seconds | Check model availability |
-| Cold start slow | Pod startup > 60 seconds | Check node capacity, image cache |
-| Budget 80% | Cost-enforcer Lambda daily check | Notify tenant, consider limit |
-| Budget 100% | Cost-enforcer Lambda daily check | Decide: increase budget or restrict |
+| Check alerts | Email (SNS) | Automatic |
 
 ## Tenant Management
 
-### Create Tenant
+### Create Tenant (Manual -- bypasses Cognito)
+
+`create-tenant.sh` provisions a tenant using `helm install` directly (not via Tenant CR / ArgoCD):
 
 ```bash
 export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
@@ -63,17 +51,24 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ./scripts/create-tenant.sh alice \
   --display-name "Alice" \
-  --emoji "🤖" \
-  --skills "weather,gog,news" \
+  --skills "weather,gog" \
   --budget 100
 ```
+
+What it does:
+1. Generates tenant values file from template
+2. Creates Secrets Manager secret + Pod Identity Association
+3. Creates K8s namespace + gateway-token Secret
+4. `helm install` with tenant values
+5. Waits for pod Ready
+
+> Note: Tenants created via `create-tenant.sh` are NOT managed by ArgoCD. For ArgoCD-managed tenants, use the Cognito signup flow (which creates a Tenant CR -> Operator -> ArgoCD).
 
 ### Delete Tenant
 
 ```bash
 ./scripts/delete-tenant.sh alice
-# Prompts: "Type tenant name to confirm"
-# Deletes: ArgoCD app → Helm → namespace → Pod Identity → SM secret → values file
+# Deletes: ArgoCD app -> Helm -> namespace -> Pod Identity -> SM secret -> values file
 ```
 
 ### Backup / Restore
@@ -83,52 +78,13 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ./scripts/restore-tenant.sh alice s3://my-backup-bucket/backups/alice/alice-2026-03-29.tar.gz
 ```
 
-## GitOps with ArgoCD
-
-ArgoCD is deployed as an EKS Capability (fully managed by AWS).
-
-### Add Tenant via GitOps
-
-1. Run `create-tenant.sh` (creates SM secret + Pod Identity + values file)
-2. Git commit + push the values file
-3. ArgoCD ApplicationSet detects new file → auto-syncs → creates namespace + pod
-
-### View ArgoCD UI
-
-ArgoCD EKS Capability provides a hosted UI with AWS Identity Center SSO. Access via:
-
-```bash
-./scripts/setup-argocd.sh  # Shows UI URL
-```
-
 ## Platform Upgrade
 
 ### OpenClaw Image Update
 
-A CronJob (`openclaw-image-updater`) checks GHCR every 6 hours for new image tags. If a new version is found, it runs `kubectl set image` across all tenant deployments.
+CronJob (`openclaw-image-updater`) checks GHCR every 6 hours. If newer version found, runs `kubectl set image` across all tenant deployments.
 
-| Detail | Value |
-|--------|-------|
-| Schedule | Every 6 hours (`0 */6 * * *`) |
-| Method | `kubectl set image` with label selector |
-| Manifest | `scripts/image-update-cronjob.yaml` |
-
-**Risks and mitigations:**
-
-| Risk | Mitigation |
-|------|-----------|
-| Breaking change | Filter to patch versions only |
-| Registry unreachable | CronJob retries next cycle |
-| Rollout failure | Kubernetes rollout strategy; `kubectl rollout undo` available |
-
-> Note: CronJob updates running deployments but does NOT update `values.yaml` in git. For full GitOps, use ArgoCD image updater.
-
-Manual upgrade:
-
-```bash
-helm upgrade openclaw-<name> helm/charts/openclaw-platform \
-  -n openclaw-<name> --set image.tag=<new-tag> --reuse-values
-```
+> Note: For ArgoCD-managed tenants, ArgoCD may revert the image change on next sync (selfHeal). Update the Helm chart source or ArgoCD Application values instead.
 
 ### CDK Stack Update
 
@@ -136,35 +92,26 @@ helm upgrade openclaw-<name> helm/charts/openclaw-platform \
 cd cdk && npx cdk deploy
 ```
 
-### Auth UI Update
+## Alerts
 
-```bash
-# Edit auth-ui/index.html
-./scripts/deploy-auth-ui.sh
-```
-
-## Audit
-
-```bash
-# One-time setup
-./scripts/setup-audit-logging.sh
-
-# Query Bedrock API calls per tenant
-# Use Athena in AWS Console or CLI
-```
+| Alert | Trigger | Action |
+|-------|---------|--------|
+| Pod restart | CloudWatch: restart count > 0 | Check pod logs |
+| Bedrock latency | P95 > 10 seconds | Check model availability |
+| Cold start slow | Pod startup > 60 seconds | Check node capacity |
+| Budget 80% | Cost-enforcer Lambda | Notify tenant |
+| Budget 100% | Cost-enforcer Lambda | Decide: increase or restrict |
 
 ## Automation Summary
 
 | Action | Automated | Manual |
 |--------|-----------|--------|
-| User signup | ✅ Cognito + Lambda | — |
-| Tenant provisioning | ✅ Lambda → Tenant CR → Operator → ArgoCD | — |
-| Welcome email | ✅ SES | — |
-| Scale to zero | ✅ KEDA (15 min idle) | — |
-| Scale up | ✅ KEDA (on request) | — |
-| PVC backup | ✅ CronJob (daily) | — |
-| Image update check | ✅ CronJob (6h) | Admin reviews |
-| Cost budget alert | ✅ Lambda (daily) | Admin decides action |
-| Pod restart alert | ✅ CloudWatch → SNS | — |
-| Tenant deletion | — | `delete-tenant.sh` |
-| Platform deploy | — | `cdk deploy` + scripts |
+| User signup | Cognito + Lambda | -- |
+| Tenant provisioning | Lambda -> Tenant CR -> Operator -> ArgoCD | -- |
+| Welcome email | SES | -- |
+| Scale to zero / up | KEDA | -- |
+| PVC backup | CronJob (daily) | -- |
+| Image update check | CronJob (6h) | Admin reviews |
+| Cost budget alert | Lambda (daily) | Admin decides |
+| Tenant deletion | -- | `delete-tenant.sh` |
+| Platform deploy | -- | `cdk deploy` + scripts |

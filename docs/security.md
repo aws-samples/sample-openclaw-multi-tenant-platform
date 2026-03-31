@@ -1,6 +1,6 @@
 # Security Deep Dive
 
-> OpenClaw Platform -- defense-in-depth across 10 layers, from edge to audit trail.
+> Defense-in-depth across 10 layers, from edge to audit trail.
 
 ---
 
@@ -10,8 +10,8 @@
 +-----------------------------------------------------------------------+
 |  1. Edge         CloudFront + WAF (Common Rules + rate limit)          |
 |  2. Signup       Turnstile CAPTCHA + email domain restriction          |
-|  3. Network      Internet-facing ALB (CF-only SG) + NetworkPolicy      |
-|  4. Auth         Cognito signup + local token auth + 3-layer origin    |
+|  3. Network      Internet-facing ALB (CF prefix list SG) + NetworkPolicy|
+|  4. Auth         Cognito signup + gateway token auth + CF prefix list   |
 |  5. Tenant       Namespace isolation + ABAC + ResourceQuota            |
 |  6. Secrets      exec SecretRef -- on-demand fetch, never persisted    |
 |  7. LLM          Bedrock via Pod Identity -- zero API keys             |
@@ -25,58 +25,48 @@
 
 ## Layer 1: Edge Protection
 
-**What it does**: Filters malicious traffic before it reaches the application.
+Filters malicious traffic before it reaches the application.
 
-**How it's configured**:
 - CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
-- WAF WebACL (REGIONAL scope) attached to ALB with two rules:
-  - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 coverage (SQLi, XSS, path traversal, etc.)
-  - `RateLimit` -- 2000 requests per 5 minutes per IP, then block
+- WAF WebACL (REGIONAL scope) attached to ALB:
+  - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 (SQLi, XSS, path traversal)
+  - `RateLimit` -- 2000 requests per 5 minutes per IP
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl` (CfnWebACL)
+**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
 
 **Script**: `scripts/setup-waf.sh` -- associates WAF WebACL with the dynamic ALB ARN
-
-**Attacks mitigated**: DDoS (rate limiting), SQLi, XSS, bad bots, path traversal
 
 ---
 
 ## Layer 2: Signup Protection
 
-**What it does**: Prevents unauthorized account creation and bot signups.
+Prevents unauthorized account creation and bot signups.
 
-**How it's configured**:
-- Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS` env var)
-- Rate limiting: max 5 signups per email domain per hour (via Cognito `ListUsers` count)
+- Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS`)
+- Rate limiting: max 5 signups per email domain per hour
 - Cloudflare Turnstile CAPTCHA verification (if `TURNSTILE_SECRET` is set)
-  > **Note**: The `allowedEmailDomains` setting in `cdk.json` is the primary access control. Ensure this is set to your company domain only.
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `PreSignupFn`
-
-**Lambda source**: `cdk/lambda/pre-signup/index.py`
-
-**Attacks mitigated**: Bot signups, unauthorized domain access, account enumeration (rejected domains get generic error)
 
 ---
 
 ## Layer 3: Network Isolation
 
-**What it does**: Ensures pods are unreachable from the internet and isolated from each other.
+Ensures tenant pods are isolated from each other and only reachable via the controlled traffic path.
 
-**How it's configured**:
 - VPC with public/private subnet separation (2 AZs, /24 subnets)
 - Pods run exclusively in private subnets
-- ALB is **internet-facing** with 3-layer origin protection:
-  - L3/L4: ALB Security Group allows only CloudFront managed prefix list
-  - L7: WAF validates `X-Verify-Origin` custom header from CloudFront
-  - Transport: HTTPS-only origin protocol
-- Traffic path: Internet -> CloudFront -> ALB (public, CF-only SG) -> Pod
+- ALB is **internet-facing** with CloudFront prefix list SG restriction (`pl-82a045eb`):
+  - Only CloudFront IPs can reach the ALB (L3/L4)
+  - WAF validates `X-Verify-Origin` custom header (L7)
+  - HTTPS-only origin protocol
+- Traffic path: Internet -> CloudFront -> ALB (internet-facing, CF-only SG) -> Pod
 - 2 NAT Gateways (HA) for outbound internet
 - VPC Flow Logs enabled (all traffic -> CloudWatch Logs)
-- NetworkPolicy per tenant namespace (created by Operator via SSA in `operator/src/resources.rs`):
+- NetworkPolicy per tenant namespace (Helm chart template `networkpolicy.yaml`):
 
 ```yaml
-# Ingress: same namespace + any source on port 18789 (ALB health checks)
+# Ingress: any source on service port (ALB health checks + traffic) + same namespace
 # Egress whitelist:
 #   DNS         -> any namespace, UDP/TCP 53
 #   Pod Identity -> 169.254.170.23/32, TCP 80
@@ -86,40 +76,34 @@
 # Everything else: implicit deny
 ```
 
-The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over port 443 while allowing external AWS service endpoints (Bedrock, Secrets Manager, container registries).
+The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over port 443 while allowing external AWS service endpoints.
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `Vpc`, `VpcFlowLog`
 
-**Operator reference**: `operator/src/resources.rs` -> `ensure_network_policy`
-
-**Attacks mitigated**: Direct pod access from internet, cross-tenant lateral movement, pod-to-pod data exfiltration
+**Helm chart template**: `helm/charts/openclaw-platform/templates/networkpolicy.yaml`
 
 ---
 
 ## Layer 4: Authentication
 
-**What it does**: Ensures access is controlled before reaching a pod.
+Controls access before reaching a pod.
 
-**How it's configured**:
 - Cognito User Pool for signup identity management
-- OpenClaw gateway runs in `local` auth mode with token authentication
-- 3-layer origin protection: CloudFront prefix list SG + WAF header validation + HTTPS-only
-- Path-based routing via Gateway API HTTPRoute
-- Traffic path: Internet -> CloudFront -> internet-facing ALB (CF-only) -> HTTPRoute -> Pod
+- OpenClaw gateway runs in `token` auth mode with `exec` SecretRef -> `aws-sm` -> Secrets Manager
+- No ALB Cognito auth -- gateway handles auth locally
+- Path-based routing via Gateway API HTTPRoute (`/t/{tenant}/`)
+- Traffic path: Internet -> CloudFront -> internet-facing ALB (CF prefix list SG) -> HTTPRoute -> Pod
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `UserPool` (imported)
 
-**Operator reference**: `operator/src/resources.rs` -> `ensure_config_map` (gateway auth config), `ensure_httproute` (HTTPRoute)
-
-**Attacks mitigated**: Direct pod access from internet (CF-only SG), unauthorized access (CloudFront + WAF + local auth)
+**Helm chart templates**: `configmap.yaml` (gateway auth config), `httproute.yaml` (HTTPRoute)
 
 ---
 
 ## Layer 5: Tenant Isolation
 
-**What it does**: Prevents one tenant from accessing another tenant's resources.
+Prevents one tenant from accessing another tenant's resources.
 
-**How it's configured**:
 - One Kubernetes namespace per tenant (`openclaw-{tenant}`)
 - ResourceQuota per namespace: CPU 4 cores, memory 8Gi, max 10 pods
 - NetworkPolicy: default-deny + explicit allowlist (see Layer 3)
@@ -129,19 +113,17 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
 
-**Operator reference**:
-- `operator/src/resources.rs` -> `ensure_resource_quota`, `ensure_service_account`, `ensure_network_policy`, `ensure_pdb`
+**Operator**: `ensure_namespace`, `ensure_pvc`, `ensure_service_account` (creates NS, PVC, SA)
 
-**Attacks mitigated**: Noisy neighbor (ResourceQuota), cross-tenant secret access (ABAC), cross-tenant network access (NetworkPolicy)
+**Helm chart templates**: `resourcequota.yaml`, `networkpolicy.yaml`, `pdb.yaml`
 
 ---
 
 ## Layer 6: Secrets Management
 
-**What it does**: Provides on-demand secret access without persisting credentials on disk.
+On-demand secret access without persisting credentials on disk.
 
-**How it's configured**:
-- Secrets stored in AWS Secrets Manager with path convention: `openclaw/{tenant}/{secret-name}`
+- Secrets stored in AWS Secrets Manager: `openclaw/{tenant}/{secret-name}`
 - Each secret tagged with `tenant-namespace: openclaw-{tenant}`
 - `exec SecretRef` pattern: OpenClaw invokes `fetch-secret.mjs` on demand
 - `fetch-secret.mjs` uses Pod Identity -> STS AssumeRole -> GetSecretValue
@@ -150,133 +132,96 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `SecretsManagerABAC` policy statement
 
-**Operator reference**: `operator/src/resources.rs` -> `ensure_config_map` (embeds `fetch-secret.mjs` in ConfigMap, deployed via init-setup container)
-
-**Attacks mitigated**: Secret leakage (never written to disk), credential theft (temporary STS tokens), cross-tenant secret access (ABAC)
+**Helm chart template**: `configmap.yaml` (embeds `fetch-secret.mjs`, deployed via init-setup container)
 
 ---
 
 ## Layer 7: LLM Access Control
 
-**What it does**: Provides LLM access without API keys, with model-level control.
+LLM access without API keys, with model-level control.
 
-**How it's configured**:
-- Amazon Bedrock accessed via Pod Identity -- zero API keys in config or environment
+- Amazon Bedrock accessed via Pod Identity -- zero API keys
 - `OpenClawTenantRole` grants `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
-- Cross-region inference profiles for model routing
-- Model discovery: `bedrock:ListFoundationModels`, `bedrock:ListInferenceProfiles`, `bedrock:GetInferenceProfile`
-- OpenClaw application-level controls (set in Operator ConfigMap):
+- OpenClaw application-level controls (set in Helm ConfigMap):
   - `tool_policy: deny` -- explicit tool allowlist only
   - `exec: deny` -- no shell execution by default
   - `elevated: disabled` -- no privilege escalation
   - `fs: workspaceOnly` -- filesystem restricted to workspace directory
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `BedrockInvoke`, `BedrockDiscovery` policy statements
+**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `BedrockInvoke`, `BedrockDiscovery`
 
-**Operator reference**: `operator/src/resources.rs` -> `ensure_config_map` (tools config)
-
-**Attacks mitigated**: API key leakage (none exist), prompt injection leading to system access (tool restrictions), unauthorized model access (IAM-controlled)
+**Helm chart template**: `configmap.yaml` (tools config)
 
 ---
 
 ## Layer 8: Cost Control
 
-**What it does**: Prevents runaway LLM costs with per-tenant budgets.
+Prevents runaway LLM costs with per-tenant budgets.
 
-**How it's configured**:
 - Daily Lambda (`CostEnforcerFn`) queries CloudWatch Logs Insights for per-namespace Bedrock token usage
-- Per-model pricing table (Opus, Sonnet, DeepSeek, etc.)
 - Budget read from Secrets Manager tag `budget-usd` (default: $100/month)
 - Alerts at 80% and 100% budget via SNS
-- Per-tenant monthly cost report: `scripts/usage-report.sh --month YYYY-MM`
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `CostEnforcerFn`, `CostEnforcerSchedule`
-
-**Lambda source**: `cdk/lambda/cost-enforcer/index.py`
-
-**Attacks mitigated**: Runaway LLM costs, abuse by compromised tenant, budget overruns
 
 ---
 
 ## Layer 9: Data Protection
 
-**What it does**: Ensures tenant data survives pod restarts, scale-to-zero, and failures.
+Ensures tenant data survives pod restarts, scale-to-zero, and failures.
 
-**How it's configured**:
 - PVC (gp3 EBS) per tenant -- persists across pod restarts and scale-to-zero
 - Daily EBS snapshot CronJob with 7-day retention
-- `EBSSnapshotRole` with Pod Identity for snapshot operations
-- Backup/restore scripts: `scripts/backup-tenant.sh`, `scripts/restore-tenant.sh`
 - Container runs as non-root (UID 1000) with `fsGroup: 1000`
-- `runAsNonRoot: true` enforced in pod security context
-- `readOnlyRootFilesystem: true` on all containers
+- `runAsNonRoot: true`, `readOnlyRootFilesystem: true`
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `EbsSnapshotRole`, `Gp3StorageClass`
+**Operator**: `ensure_pvc` (creates PVC)
 
-**Operator reference**: `operator/src/resources.rs` -> `ensure_pvc`, `ensure_deployment` (securityContext)
-
-**Scripts**: `scripts/pvc-backup-cronjob.yaml`, `scripts/setup-pvc-backup.sh`
-
-**Attacks mitigated**: Data loss from pod crashes, accidental deletion (snapshot recovery), privilege escalation via root container
+**Helm chart template**: `deployment.yaml` (securityContext)
 
 ---
 
 ## Layer 10: Audit Trail
 
-**What it does**: Records all Bedrock API calls for compliance and forensics.
+Records all Bedrock API calls for compliance and forensics.
 
-**How it's configured**:
 - Dedicated CloudTrail trail (`openclaw-bedrock-audit`) -- Bedrock events only
-- Advanced event selectors: `bedrock.amazonaws.com` + `bedrock-runtime.amazonaws.com`
-- Logs stored in S3 bucket: `openclaw-audit-logs-{account}-{region}`
-- Athena database + table for SQL queries over audit logs
-- CloudWatch Container Insights for pod-level metrics and application logs
-- EKS control plane logging: all 5 types (api, audit, authenticator, controllerManager, scheduler)
+- Logs stored in S3: `openclaw-audit-logs-{account}-{region}`
+- Athena database + table for SQL queries
+- CloudWatch Container Insights for pod-level metrics
+- EKS control plane logging: all 5 types
 
 **Script**: `scripts/setup-audit-logging.sh`
-
-**Example Athena query**:
-```sql
-SELECT eventtime, eventname, useridentity.arn
-FROM openclaw_audit.cloudtrail_bedrock
-WHERE eventsource = 'bedrock-runtime.amazonaws.com'
-ORDER BY eventtime DESC LIMIT 20;
-```
-
-**Attacks mitigated**: Undetected unauthorized access, compliance violations, forensic gaps
 
 ---
 
 ## Threat Model
 
-### Attacks Mitigated
-
 | Attack Vector | Mitigation |
 |---------------|------------|
 | DDoS | CloudFront edge caching + WAF rate limiting (2000 req/5min/IP) |
 | SQLi / XSS | WAF AWSManagedRulesCommonRuleSet |
-| Bot signups | Cloudflare Turnstile CAPTCHA + email domain allowlist + rate limiting (5/domain/hour) |
-| Unauthenticated access | 3-layer origin protection: CF prefix list SG + WAF header + HTTPS |
+| Bot signups | Turnstile CAPTCHA + email domain allowlist + rate limiting |
+| Unauthenticated access | CF prefix list SG + WAF header + gateway token auth |
 | Cross-tenant data access | Namespace isolation + NetworkPolicy + ABAC on Secrets Manager |
 | Cross-tenant network | NetworkPolicy blocks 10.0.0.0/8 on egress port 443 |
-| API key leakage | Zero API keys -- all access via Pod Identity + STS temporary credentials |
-| Secret persistence on disk | exec SecretRef -- fetched on demand, returned via stdout, never written |
-| Prompt injection -> system access | `exec: deny`, `elevated: disabled`, `fs: workspaceOnly`, explicit tool allowlist |
+| API key leakage | Zero API keys -- all access via Pod Identity + STS |
+| Secret persistence on disk | exec SecretRef -- fetched on demand, never written |
+| Prompt injection -> system access | `exec: deny`, `elevated: disabled`, `fs: workspaceOnly` |
 | Runaway LLM costs | Daily cost enforcer Lambda + per-tenant budget + SNS alerts |
 | Data loss | PVC persistence + daily EBS snapshots + 7-day retention |
-| Privilege escalation | Non-root container (UID 1000), `runAsNonRoot: true`, `readOnlyRootFilesystem: true` |
-| Unauthorized Bedrock usage | CloudTrail audit trail + Athena queryable logs |
+| Privilege escalation | Non-root container, `runAsNonRoot: true`, `readOnlyRootFilesystem: true` |
 | Karpenter subnet confusion | EC2NodeClass requires both `internal-elb` AND cluster-owned tags |
 
 ### Attack Surface Diagram
 
 ```
-Internet --> CloudFront --> ALB (internet-facing, CF-only SG) --> Pod
-   |              |           |                                     |
-   |         TLS termination  WAF: origin header verify         NetworkPolicy
-   |         Edge caching     + Common Rules + Rate Limit        ABAC
-   |                          SG: CF prefix list only            exec deny
-   |                                                             fs: workspaceOnly
+Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
+   |              |           |                                           |
+   |         TLS termination  WAF: origin header verify               NetworkPolicy
+   |         Edge caching     + Common Rules + Rate Limit              ABAC
+   |                          SG: CF prefix list only                  exec deny
+   |                                                                   fs: workspaceOnly
    |
    +-> Cognito --> Pre-signup Lambda --> Turnstile + domain check
                    Post-confirm Lambda --> SM + Pod Identity + Tenant CR
@@ -286,17 +231,15 @@ Internet --> CloudFront --> ALB (internet-facing, CF-only SG) --> Pod
 
 ## What's NOT Covered
 
-These are known gaps -- not yet implemented or intentionally deferred:
-
 | Gap | Notes |
 |-----|-------|
-| MFA | Cognito supports MFA but not enabled. Recommended for admin accounts. |
-| SAST/DAST | No static/dynamic application security testing in CI pipeline. Consider adding CodeGuru or Snyk. |
-| Image signing / verification | No Sigstore/Cosign verification on container images. |
-| Secrets rotation | Secrets Manager secrets are not auto-rotated. |
-| WAF logging | WAF sampled requests enabled but full logging to S3/CloudWatch not configured. |
-| GuardDuty | No runtime threat detection for EKS. Run `scripts/setup-guardduty.sh` to enable. |
-| KMS encryption | EBS uses default encryption. No customer-managed KMS keys for S3 or Secrets Manager. |
+| MFA | Cognito supports MFA but not enabled |
+| SAST/DAST | No static/dynamic security testing in CI |
+| Image signing | No Sigstore/Cosign verification |
+| Secrets rotation | SM secrets not auto-rotated |
+| WAF logging | Sampled requests only, no full logging |
+| GuardDuty | No runtime threat detection for EKS |
+| KMS encryption | EBS uses default encryption, no CMK |
 
 ---
 
@@ -307,24 +250,20 @@ These are known gaps -- not yet implemented or intentionally deferred:
 | Control Area | Current State | Gap |
 |-------------|---------------|-----|
 | Access Control | Cognito + ABAC + Pod Identity | Add MFA for admin accounts |
-| Encryption in Transit | TLS everywhere (CloudFront -> ALB -> Pod) | None |
-| Encryption at Rest | EBS default encryption, S3 default encryption | Consider CMK for sensitive data |
-| Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs + SNS alerts | Enable WAF logging |
-| Change Management | ArgoCD (EKS Capability) + CI/CD + cdk-nag + npm audit | None |
-| Supply Chain | GitHub Actions SHA-pinned, npm --ignore-scripts, cargo-deny | None |
+| Encryption in Transit | TLS everywhere | None |
+| Encryption at Rest | EBS default encryption | Consider CMK |
+| Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs | Enable WAF logging |
+| Change Management | ArgoCD + CI/CD + cdk-nag + npm audit | None |
 | Incident Response | SNS alerts + Athena queries | Document runbooks |
-| Data Retention | 7-day EBS snapshots, CloudTrail in S3 | Define retention policy per data class |
 
 ### HIPAA Readiness
 
 | Requirement | Current State | Gap |
 |-------------|---------------|-----|
-| PHI encryption at rest | EBS default encryption | Requires CMK + audit of key management |
+| PHI encryption at rest | EBS default encryption | Requires CMK |
 | PHI encryption in transit | TLS everywhere | None |
-| Access logging | CloudTrail + Container Insights | Need comprehensive access logs for all PHI touchpoints |
-| BAA | Not in place | Requires AWS BAA + Bedrock BAA eligibility check |
+| Access logging | CloudTrail + Container Insights | Need comprehensive PHI access logs |
+| BAA | Not in place | Requires AWS BAA |
 | Minimum necessary access | ABAC + namespace isolation | None |
-| Audit controls | CloudTrail + Athena | Need automated compliance reporting |
-| Data backup | Daily EBS snapshots | Need documented recovery procedures + RTO/RPO |
 
-> **Note**: HIPAA compliance requires a Business Associate Agreement (BAA) with AWS and verification that all services used (Bedrock, Secrets Manager, EKS, etc.) are HIPAA-eligible. This platform provides the technical controls but does not constitute HIPAA compliance on its own.
+> **Note**: HIPAA compliance requires a BAA with AWS and verification that all services used are HIPAA-eligible. This platform provides technical controls but does not constitute HIPAA compliance on its own.
