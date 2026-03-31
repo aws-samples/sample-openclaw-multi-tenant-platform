@@ -33,7 +33,7 @@ rules:
     resources: ["httproutes"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["gateway.k8s.aws"]
-    resources: ["listenerruleconfigurations", "targetgroupconfigurations"]
+    resources: ["targetgroupconfigurations"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["http.keda.sh"]
     resources: ["httpscaledobjects"]

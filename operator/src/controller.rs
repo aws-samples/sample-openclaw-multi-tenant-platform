@@ -1,4 +1,4 @@
-use crate::types::{TENANT_FINALIZER, Tenant, require_env};
+use crate::types::{TENANT_FINALIZER, Tenant};
 use crate::{Error, Metrics, Result, resources};
 use futures::StreamExt;
 use kube::{
@@ -82,28 +82,8 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     resources::ensure_resource_quota(client.clone(), &name, tenant_ns, &ssapply).await?;
     resources::ensure_pdb(client.clone(), &name, tenant_ns, &ssapply).await?;
 
-    let cognito_pool_arn = require_env("COGNITO_POOL_ARN")?;
-    let cognito_client_id = require_env("COGNITO_CLIENT_ID")?;
-    let cognito_domain = require_env("COGNITO_DOMAIN")?;
-
-    let httproute_condition = resources::ensure_httproute(
-        client.clone(),
-        &name,
-        tenant_ns,
-        &ssapply,
-        &cognito_pool_arn,
-    )
-    .await?;
-    let lrc_condition = resources::ensure_lrc(
-        client.clone(),
-        &name,
-        tenant_ns,
-        &ssapply,
-        &cognito_pool_arn,
-        &cognito_client_id,
-        &cognito_domain,
-    )
-    .await?;
+    let httproute_condition =
+        resources::ensure_httproute(client.clone(), &name, tenant_ns, &ssapply).await?;
     let tgc_condition = resources::ensure_tgc(client.clone(), &name, tenant_ns, &ssapply).await?;
     let keda_condition =
         resources::ensure_keda_hso(client.clone(), &name, tenant_ns, &ssapply).await?;
@@ -120,7 +100,6 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
                 deploy_condition,
                 keda_condition,
                 httproute_condition,
-                lrc_condition,
                 tgc_condition
             ]
         }
