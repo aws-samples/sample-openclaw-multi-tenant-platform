@@ -16,33 +16,10 @@ env:
   IMAGE_NAME: ${{ github.repository_owner }}/openclaw-tenant-operator
 
 jobs:
-  # Check if self-hosted runners are available
-  check-runners:
-    name: "Check runner availability"
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    outputs:
-      has-self-hosted: ${{ steps.check.outputs.available }}
-    steps:
-      - id: check
-        run: |
-          # Check via GitHub API if self-hosted runners are online
-          RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/actions/runners")
-          if ! echo "$RESPONSE" | jq -e '.runners' >/dev/null 2>&1; then
-            echo "Failed to query runners API or invalid response"
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          RUNNERS=$(echo "$RESPONSE" | jq '[.runners[] | select(.status=="online")] | length')
-          echo "Online runners: $RUNNERS"
-          echo "available=$( [ "${RUNNERS:-0}" -ge 2 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
-
   # === Fast path: native build on self-hosted runners ===
   build-arm64-native:
     name: "Build arm64 (native)"
-    needs: check-runners
-    if: needs.check-runners.outputs.has-self-hosted == 'true' && github.repository_owner == 'snese'
+    if: vars.USE_SELF_HOSTED_RUNNERS == 'true' && github.repository_owner == 'snese'
     runs-on: [self-hosted, linux, ARM64]
     timeout-minutes: 15
     steps:
@@ -64,8 +41,7 @@ jobs:
 
   build-amd64-native:
     name: "Build amd64 (native)"
-    needs: check-runners
-    if: needs.check-runners.outputs.has-self-hosted == 'true' && github.repository_owner == 'snese'
+    if: vars.USE_SELF_HOSTED_RUNNERS == 'true' && github.repository_owner == 'snese'
     runs-on: [self-hosted, linux, X64]
     timeout-minutes: 15
     steps:
@@ -87,8 +63,9 @@ jobs:
 
   merge-native:
     name: "Merge manifest (native)"
-    runs-on: ubuntu-latest
+    if: vars.USE_SELF_HOSTED_RUNNERS == 'true' && github.repository_owner == 'snese'
     needs: [build-arm64-native, build-amd64-native]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -119,8 +96,7 @@ jobs:
   # === Fallback: QEMU cross-compile on GitHub-hosted runner ===
   build-fallback:
     name: "Build multi-arch (QEMU fallback)"
-    needs: check-runners
-    if: needs.check-runners.outputs.has-self-hosted != 'true' || github.repository_owner != 'snese'
+    if: vars.USE_SELF_HOSTED_RUNNERS != 'true' || github.repository_owner != 'snese'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
