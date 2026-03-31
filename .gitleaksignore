@@ -1,0 +1,7 @@
+# False positives verified 2026-03-31
+# All are template placeholders or deleted files in git history
+cecb8bfa0df7ba3c84866d699f4563850e8e5584:helm/tenants/values-template.yaml:generic-api-key:16
+cecb8bfa0df7ba3c84866d699f4563850e8e5584:helm/values-tenant-example.yaml:generic-api-key:11
+6746e8b14c4c6169c7be352c4a34996d54cd4f1d:cognito-config.json:generic-api-key:3
+6746e8b14c4c6169c7be352c4a34996d54cd4f1d:platform-config.json:generic-api-key:7
+f3f51c7414d1761abfec0cccd50f3e879dbbda0e:README.md:generic-api-key:86

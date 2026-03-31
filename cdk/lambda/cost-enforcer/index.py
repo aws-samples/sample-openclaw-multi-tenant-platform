@@ -54,7 +54,7 @@ def query_token_usage() -> dict:
     query_id = resp['queryId']
 
     for _ in range(30):
-        time.sleep(2)
+        time.sleep(2)  # nosemgrep: arbitrary-sleep -- polling CloudWatch Logs Insights query completion
         result = logs.get_query_results(queryId=query_id)
         if result['status'] == 'Complete':
             break
