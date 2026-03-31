@@ -172,6 +172,7 @@ config:
       aws-sm:
         source: exec
         command: /usr/local/bin/node
+        allowInsecurePath: true
         args:
           - /home/node/.openclaw/workspace/bin/fetch-secret.mjs
         timeoutMs: 10000
