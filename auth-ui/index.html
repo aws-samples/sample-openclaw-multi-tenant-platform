@@ -51,6 +51,7 @@ input::placeholder{color:#555}
 #welcome-section h2{font-size:1.25rem;margin-bottom:0.75rem}
 #welcome-section p{color:var(--muted);line-height:1.6;font-size:0.9rem}
 #forgot-section{text-align:left}
+.error-icon{width:56px;height:56px;border-radius:50%;background:rgba(239,68,68,0.1);display:inline-flex;align-items:center;justify-content:center;font-size:1.5rem;margin-bottom:1rem}
 </style>
 </head>
 <body>
@@ -66,7 +67,7 @@ input::placeholder{color:#555}
         <div class="tab active" onclick="switchTab('login')" role="tab" aria-selected="true">Sign In</div>
         <div class="tab" onclick="switchTab('signup')" role="tab" aria-selected="false">Sign Up</div>
       </div>
-      <div id="msg" class="msg"></div>
+      <div id="msg" class="msg" role="alert"></div>
       <form onsubmit="return handleSubmit(event)">
         <input type="email" id="email" placeholder="Email" required autocomplete="email">
         <div class="pw-wrap">
@@ -84,7 +85,7 @@ input::placeholder{color:#555}
 
     <!-- Verify code -->
     <div id="verify-section" class="section">
-      <div id="verify-msg" class="msg info">Check your email for a verification code.</div>
+      <div id="verify-msg" class="msg info" role="status">Check your email for a verification code.</div>
       <form onsubmit="return handleVerify(event)">
         <input type="text" id="code" placeholder="Verification code" required autocomplete="one-time-code">
         <button type="submit" class="btn" id="verify-btn">Verify<span class="spinner"></span></button>
@@ -120,9 +121,9 @@ input::placeholder{color:#555}
 
     <!-- Loading / provisioning -->
     <div id="loading-section" class="section" style="text-align:center">
-      <div class="spinner" style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem"></div>
-      <h2 id="loading-title">Opening your workspace...</h2>
-      <p id="loading-msg" style="color:var(--muted);margin-top:0.75rem;font-size:0.9rem">This may take up to 30 seconds if your workspace was idle.</p>
+      <div id="loading-spinner" class="spinner" style="display:inline-block;width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:1rem"></div>
+      <h2 id="loading-title" aria-live="polite">Opening your workspace...</h2>
+      <p id="loading-msg" aria-live="polite" style="color:var(--muted);margin-top:0.75rem;font-size:0.9rem">This may take up to 30 seconds if your workspace was idle.</p>
       <div id="loading-progress" style="margin-top:1.5rem;display:none">
         <div style="background:var(--border);border-radius:8px;height:6px;width:100%;max-width:300px;margin:0 auto">
           <div id="progress-bar" style="background:var(--primary);height:6px;border-radius:8px;width:0%;transition:width 1s ease"></div>
@@ -161,18 +162,32 @@ function pollWorkspace(url,isNewSignup,gwToken){
   const bar=document.getElementById('progress-bar');
   const ptext=document.getElementById('progress-text');
   const fallback=document.getElementById('loading-fallback');
+  const spinner=document.getElementById('loading-spinner');
   showSection('loading-section');
+  spinner.style.display='inline-block';
   title.textContent=isNewSignup?'Creating your workspace...':'Opening your workspace...';
-  msg.textContent=isNewSignup?'This usually takes about 2 minutes.':'Connecting...';
+  msg.textContent=isNewSignup?'This usually takes about 2 minutes.':'This may take up to 30 seconds if your workspace was idle.';
   progress.style.display=isNewSignup?'block':'none';
-  if(isNewSignup){bar.style.width='5%';ptext.textContent='Setting up...';}
+  fallback.style.display='none';
+  if(isNewSignup){bar.style.width='5%';bar.style.background='var(--primary)';ptext.textContent='Setting up...';}
   const max=isNewSignup?60:20;
   let i=0;
   const poll=async()=>{
     i++;
     if(isNewSignup){const p=Math.min(5+i*1.5,95);bar.style.width=p+'%';ptext.textContent=i<8?'Setting up account...':i<18?'Configuring AI assistant...':i<30?'Deploying workspace...':'Almost ready...';}
     try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status===401){window.location.href='/';return;}if(r.status!==404&&r.status!==502&&r.status!==503){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';const dest=gwToken?url+(url.includes('#')?'':'#token=')+gwToken:url;setTimeout(()=>{window.location.href=dest},800);return;}}catch(e){}
-    if(i>=max){title.textContent='Still setting up...';msg.textContent='Taking longer than expected. Try refreshing in a minute.';fallback.style.display='block';return;}
+    if(i>=max){
+      // Terminal error state: stop spinner, show clear failure
+      spinner.style.display='none';
+      if(isNewSignup){
+        bar.style.width='100%';bar.style.background='var(--error)';
+        ptext.textContent='Setup did not complete in time.';
+      }
+      title.textContent='Workspace unavailable';
+      msg.textContent='Setup is taking longer than expected. Please try again in a few minutes, or contact your administrator.';
+      fallback.style.display='block';
+      return;
+    }
     setTimeout(poll,3000);
   };
   poll();
@@ -192,7 +207,7 @@ async function handleSubmit(e){
   setLoading(btn,true);
   try{
     if(tab==='signup'){if(C.turnstileSiteKey){const tr=turnstile.getResponse();if(!tr){showMsg('msg','Please complete the CAPTCHA','error');setLoading(btn,false);return}}const signUpResp=await api('SignUp',{ClientId:C.clientId,Username:email,Password:pw,UserAttributes:[{Name:'email',Value:email}],ClientMetadata:{turnstileToken:C.turnstileSiteKey?turnstile.getResponse():''}});if(signUpResp.UserConfirmed){const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);pollWorkspace(`https://${C.domain}/t/${t}/`,true,gw)}else{pendingEmail=email;pendingPw=pw;showSection('verify-section')}}
-    else{const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);window.location.assign(`https://${C.domain}/t/${t}/#token=`+gw)}
+    else{const auth=await api('InitiateAuth',{AuthFlow:'USER_PASSWORD_AUTH',ClientId:C.clientId,AuthParameters:{USERNAME:email,PASSWORD:pw}});const gw=getGatewayToken(auth.AuthenticationResult.IdToken);localStorage.setItem('openclaw_email',email);const t=email.split('@')[0].toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,20);pollWorkspace(`https://${C.domain}/t/${t}/`,false,gw)}
   }catch(err){showMsg('msg',err.message,'error')}
   setLoading(btn,false)
 }
