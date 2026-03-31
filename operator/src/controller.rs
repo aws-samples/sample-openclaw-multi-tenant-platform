@@ -70,22 +70,8 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     let oref = tenant.object_ref(&());
     let ssapply = PatchParams::apply("tenant-operator").force();
 
-    // Set phase to Provisioning at the start of reconciliation
-    let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
-    let provisioning_status = json!({
-        "apiVersion": "openclaw.io/v1alpha1",
-        "kind": "Tenant",
-        "status": {
-            "phase": "Provisioning",
-            "conditions": []
-        }
-    });
-    tenants
-        .patch_status(&name, &ssapply, &Patch::Apply(provisioning_status))
-        .await
-        .map_err(Error::KubeError)?;
-
     // Ensure resources — collect conditions as we go
+    let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
     let mut conditions = Vec::new();
 
     resources::ensure_namespace(client.clone(), &name, tenant_ns, &ssapply).await?;
@@ -93,8 +79,6 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
 
     let pvc_condition = resources::ensure_pvc(client.clone(), &name, tenant_ns, &ssapply).await?;
     conditions.push(pvc_condition);
-
-    resources::ensure_service_account(client.clone(), &name, tenant_ns, &ssapply).await?;
 
     let argocd_condition =
         resources::ensure_argocd_app(client.clone(), &name, tenant_ns, &ssapply, &tenant.spec)
@@ -362,7 +346,7 @@ pub async fn run(state: State) {
         info!("Installation: cargo run --bin crdgen | kubectl apply -f -");
         std::process::exit(1);
     }
-    Controller::new(tenants, Config::default().any_semantic())
+    Controller::new(tenants, Config::default())
         .shutdown_on_signal()
         .run(reconcile, error_policy, state.to_context(client).await)
         .filter_map(|x| async move { std::result::Result::ok(x) })
