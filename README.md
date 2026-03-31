@@ -8,7 +8,7 @@
 
 # OpenClaw Platform
 
-> Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated, private AI workspace powered by Amazon Bedrock — zero API keys, zero shared data.
+> Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated, private AI workspace powered by Amazon Bedrock -- zero API keys, zero shared data.
 
 Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
@@ -31,44 +31,44 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
 ## Features
 
-- **One tenant per user** — isolated namespace, PVC, network policy, IAM role
-- **Zero API keys** — LLM access via Amazon Bedrock + Pod Identity
-- **Scale to zero** — KEDA scales idle pods to 0; cold start in 15-30s
-- **3-layer origin protection** — internet-facing ALB with CF-only SG + WAF + HTTPS
-- **Custom auth UI** — branded login/signup on your domain (no Cognito Hosted UI)
-- **Self-service signup** — Cognito + Lambda auto-provisions tenants on auto-provisioning
-- **Operator-managed** — Tenant Operator creates all K8s resources directly (no GitOps layer)
-- **Cost control** — per-tenant monthly budget with per-model pricing alerts
-- **Graviton ARM64** — 20% cheaper compute with t4g instances
-- **Security deep-dive** — 10 layers, threat model, compliance considerations
+- **One tenant per user** -- isolated namespace, PVC, network policy, IAM role
+- **Zero API keys** -- LLM access via Amazon Bedrock + Pod Identity
+- **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s
+- **3-layer origin protection** -- internet-facing ALB with CF-only SG + WAF + HTTPS
+- **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
+- **Self-service signup** -- Cognito + Lambda auto-provisions tenants on auto-provisioning
+- **Operator-managed** -- Tenant Operator (Rust/kube-rs) creates all K8s resources via SSA ([details](docs/architecture.md#tenant-operator----how-it-works))
+- **Cost control** -- per-tenant monthly budget with per-model pricing alerts
+- **Graviton ARM64** -- 20% cheaper compute with t4g instances
+- **Security deep-dive** -- 10 layers, threat model, compliance considerations
 
 ## Architecture
 
-Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
+Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain, one ALB, no wildcard DNS needed.
 
 ```
 Internet
-  │
-  ├─ your-domain.com ──► CloudFront #1 ──► S3 (custom auth UI)
-  │
-  ├─ claw.your-domain.com ──► CloudFront #2 ──► Internet-facing ALB ──► EKS Pod
-  │                                               (CF-only SG + WAF)
-  │
-  └─ Outbound only: EKS Pod ──► NAT Gateway (HA) ──► Internet
+  |
+  +- your-domain.com --> CloudFront #1 --> S3 (custom auth UI)
+  |
+  +- claw.your-domain.com --> CloudFront #2 --> Internet-facing ALB --> EKS Pod
+  |                                               (CF-only SG + WAF)
+  |
+  +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
 ```
 
 ```
 EKS Cluster
-│  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
-│  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
-│  KEDA HTTP Add-on
-│
-├── namespace: openclaw-{tenant}
-│   ├── Deployment + PVC (persists across scale-to-zero)
-│   ├── HTTPRoute (Gateway API, path-based routing)
-│   ├── HTTPScaledObject (KEDA, 15min idle → 0)
-│   ├── NetworkPolicy (cross-tenant blocked)
-│   └── ResourceQuota
+|  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
+|  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
+|  KEDA HTTP Add-on
+|
++-- namespace: openclaw-{tenant}
+|   +-- Deployment + PVC (persists across scale-to-zero)
+|   +-- HTTPRoute (Gateway API, path-based routing)
+|   +-- HTTPScaledObject (KEDA, 15min idle -> 0)
+|   +-- NetworkPolicy (cross-tenant blocked)
+|   +-- ResourceQuota
 ```
 
 ## Getting Started
@@ -96,13 +96,13 @@ For full control over each deployment phase:
 - Node.js 22+
 - Docker
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
-- Cognito User Pool + App Client (**no client secret** — public client for SPA)
+- Cognito User Pool + App Client (**no client secret** -- public client for SPA)
 
 #### 1. Configure
 
 ```bash
 cp cdk/cdk.json.example cdk/cdk.json
-# Edit cdk/cdk.json — fill in context values
+# Edit cdk/cdk.json -- fill in context values
 ```
 
 <details>
@@ -167,20 +167,40 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
   --stack-name OpenClawEksStack \
   --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
 
-./scripts/create-tenant.sh alice --display-name "Alice" --emoji "🤖"
+./scripts/create-tenant.sh alice --display-name "Alice" --emoji "robot"
 ```
+
+<details>
+<summary>All create-tenant options (maps to Tenant CRD spec)</summary>
+
+| Flag | CRD Field | Description |
+|------|-----------|-------------|
+| `--display-name` | `spec.displayName` | Human-readable name |
+| `--emoji` | `spec.emoji` | Emoji for dashboards and logs |
+| `--skills` | `spec.skills` | Comma-separated skill names |
+| `--budget` | `spec.budget.monthlyUSD` | Monthly spend cap in USD (default: 100) |
+| `--image` | `spec.image.repository` | Container image override |
+| `--image-tag` | `spec.image.tag` | Image tag override |
+| `--cpu-request` | `spec.resources.requests.cpu` | CPU request |
+| `--memory-request` | `spec.resources.requests.memory` | Memory request |
+| `--cpu-limit` | `spec.resources.limits.cpu` | CPU limit |
+| `--memory-limit` | `spec.resources.limits.memory` | Memory limit |
+| `--env` | `spec.env` | Extra env vars (KEY=VALUE, repeatable) |
+| `--disabled` | `spec.enabled=false` | Create in suspended state |
+
+</details>
 
 ### 6. Finalize
 
 ```bash
-./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF→ALB
+./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF->ALB
 ./scripts/deploy-auth-ui.sh       # Upload auth UI to S3
 ```
 
 ### 7. Access
 
 | URL | Purpose |
-|-----|---------|
+|-----|--------|
 | `https://your-domain.com` | Landing page (custom auth UI) |
 | `https://claw.your-domain.com/t/alice/` | Tenant AI assistant (path-based routing) |
 | `https://your-domain.com/admin.html` | Admin dashboard |
@@ -204,7 +224,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ## Tenant Management
 
 ```bash
-./scripts/create-tenant.sh <name> [options]    # Create (--display-name --emoji --skills --budget)
+./scripts/create-tenant.sh <name> [options]    # Create (see options above)
 ./scripts/delete-tenant.sh <name>              # Delete (with confirmation)
 ./scripts/verify-tenant.sh <name>              # Health check
 ./scripts/check-all-tenants.sh                 # Check all tenants
@@ -216,7 +236,7 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ## Operations
 
 | Script | Purpose |
-|--------|---------|
+|--------|--------|
 | `post-deploy.sh` | CloudFront #2 + Route53 + WAF |
 | `build-operator.sh` | Build, push, deploy Tenant Operator |
 | `deploy-auth-ui.sh` | Upload auth UI to S3 + invalidate cache |
@@ -230,14 +250,14 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 ## Security
 
 | Layer | Control |
-|-------|---------|
+|-------|--------|
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
 | Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
 | Network | Internet-facing ALB with CF-only SG + WAF + HTTPS |
 | Auth | Cognito signup + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
-| Secrets | exec SecretRef — fetched on-demand, never persisted |
-| LLM | Bedrock via Pod Identity — zero API keys |
+| Secrets | exec SecretRef -- fetched on-demand, never persisted |
+| LLM | Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero; daily EBS snapshots |
 | Audit | CloudTrail + S3 + Athena + EKS control plane logging |
@@ -260,8 +280,8 @@ export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
 
 ### Architecture
 
-Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` — one domain, one ALB, no wildcard DNS needed.
-- [System Architecture](docs/architecture.md)
+Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain, one ALB, no wildcard DNS needed.
+- [System Architecture](docs/architecture.md) -- includes Operator SSA flow diagram
 - [Security Deep Dive](docs/security.md)
 
 ### Components
@@ -276,6 +296,7 @@ Learn how each component works:
 | [Observability](docs/components/observability.md) | CloudWatch, alarms, cost tracking |
 | [CI/CD](docs/components/cicd.md) | GitHub Actions, Tenant Operator, image updates |
 | [Storage](docs/components/storage.md) | PVC, EBS snapshots, backup/restore |
+| [GitOps](docs/components/gitops.md) | ArgoCD (EKS Capability) -- platform components only |
 
 ### Operations
 | Guide | Description |
@@ -287,25 +308,30 @@ Learn how each component works:
 ## Project Structure
 
 ```
-├── auth-ui/                    # Custom login/signup (S3 + CloudFront)
-│   ├── index.html              # Auth UI (Cognito SDK, CAPTCHA, PWA)
-│   ├── admin.html              # Admin dashboard
-│   └── terms.html, privacy.html, manifest.json
-├── cdk/                        # AWS CDK infrastructure
-│   ├── lib/eks-cluster-stack.ts
-│   ├── lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
-│   └── cdk.json.example        # Config template
-├── helm/                       # Helm chart templates (reference only, not used by operator)
-│   ├── charts/openclaw-platform/
-│   └── tenants/values-template.yaml
-├── docs/                       # Architecture, security, components, operations, design
-│   ├── architecture.md
-│   ├── security.md
-│   ├── components/             # Per-component deep dives
-│   ├── operations/             # Admin, user, migration, webhook guides
-├── scripts/                    # 20+ operations scripts
-├── .github/workflows/ci.yml   # CI pipeline
-└── LICENSE                     # MIT
++-- auth-ui/                    # Custom login/signup (S3 + CloudFront)
+|   +-- index.html              # Auth UI (Cognito SDK, CAPTCHA, PWA)
+|   +-- admin.html              # Admin dashboard
+|   +-- terms.html, privacy.html, manifest.json
++-- cdk/                        # AWS CDK infrastructure
+|   +-- lib/eks-cluster-stack.ts
+|   +-- lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
+|   +-- cdk.json.example        # Config template
++-- helm/                       # Reference Helm templates (NOT used by Operator at runtime)
+|   +-- charts/openclaw-platform/  # Templates for docs and manual debugging
+|   +-- gateway.yaml            # Gateway API resource
+|   +-- tenants/values-template.yaml  # Example values for reference
++-- operator/                   # Tenant Operator (Rust/kube-rs) -- creates all K8s resources via SSA
+|   +-- src/                    # controller.rs, resources.rs, types.rs (CRD)
+|   +-- yaml/                   # CRD manifest, operator deployment
+|   +-- Dockerfile
++-- docs/                       # Architecture, security, components, operations
+|   +-- architecture.md         # Includes Operator SSA flow diagram
+|   +-- security.md
+|   +-- components/             # Per-component deep dives
+|   +-- operations/             # Admin, user, webhook guides
++-- scripts/                    # 20+ operations scripts
++-- .github/workflows/ci.yml   # CI pipeline
++-- LICENSE                     # MIT
 ```
 
 <details>
@@ -317,12 +343,12 @@ Learn how each component works:
 | Lambda functions | Cognito configuration |
 | S3 buckets | CloudFront #2 (tenants) |
 | CloudFront #1 (auth UI) | Route53 records |
-| WAF WebACL | WAF → ALB association |
+| WAF WebACL | WAF -> ALB association |
 | CloudWatch + SNS | CronJobs + dashboards |
 | VPC Flow Logs | GuardDuty EKS protection |
 | EKS cluster logging | Tenant Operator |
 
-ALB is created dynamically by Kubernetes LB Controller — CDK cannot reference it at deploy time.
+ALB is created dynamically by Kubernetes LB Controller -- CDK cannot reference it at deploy time.
 
 </details>
 
@@ -337,7 +363,7 @@ for tenant in $(kubectl get tenants -o jsonpath='{.items[*].metadata.name}'); do
 done
 
 # 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh)
-#    These are not managed by CDK — delete manually via AWS Console or CLI
+#    These are not managed by CDK -- delete manually via AWS Console or CLI
 
 # 3. Destroy CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack
@@ -359,5 +385,5 @@ Contributions welcome. Please open an issue first to discuss changes.
 ---
 
 <p align="center">
-  Built with ❤️ on <a href="https://aws.amazon.com/eks/">Amazon EKS</a> + <a href="https://aws.amazon.com/bedrock/">Amazon Bedrock</a>
+  Built with love on <a href="https://aws.amazon.com/eks/">Amazon EKS</a> + <a href="https://aws.amazon.com/bedrock/">Amazon Bedrock</a>
 </p>

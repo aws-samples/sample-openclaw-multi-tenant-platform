@@ -1,6 +1,8 @@
 apiVersion: v2
-name: openclaw-helm
-description: OpenClaw AI Agent (custom chart without chromium)
+name: openclaw-platform
+description: |
+  OpenClaw AI Agent Helm chart -- reference templates for documentation and manual debugging.
+  Tenant provisioning is handled by the Tenant Operator (Rust/kube-rs SSA), not Helm.
 type: application
 version: 1.3.14
 appVersion: "2026.3.24"
