@@ -176,6 +176,10 @@ pub async fn ensure_argocd_app(
                 "group": "apps",
                 "kind": "Deployment",
                 "jsonPointers": ["/spec/replicas"]
+            }, {
+                "group": "gateway.k8s.aws",
+                "kind": "TargetGroupConfiguration",
+                "jsonPointers": ["/spec/defaultConfiguration/healthCheckConfig/healthCheckIntervalSeconds"]
             }],
             "syncPolicy": {
                 "automated": {
