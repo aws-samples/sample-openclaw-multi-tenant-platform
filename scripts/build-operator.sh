@@ -31,14 +31,19 @@ if [[ -f "$CDK_JSON" ]]; then
   COGNITO_CLIENT_ID=$(node -e "console.log(require('./$CDK_JSON').context.cognitoClientId || '')")
   COGNITO_DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.cognitoDomain || '')")
 else
-  echo "Warning: cdk/cdk.json not found, using placeholders for env vars"
-  DOMAIN="DOMAIN"
-  GITHUB_OWNER="ORG"
-  GITHUB_REPO="REPO"
-  COGNITO_POOL_ARN="COGNITO_POOL_ARN"
-  COGNITO_CLIENT_ID="COGNITO_CLIENT_ID"
-  COGNITO_DOMAIN="COGNITO_DOMAIN"
+  echo "Error: cdk/cdk.json not found. Cannot deploy without configuration."
+  echo "Create cdk/cdk.json with context values: zoneName, githubOwner, githubRepo, cognitoPoolId, cognitoClientId, cognitoDomain"
+  exit 1
 fi
+
+# Validate required values — fail early instead of deploying placeholders
+for var_name in DOMAIN GITHUB_OWNER GITHUB_REPO; do
+  eval val=\$$var_name
+  if [[ -z "$val" ]]; then
+    echo "Error: $var_name is empty in cdk.json. Cannot deploy with placeholder values."
+    exit 1
+  fi
+done
 
 CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
 

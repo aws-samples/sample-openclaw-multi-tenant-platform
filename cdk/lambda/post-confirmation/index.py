@@ -215,8 +215,19 @@ def handler(event, context):
     # 6. Create Tenant CR -> Operator handles the rest
     create_tenant_cr(tenant, email)
 
-    # 7. Create K8s Secret with gateway token (single source of truth from SM)
-    create_gateway_secret(tenant, ns, token)
+    # 7. Create K8s Secret with gateway token
+    # Race condition: Operator creates namespace async after step 6.
+    # Retry with backoff until namespace exists.
+    import time
+    for attempt in range(5):
+        try:
+            create_gateway_secret(tenant, ns, token)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404 and attempt < 4:
+                time.sleep(2 ** attempt)  # 1, 2, 4, 8s
+                continue
+            raise
 
     # 8. Notify admin
     sns.publish(
