@@ -69,8 +69,51 @@ async fn apply(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Resul
     let name = tenant.name_any();
     let oref = tenant.object_ref(&());
     let ssapply = PatchParams::apply("tenant-operator").force();
+    let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
 
-    // Ensure resources — collect conditions as we go
+    match apply_inner(tenant.clone(), tenant_ns, ctx.clone()).await {
+        Ok(action) => Ok(action),
+        Err(e) => {
+            // Write Error phase so status reflects the failure
+            let status = json!({
+                "apiVersion": "openclaw.io/v1alpha1",
+                "kind": "Tenant",
+                "status": {
+                    "phase": "Error",
+                    "conditions": [{
+                        "type": "ReconcileError",
+                        "status": "True",
+                        "message": format!("{e}")
+                    }]
+                }
+            });
+            let _ = tenants
+                .patch_status(&name, &ssapply, &Patch::Apply(status))
+                .await;
+            // Publish error event
+            let _ = ctx
+                .recorder
+                .publish(
+                    &Event {
+                        type_: EventType::Warning,
+                        reason: "ReconcileError".into(),
+                        note: Some(format!("Tenant {name} error: {e}")),
+                        action: "Reconciling".into(),
+                        secondary: None,
+                    },
+                    &oref,
+                )
+                .await;
+            Err(e)
+        }
+    }
+}
+
+async fn apply_inner(tenant: Arc<Tenant>, tenant_ns: &str, ctx: Arc<Context>) -> Result<Action> {
+    let client = ctx.client.clone();
+    let name = tenant.name_any();
+    let oref = tenant.object_ref(&());
+    let ssapply = PatchParams::apply("tenant-operator").force();
     let tenants: Api<Tenant> = Api::default_namespaced(client.clone());
     let mut conditions = Vec::new();
 
