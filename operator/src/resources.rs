@@ -179,7 +179,7 @@ pub async fn ensure_argocd_app(
             }, {
                 "group": "gateway.k8s.aws",
                 "kind": "TargetGroupConfiguration",
-                "jsonPointers": ["/spec/defaultConfiguration/healthCheckConfig/healthCheckIntervalSeconds"]
+                "jsonPointers": ["/spec/defaultConfiguration/healthCheckConfig/healthCheckInterval"]
             }],
             "syncPolicy": {
                 "automated": {
@@ -208,6 +208,9 @@ pub async fn ensure_reference_grant(
     tenant_ns: &str,
     ssapply: &PatchParams,
 ) -> Result<()> {
+    // Ensure shared interceptor TGC exists (idempotent, created once for all tenants)
+    ensure_interceptor_tgc(client.clone(), ssapply).await?;
+
     let ar = ApiResource {
         group: "gateway.networking.k8s.io".into(),
         version: "v1beta1".into(),
@@ -246,5 +249,52 @@ pub async fn ensure_reference_grant(
         .await
         .map_err(Error::KubeError)?;
     info!("Ensured ReferenceGrant {rg_name} in keda namespace");
+    Ok(())
+}
+
+/// Ensure a shared TargetGroupConfiguration exists for the KEDA interceptor
+/// in the keda namespace. Without this, ALB controller defaults to Instance
+/// target type for the interceptor Service (ClusterIP), which fails with
+/// "TargetGroup port is empty".
+async fn ensure_interceptor_tgc(client: Client, ssapply: &PatchParams) -> Result<()> {
+    let ar = ApiResource {
+        group: "gateway.k8s.aws".into(),
+        version: "v1beta1".into(),
+        kind: "TargetGroupConfiguration".into(),
+        api_version: "gateway.k8s.aws/v1beta1".into(),
+        plural: "targetgroupconfigurations".into(),
+    };
+    let tgc_api: Api<DynamicObject> = Api::namespaced_with(client, "keda", &ar);
+    let tgc_patch: Value = json!({
+        "apiVersion": "gateway.k8s.aws/v1beta1",
+        "kind": "TargetGroupConfiguration",
+        "metadata": {
+            "name": "keda-interceptor-tg",
+            "namespace": "keda",
+            "labels": {
+                "app.kubernetes.io/managed-by": "tenant-operator"
+            }
+        },
+        "spec": {
+            "targetReference": {
+                "name": "keda-add-ons-http-interceptor-proxy"
+            },
+            "defaultConfiguration": {
+                "targetType": "ip",
+                "healthCheckConfig": {
+                    "healthCheckPath": "/readyz",
+                    "healthCheckPort": "9090",
+                    "healthyThresholdCount": 2,
+                    "unhealthyThresholdCount": 2,
+                    "healthCheckInterval": 15
+                }
+            }
+        }
+    });
+    tgc_api
+        .patch("keda-interceptor-tg", ssapply, &Patch::Apply(tgc_patch))
+        .await
+        .map_err(Error::KubeError)?;
+    info!("Ensured interceptor TGC in keda namespace");
     Ok(())
 }
