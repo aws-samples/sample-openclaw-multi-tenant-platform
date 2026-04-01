@@ -58,6 +58,9 @@ metadata:
     app: tenant-operator
   annotations:
     checkov.io/skip1: CKV2_K8S_6=NetworkPolicy for openclaw-system managed by CDK Pod Security Standards
+    checkov.io/skip2: CKV_K8S_38=Operator requires SA token for K8s API access (kube-rs client)
+    checkov.io/skip3: CKV_K8S_43=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
+    checkov.io/skip4: CKV_K8S_14=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
 spec:
   replicas: 1
   selector:
@@ -68,9 +71,7 @@ spec:
       labels:
         app: tenant-operator
       annotations:
-        checkov.io/skip1: CKV_K8S_38=Operator requires SA token for K8s API access (kube-rs client)
-        checkov.io/skip2: CKV_K8S_43=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
-        checkov.io/skip3: CKV_K8S_14=Image tag set dynamically by setup.sh sed substitution (commit SHA from CI)
+        instrumentation.opentelemetry.io/inject-java: "false"
     spec:
       serviceAccountName: tenant-operator
       automountServiceAccountToken: true

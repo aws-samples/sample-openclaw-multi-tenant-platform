@@ -34,6 +34,10 @@ kind: CronJob
 metadata:
   name: openclaw-pvc-backup
   namespace: kube-system
+  annotations:
+    checkov.io/skip1: CKV_K8S_38=CronJob uses kubectl + aws-cli, requires SA token
+    checkov.io/skip2: CKV_K8S_43=Image tag pinned to minor version, digest changes on every release
+    checkov.io/skip3: CKV_K8S_31=Seccomp profile set via Pod Security Standards at namespace level
 spec:
   schedule: "0 3 * * *"
   concurrencyPolicy: Forbid
@@ -43,10 +47,7 @@ spec:
     spec:
       backoffLimit: 2
       template:
-        metadata:
-          annotations:
-            checkov.io/skip1: CKV_K8S_38=CronJob uses kubectl + aws-cli, requires SA token
-            checkov.io/skip2: CKV_K8S_43=Image tag pinned to minor version, digest changes on every release
+        metadata: {}
         spec:
           serviceAccountName: pvc-backup
           restartPolicy: Never
