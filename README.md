@@ -139,8 +139,9 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 
 ```bash
 ./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF->ALB
-./scripts/deploy-auth-ui.sh       # Upload auth UI to S3
 ```
+
+> **Note**: Auth UI is deployed automatically by CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
 
 ## Tenant Management
 

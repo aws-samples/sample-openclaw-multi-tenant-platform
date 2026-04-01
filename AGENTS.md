@@ -29,7 +29,7 @@ Key components:
 - `cdk/` -- AWS CDK infrastructure (TypeScript)
 - `helm/` -- Helm chart (source of truth for tenant K8s resources, synced by ArgoCD)
 - `auth-ui/` -- Auth UI pages (vanilla JS, no framework) -- index.html, admin.html, terms, privacy
-- `cdk/lambda/` -- Cognito trigger functions (Python)
+- `cdk/lambda/` -- Cognito trigger functions + cost enforcement (Python)
 - `operator/` -- Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application + ReferenceGrant via SSA
 - `scripts/` -- Operational scripts (Bash)
 - `docs/` -- Architecture and operations documentation
@@ -53,9 +53,10 @@ cdk/cdk.json.example  <- Template for cdk.json (real values gitignored)
 cdk/lib/eks-cluster-stack.ts  <- Main CDK stack, references Lambda code
 cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (creates Tenant CR)
+cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
 operator/src/types.rs  <- Tenant CRD definition (TenantSpec, TenantStatus)
 operator/src/controller.rs  <- Reconciles Tenant CR -> creates Namespace + ArgoCD Application + ReferenceGrant via SSA
-operator/src/resources.rs  <- ensure_namespace, ensure_argocd_app
+operator/src/resources.rs  <- ensure_namespace, ensure_argocd_app, ensure_reference_grant
 operator/yaml/deployment.yaml  <- Operator deployment + RBAC
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
 setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
@@ -101,7 +102,9 @@ bash scripts/deploy-auth-ui.sh
 ### Lambda Functions
 ```bash
 # Edit cdk/lambda/*/index.py
-python3 -c "compile(open('cdk/lambda/<fn>/index.py').read(), 'x', 'exec')"  # Syntax check
+python3 -m py_compile cdk/lambda/pre-signup/index.py
+python3 -m py_compile cdk/lambda/post-confirmation/index.py
+python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 cd cdk && npx cdk deploy OpenClawEksStack --require-approval broadening
 # Cognito triggers managed by CDK CognitoTriggers custom resource
 ```
@@ -128,7 +131,9 @@ Before declaring any change complete:
 - [ ] `cd cdk && npx cdk synth --no-staging` -- cdk-nag runs (review findings, suppress with rationale if needed)
 - [ ] `cd cdk && npx cdk diff` -- Shows expected changes (or no differences)
 - [ ] `cd operator && cargo clippy -- -D warnings && cargo test --lib` -- Operator compiles + tests pass
-- [ ] `python3 -m py_compile cdk/lambda/*/index.py` -- Lambda syntax OK
+- [ ] `python3 -m py_compile cdk/lambda/pre-signup/index.py` -- Lambda syntax OK
+- [ ] `python3 -m py_compile cdk/lambda/post-confirmation/index.py` -- Lambda syntax OK
+- [ ] `python3 -m py_compile cdk/lambda/cost-enforcer/index.py` -- Lambda syntax OK
 - [ ] `helm lint helm/charts/openclaw-platform/` -- Helm renders
 - [ ] No sensitive data: `grep -rn 'AKIA[A-Z0-9]\{16\}' --include="*.ts" --include="*.py" --include="*.sh" --include="*.rs"` = 0 matches
 - [ ] No CJK in code files
