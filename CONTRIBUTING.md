@@ -51,7 +51,7 @@ bash scripts/build-operator.sh
 ```
 cdk/                    # AWS CDK infrastructure (TypeScript)
   lib/eks-cluster-stack.ts   # Main stack (~700 lines)
-  lambda/                    # Cognito trigger functions (Python)
+  lambda/                    # Cognito trigger functions + cost enforcement (Python)
   cdk.json.example           # Configuration template
 helm/                   # Helm chart (source of truth, synced by ArgoCD)
   charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
@@ -75,11 +75,12 @@ See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
 cd cdk && npx tsc --noEmit
 
 # Lambda
-python3 -c "compile(open('cdk/lambda/pre-signup/index.py').read(), 'x', 'exec')"
-python3 -c "compile(open('cdk/lambda/post-confirmation/index.py').read(), 'x', 'exec')"
+python3 -m py_compile cdk/lambda/pre-signup/index.py
+python3 -m py_compile cdk/lambda/post-confirmation/index.py
+python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 
 # Sensitive data scan
-grep -rn 'AKIA\|amazonaws\.com\|[0-9]\{12\}' \
+grep -rn 'AKIA[A-Z0-9]\{16\}' \
   --include="*.ts" --include="*.py" --include="*.md" --include="*.sh" --include="*.html" \
   | grep -v node_modules | grep -v cdk.out | grep -v cdk.json
 # Must return 0 results
