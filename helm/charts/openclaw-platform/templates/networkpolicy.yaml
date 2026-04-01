@@ -5,6 +5,8 @@ metadata:
   name: {{ include "openclaw-helm.fullname" . }}
   labels:
     {{- include "openclaw-helm.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   podSelector: {}
   policyTypes:

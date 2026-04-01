@@ -436,6 +436,21 @@ export class EksClusterStack extends cdk.Stack {
 
     const userPool = cognito.UserPool.fromUserPoolId(this, 'UserPool', cognitoPoolId);
 
+    // ── Context Validation ─────────────────────────────────────────────────
+    // Warn on placeholder values that will produce broken IAM policies or
+    // Cognito custom resources. CI uses cdk.json.example (non-empty placeholders)
+    // so synth passes, but empty values indicate a misconfigured cdk.json.
+    const contextChecks: Record<string, string> = {
+      cognitoPoolId, cognitoClientId, cognitoDomain,
+    };
+    for (const [key, val] of Object.entries(contextChecks)) {
+      if (!val) {
+        cdk.Annotations.of(this).addWarningV2(`OpenClaw:${key}`,
+          `CDK context '${key}' is empty. Lambda IAM policies and Cognito triggers will be misconfigured. ` +
+          `Fill in cdk/cdk.json or run setup.sh to generate it.`);
+      }
+    }
+
     // ── CloudWatch Alerts ──────────────────────────────────────────────────
     const alertsTopic = new sns.Topic(this, 'AlertsTopic', { topicName: 'OpenClawAlerts' });
 
