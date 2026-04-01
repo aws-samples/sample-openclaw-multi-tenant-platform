@@ -52,7 +52,7 @@ EKS Cluster
 |   Operator-managed:               ArgoCD-managed (Helm chart):
 |     Namespace                      PVC (10Gi gp3)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
-|                                    Deployment + Service + ConfigMap
+|     ReferenceGrant (keda ns)      Deployment + Service + ConfigMap
 |                                    HTTPRoute + TGC + NetworkPolicy + PDB + KEDA HSO
 |   ArgoCD Application (in argocd namespace, points to helm/charts/openclaw-platform)
 ```
