@@ -25,19 +25,17 @@ Cognito SignUp
   -> Post-confirmation Lambda (creates Tenant CR)
   -> Operator reconciles via SSA:
        1. Namespace (openclaw-{tenant})
-       2. PVC (10Gi gp3)
-       3. ServiceAccount (Pod Identity)
-       4. ArgoCD Application (points to helm/charts/openclaw-platform, auto-sync prune+selfHeal)
-       5. KEDA HTTPScaledObject (15min idle -> 0)
+       2. ArgoCD Application (points to helm/charts/openclaw-platform, auto-sync prune+selfHeal)
+       3. ReferenceGrant (in keda namespace, when scaleToZero enabled)
   -> ArgoCD detects Application, syncs Helm chart:
-       Deployment, Service, ConfigMap, NetworkPolicy,
-       ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
+       PVC, ServiceAccount, Deployment, Service, ConfigMap, NetworkPolicy,
+       ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration, KEDA HSO
   -> Pod ready, HTTPRoute active, scale-to-zero armed
 ```
 
 ## Operator + ArgoCD Split
 
-The Tenant Operator (Rust/kube-rs) creates 5 bootstrap resources via Server-Side Apply, then delegates workload resources to ArgoCD + Helm.
+The Tenant Operator (Rust/kube-rs) creates 3 bootstrap resources via Server-Side Apply, then delegates all workload resources to ArgoCD + Helm.
 
 ```
 Tenant CR
@@ -45,19 +43,22 @@ Tenant CR
   v
 Operator (SSA)                    ArgoCD (Helm sync)
   |                                 |
-  +-- Namespace                     +-- Deployment
-  +-- PVC                           +-- Service
-  +-- ServiceAccount                +-- ConfigMap
-  +-- ArgoCD Application ---------> +-- NetworkPolicy
-  +-- KEDA HSO                      +-- ResourceQuota
+  +-- Namespace                     +-- PVC
+  +-- ArgoCD Application ---------> +-- ServiceAccount
+  +-- ReferenceGrant (keda ns)      +-- Deployment
+                                    +-- Service
+                                    +-- ConfigMap
+                                    +-- NetworkPolicy
+                                    +-- ResourceQuota
                                     +-- PDB
                                     +-- HTTPRoute
                                     +-- TargetGroupConfiguration
+                                    +-- KEDA HSO
 ```
 
 The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync enabled (prune + selfHeal), pointing to `helm/charts/openclaw-platform`.
 
-**Cleanup:** On Tenant CR deletion, the operator deletes the namespace. Kubernetes cascades all resources inside. The ArgoCD Application is also deleted, stopping sync.
+**Cleanup:** On Tenant CR deletion, the operator deletes the ArgoCD Application, the ReferenceGrant (if exists), then the namespace. Kubernetes cascades all resources inside the namespace.
 
 ## EKS Cluster
 
@@ -68,9 +69,12 @@ EKS Cluster (v1.35)
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   +-- Operator: Namespace, PVC, ServiceAccount, KEDA HSO
-|   +-- ArgoCD/Helm: Deployment, Service, ConfigMap, HTTPRoute,
-|       TargetGroupConfiguration, NetworkPolicy, ResourceQuota, PDB
+|   Operator-managed:               ArgoCD-managed (Helm chart):
+|     Namespace                      PVC (10Gi gp3)
+|     ArgoCD Application            ServiceAccount (Pod Identity)
+|     ReferenceGrant (in keda ns)   Deployment + Service + ConfigMap
+|                                    HTTPRoute + TGC + NetworkPolicy
+|                                    ResourceQuota + PDB + KEDA HSO
 |
 +-- namespace: openclaw-system
 |   +-- Tenant Operator (Rust/kube-rs)
@@ -85,7 +89,7 @@ EKS Cluster (v1.35)
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
 | Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, WAF |
-| Operator | Rust / kube-rs (SSA) | Creates NS/PVC/SA + ArgoCD Application + KEDA HSO |
+| Operator | Rust / kube-rs (SSA) | Creates Namespace + ArgoCD Application + ReferenceGrant |
 | Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
 | Auth | Cognito + custom UI | Signup, login, email domain gate |
 | Scaling | KEDA HTTP Add-on | Scale-to-zero (15min idle) |
@@ -98,13 +102,14 @@ EKS Cluster (v1.35)
 The operator updates `Tenant.status.conditions` during reconciliation:
 
 | Condition | Meaning |
-|-----------|---------|
+|-----------|--------|
 | `NamespaceReady` | Namespace exists and is active |
-| `PVCBound` | PVC is bound to a volume |
-| `ArgoAppReady` | ArgoCD Application is synced and healthy |
-| `KEDAReady` | HTTPScaledObject is active |
+| `ArgoSyncHealthy` | ArgoCD Application is synced and healthy |
+| `DeploymentAvailable` | Tenant Deployment has available replicas |
+| `ReferenceGrantReady` | ReferenceGrant created in keda namespace (when scaleToZero enabled) |
+| `ReconcileError` | Set on reconcile failure with error message |
 
-`Tenant.status.phase`: `Ready` (all conditions true) or `Suspended` (tenant disabled).
+`Tenant.status.phase`: `Ready` (ArgoCD synced + Deployment available), `Provisioning` (in progress), `Suspended` (tenant disabled), or `Error` (reconcile failed).
 
 ## Security Layers
 
@@ -131,9 +136,9 @@ User Request:
 Tenant Provisioning:
   Cognito SignUp -> Pre-signup Lambda (email gate)
   Cognito Confirm -> Post-confirmation Lambda -> Tenant CR
-  Operator (SSA) -> Namespace + PVC + SA + ArgoCD App + KEDA HSO
-  ArgoCD -> Helm sync -> Deployment + Service + ConfigMap + HTTPRoute
-            + TGC + NetworkPolicy + ResourceQuota + PDB
+  Operator (SSA) -> Namespace + ArgoCD Application + ReferenceGrant
+  ArgoCD -> Helm sync -> PVC + SA + Deployment + Service + ConfigMap
+            + HTTPRoute + TGC + NetworkPolicy + ResourceQuota + PDB + KEDA HSO
 ```
 
 ## Related Docs
