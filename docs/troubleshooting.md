@@ -1,0 +1,202 @@
+# Troubleshooting Guide
+
+Common issues encountered when deploying and operating the OpenClaw Platform.
+
+---
+
+## Deployment Issues
+
+### CDK deploy fails with "Resource already exists"
+
+**Symptom**: `cdk deploy` fails on second run.
+
+**Cause**: Some resources (Route53 records, CloudFront distributions) are created by `post-deploy.sh`, not CDK. CDK doesn't know about them.
+
+**Fix**: Delete the conflicting resource manually, then re-run `cdk deploy`.
+
+---
+
+### Operator pod CrashLoopBackOff
+
+**Symptom**: `kubectl get pods -n openclaw-system` shows CrashLoopBackOff.
+
+**Cause**: Usually missing CRD or wrong image architecture.
+
+**Fix**:
+```bash
+# Check logs
+kubectl logs deployment/tenant-operator -n openclaw-system
+
+# Verify CRD exists
+kubectl get crd tenants.openclaw.io
+
+# Verify image architecture matches node
+kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}'
+# Should match the operator image (arm64 for Graviton, amd64 for x86)
+```
+
+---
+
+### Operator env vars show placeholder values (DOMAIN, REGION)
+
+**Symptom**: `GATEWAY_DOMAIN=DOMAIN` instead of actual domain.
+
+**Cause**: `build-operator.sh` or `setup.sh` sed replacement didn't run, or `cdk.json` has empty values.
+
+**Fix**: The Operator code filters known placeholder values (`REGION`, `DOMAIN`, `COGNITO_POOL_ARN`, etc.) and treats them as empty. But for correct operation, patch the deployment:
+```bash
+kubectl set env deployment/tenant-operator -n openclaw-system \
+  GATEWAY_DOMAIN=<your-domain> \
+  AWS_REGION=<your-region>
+```
+
+**Prevention**: `build-operator.sh` now fails early if `cdk.json` values are empty.
+
+---
+
+## KEDA / Scale-to-Zero Issues
+
+### Pods stuck at 0 replicas, never scale up
+
+**Symptom**: Tenant deployment has 0 replicas. HTTP requests return 503. KEDA interceptor logs show zero traffic.
+
+**Cause**: Missing TargetGroupConfiguration for KEDA interceptor in `keda` namespace. Without it, ALB controller defaults to Instance target type, but the interceptor Service is ClusterIP.
+
+**Fix**: The Operator automatically creates the interceptor TGC. Verify it exists:
+```bash
+kubectl get targetgroupconfiguration -n keda
+# Should show: keda-interceptor-tg
+```
+
+If missing, check Operator RBAC:
+```bash
+kubectl get clusterrole tenant-operator -o yaml | grep targetgroupconfigurations
+```
+
+---
+
+### ALB controller stuck in error loop: "TargetGroup port is empty"
+
+**Symptom**: ALB controller logs show repeated `TargetGroup port is empty. When using Instance targets, your service must be of type 'NodePort' or 'LoadBalancer'`.
+
+**Cause**: Same as above — missing interceptor TGC. This error blocks the entire Gateway reconcile, affecting ALL tenants.
+
+**Fix**: Ensure the Operator has RBAC for `targetgroupconfigurations` and is running the latest image.
+
+---
+
+### ArgoCD permanently OutOfSync on Deployment replicas
+
+**Symptom**: ArgoCD shows Deployment as OutOfSync. Tenant stays in Provisioning.
+
+**Cause**: KEDA modifies `spec.replicas` at runtime. ArgoCD sees the diff.
+
+**Fix**: The Operator sets `ignoreDifferences` for `/spec/replicas` on Deployments and `/spec/defaultConfiguration/healthCheckConfig/healthCheckInterval` on TargetGroupConfigurations. Verify the ArgoCD Application has these:
+```bash
+kubectl get application tenant-<name> -n argocd -o jsonpath='{.spec.ignoreDifferences}' | python3 -m json.tool
+```
+
+---
+
+### FailedCreatePodSandBox: aws-cni network policy error
+
+**Symptom**: Pod events show `FailedCreatePodSandBox: plugin type="aws-cni" failed`.
+
+**Cause**: Race condition — NetworkPolicy and Deployment are created simultaneously by ArgoCD. The VPC CNI network policy controller hasn't finished setting up the namespace.
+
+**Fix**: The Helm chart sets `argocd.argoproj.io/sync-wave: "1"` on NetworkPolicy so it syncs after the Deployment. If you still see this, the pod will retry and succeed within ~15 seconds.
+
+---
+
+## Authentication Issues
+
+### Sign Up succeeds but workspace never loads
+
+**Symptom**: User completes email verification, sees "Creating your workspace..." spinner, but workspace never becomes reachable.
+
+**Possible causes**:
+1. **KEDA scale-from-zero broken** — see "Pods stuck at 0 replicas" above
+2. **Lambda namespace race condition** — PostConfirmation Lambda creates K8s Secret before Operator creates namespace. Lambda retries with backoff (up to 5 attempts).
+3. **Cognito triggers missing** — CDK Custom Resource should set PreSignUp + PostConfirmation triggers. Verify:
+```bash
+aws cognito-idp describe-user-pool --user-pool-id <pool-id> \
+  --query 'UserPool.LambdaConfig' --output json
+```
+
+---
+
+### Gateway token not working
+
+**Symptom**: Workspace loads but shows authentication error.
+
+**Cause**: Gateway token mismatch between Secrets Manager, K8s Secret, and Cognito user attribute.
+
+**Fix**: Check all three sources match:
+```bash
+# Secrets Manager
+aws secretsmanager get-secret-value --secret-id openclaw/<tenant>/gateway-token --query SecretString --output text
+
+# K8s Secret
+kubectl get secret <tenant>-gateway-token -n openclaw-<tenant> -o jsonpath='{.data.OPENCLAW_GATEWAY_TOKEN}' | base64 -d
+
+# Cognito (admin only)
+aws cognito-idp admin-get-user --user-pool-id <pool-id> --username <email> \
+  --query 'UserAttributes[?Name==`custom:gateway_token`].Value' --output text
+```
+
+---
+
+## CI / Runner Issues
+
+### GitHub Actions self-hosted runner offline
+
+**Symptom**: CI jobs queued but not running. Runner shows "Offline" in GitHub Settings.
+
+**Cause**: Runner service exited with `SessionConflictException` after EC2 restart. The old GitHub session hadn't expired when the new runner tried to connect.
+
+**Fix**:
+```bash
+# Check runner status via SSM
+aws ssm send-command --instance-ids <instance-id> \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["sudo systemctl status actions.runner.*.service 2>&1 | tail -10"]' \
+  --region us-east-1
+
+# Restart runner service
+aws ssm send-command --instance-ids <instance-id> \
+  --document-name "AWS-RunShellScript" \
+  --parameters 'commands=["sudo systemctl restart actions.runner.*.service"]' \
+  --region us-east-1
+```
+
+**Prevention**: Consider adding `RestartForceExitStatus=5` to the systemd service to auto-restart on SessionConflict.
+
+---
+
+## Operator Status Issues
+
+### Tenant stuck in "Provisioning" phase
+
+**Symptom**: `kubectl get tenant <name> -n openclaw-system` shows `phase: Provisioning` even though pod is running.
+
+**Cause**: Operator requires both `ArgoSyncHealthy=True` AND `DeploymentAvailable=True` for Ready phase. Check conditions:
+```bash
+kubectl get tenant <name> -n openclaw-system -o jsonpath='{.status.conditions}' | python3 -m json.tool
+```
+
+Common blockers:
+- `ArgoSyncHealthy: False` — ArgoCD OutOfSync (see above)
+- `DeploymentAvailable: False` — Pod not running or KEDA scaled to 0
+
+---
+
+### Tenant shows "Error" phase
+
+**Symptom**: `phase: Error` with `ReconcileError` condition.
+
+**Cause**: An ensure step failed (namespace, ArgoCD app, or ReferenceGrant creation).
+
+**Fix**: Read the error message in the condition, then check Operator logs:
+```bash
+kubectl logs deployment/tenant-operator -n openclaw-system --tail=20 | grep -i error
+```
