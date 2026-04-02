@@ -1,6 +1,11 @@
-.PHONY: lint check-cdk check-helm check-python check-rust check-sensitive check-cjk check-shell check-deny check-cdk-test
+.PHONY: lint test validate check-cdk check-helm check-python check-rust check-sensitive check-cjk check-shell check-deny check-cdk-test test-operator test-lambda
 
+# --- Aggregates ---
 lint: check-cdk check-cdk-test check-helm check-python check-rust check-deny check-shell check-sensitive check-cjk
+
+test: test-operator check-cdk-test test-lambda
+
+validate: lint test
 
 check-cdk:
 	cd cdk && npm ci && npx tsc --noEmit
@@ -38,3 +43,10 @@ check-cjk:
 	 for f in glob.glob(f'**/{ext}',recursive=True) \
 	 if not any(x in f for x in ['node_modules','cdk.out','.git','target/'])]; \
 	exit(1) if found and [print(f'CJK found in {len(found)} lines:')] and [print(f'  {f}') for f in found[:10]] else print('Clean')"
+
+test-operator:
+	cd operator && cargo test --lib
+
+test-lambda:
+	python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
+	python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
