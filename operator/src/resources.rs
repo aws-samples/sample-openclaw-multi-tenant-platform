@@ -298,3 +298,71 @@ async fn ensure_interceptor_tgc(client: Client, ssapply: &PatchParams) -> Result
     info!("Ensured interceptor TGC in keda namespace");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Each test uses a unique env var name to avoid race conditions in parallel execution.
+
+    #[test]
+    fn env_or_default_returns_real_value() {
+        unsafe { std::env::set_var("TEST_EODR_REAL", "claw.snese.net") };
+        assert_eq!(
+            env_or_default("TEST_EODR_REAL", "fallback"),
+            "claw.snese.net"
+        );
+        unsafe { std::env::remove_var("TEST_EODR_REAL") };
+    }
+
+    #[test]
+    fn env_or_default_filters_placeholder() {
+        unsafe { std::env::set_var("TEST_EODR_PH", "DOMAIN") };
+        assert_eq!(env_or_default("TEST_EODR_PH", "fallback"), "fallback");
+        unsafe { std::env::remove_var("TEST_EODR_PH") };
+    }
+
+    #[test]
+    fn env_or_default_filters_all_known_placeholders() {
+        for (i, ph) in [
+            "REGION",
+            "DOMAIN",
+            "COGNITO_POOL_ARN",
+            "COGNITO_CLIENT_ID",
+            "COGNITO_DOMAIN",
+            "GATEWAY_DOMAIN",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let key = format!("TEST_EODR_KP_{i}");
+            unsafe { std::env::set_var(&key, ph) };
+            assert_eq!(
+                env_or_default(&key, "fb"),
+                "fb",
+                "Failed for placeholder: {ph}"
+            );
+            unsafe { std::env::remove_var(&key) };
+        }
+    }
+
+    #[test]
+    fn env_or_default_allows_uppercase_real_values() {
+        unsafe { std::env::set_var("TEST_EODR_UP", "US_EAST_1") };
+        assert_eq!(env_or_default("TEST_EODR_UP", "fb"), "US_EAST_1");
+        unsafe { std::env::remove_var("TEST_EODR_UP") };
+    }
+
+    #[test]
+    fn env_or_default_empty_returns_default() {
+        unsafe { std::env::set_var("TEST_EODR_EMPTY", "") };
+        assert_eq!(env_or_default("TEST_EODR_EMPTY", "fb"), "fb");
+        unsafe { std::env::remove_var("TEST_EODR_EMPTY") };
+    }
+
+    #[test]
+    fn env_or_default_unset_returns_default() {
+        unsafe { std::env::remove_var("TEST_EODR_UNSET") };
+        assert_eq!(env_or_default("TEST_EODR_UNSET", "fb"), "fb");
+    }
+}
