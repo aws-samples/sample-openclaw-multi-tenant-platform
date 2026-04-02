@@ -23,21 +23,17 @@ Tenant provisioning uses ArgoCD:
 
 For manual provisioning without Cognito, `create-tenant.sh` uses `helm install` directly (bypasses ArgoCD).
 
-## Image Update CronJob
+## Image Upgrade
 
-`scripts/image-update-cronjob.yaml` -- checks GHCR for new OpenClaw images every 6 hours.
+To upgrade the OpenClaw image across all tenants, update the Helm chart values:
 
-1. Gets current image tag from any tenant deployment
-2. Queries GHCR tag list API
-3. If newer semver tag found, runs `kubectl set image` across all tenant deployments
+1. Change `image.tag` in `helm/charts/openclaw-platform/values.yaml`
+2. Commit and push to the main branch
+3. ArgoCD auto-syncs the change to all tenant deployments
 
-> Note: CronJob updates running deployments but does NOT update values in git. For ArgoCD-managed tenants, ArgoCD may revert the image change on next sync.
+For per-tenant image overrides, set `spec.image.tag` on the Tenant CR (see `examples/tenant.yaml`).
 
-**Manual trigger:**
-
-```bash
-kubectl create job --from=cronjob/openclaw-image-updater manual-update -n kube-system
-```
+> **Why not `kubectl set image`?** ArgoCD `selfHeal: true` reverts any live mutation within seconds. The Helm chart is the single source of truth for deployments.
 
 ## Auth UI Deployment
 
@@ -60,5 +56,5 @@ Sets up CloudTrail + S3 + Athena for Bedrock API audit.
 | File | Purpose |
 |---|---|
 | `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
-| `scripts/image-update-cronjob.yaml` | Image update CronJob manifest |
+| `helm/charts/openclaw-platform/values.yaml` | Image tag and chart defaults |
 | `scripts/deploy-auth-ui.sh` | S3 + CloudFront auth UI deployment |

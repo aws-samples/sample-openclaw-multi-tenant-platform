@@ -79,9 +79,9 @@ What it does:
 
 ### OpenClaw Image Update
 
-CronJob (`openclaw-image-updater`) checks GHCR every 6 hours. If newer version found, runs `kubectl set image` across all tenant deployments.
+Update `image.tag` in `helm/charts/openclaw-platform/values.yaml`, commit, and push. ArgoCD auto-syncs the change to all tenant deployments.
 
-> Note: For ArgoCD-managed tenants, ArgoCD may revert the image change on next sync (selfHeal). Update the Helm chart source or ArgoCD Application values instead.
+For per-tenant overrides, set `spec.image.tag` on the Tenant CR.
 
 ### CDK Stack Update
 
