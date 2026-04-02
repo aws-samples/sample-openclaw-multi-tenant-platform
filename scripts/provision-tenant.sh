@@ -35,7 +35,7 @@ get_output() {
 
 CLUSTER_NAME="${CLUSTER_NAME:-$(get_output ClusterName)}"
 USER_POOL_ID="${USER_POOL_ID:-$(get_output UserPoolId)}"
-TENANT_ROLE_ARN="${TENANT_ROLE_ARN:-$(get_output TenantPodRoleArn)}"
+TENANT_ROLE_ARN="${TENANT_ROLE_ARN:-$(get_output TenantRoleArn)}"
 
 if [[ -z "$CLUSTER_NAME" || -z "$USER_POOL_ID" || -z "$TENANT_ROLE_ARN" ]]; then
   echo "ERROR: Could not resolve required config from CDK stack outputs."
@@ -85,14 +85,14 @@ aws cognito-idp admin-update-user-attributes \
 # Step 4: Create Tenant CR
 echo "[4/6] Creating Tenant CR..."
 kubectl apply -f - <<EOF
-apiVersion: openclaw.snese.net/v1
+apiVersion: openclaw.io/v1alpha1
 kind: Tenant
 metadata:
   name: $TENANT
   namespace: openclaw-system
 spec:
-  tenantId: "$TENANT"
   email: "$EMAIL"
+  displayName: "OpenClaw"
 EOF
 
 # Step 5: Wait for namespace, then create K8s Secret
@@ -104,11 +104,13 @@ for i in $(seq 1 15); do
 apiVersion: v1
 kind: Secret
 metadata:
-  name: gateway-token
+  name: ${TENANT}-gateway-token
   namespace: $NS
+  labels:
+    app.kubernetes.io/managed-by: provision-tenant-script
 type: Opaque
 stringData:
-  token: "$TOKEN"
+  OPENCLAW_GATEWAY_TOKEN: "$TOKEN"
 EOF
     echo "  Secret created in $NS"
     SECRET_CREATED=true
