@@ -106,7 +106,7 @@ pub async fn ensure_argocd_app(
 
     let budget = spec.budget.as_ref().map(|b| b.monthly_usd).unwrap_or(100);
 
-    let helm_values = serde_yaml::to_string(&json!({
+    let mut values = json!({
         "fullnameOverride": name,
         "tenant": {
             "name": name,
@@ -134,8 +134,24 @@ pub async fn ensure_argocd_app(
                 "userPoolArn": &cognito_pool_arn
             }
         }
-    }))
-    .map_err(|e| Error::HelmError(e.to_string()))?;
+    });
+
+    // Pass per-tenant image overrides to Helm values
+    if let Some(ref img) = spec.image
+        && let Some(obj) = values.as_object_mut()
+    {
+        let image = obj.entry("image").or_insert_with(|| json!({}));
+        if let Some(ref repo) = img.repository {
+            image["repository"] = json!(repo);
+        }
+        if let Some(ref tag) = img.tag {
+            image["tag"] = json!(tag);
+        }
+        image["pullPolicy"] = json!(&img.pull_policy);
+    }
+
+    let helm_values =
+        serde_yaml::to_string(&values).map_err(|e| Error::HelmError(e.to_string()))?;
 
     let ar = ApiResource {
         group: "argoproj.io".into(),
