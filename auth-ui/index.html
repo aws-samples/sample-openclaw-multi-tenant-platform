@@ -130,11 +130,15 @@ input::placeholder{color:#555}
         <p id="progress-text" style="color:var(--muted);margin-top:0.5rem;font-size:0.8rem"></p>
       </div>
       <p id="loading-fallback" style="display:none;margin-top:1.5rem">
-        <span class="link" onclick="showSection('auth-section')">Back to sign in</span>
+        <span class="link" onclick="logout()">Back to sign in</span>
       </p>
     </div>
   </div>
-  <div class="footer">Powered by Amazon EKS + Bedrock</div>
+  <div class="footer">
+    <span class="link" onclick="logout()" style="font-size:0.75rem;color:#555">Clear saved session</span>
+    <span style="margin:0 6px;color:#333">·</span>
+    Powered by Amazon EKS + Bedrock
+  </div>
 </div>
 <script>
 // Config — values injected by deploy-auth-ui.sh via sed
@@ -231,6 +235,8 @@ async function handleReset(e){
   catch(err){showMsg('reset-msg',err.message,'error')}
   setLoading(btn,false)
 }
+
+function logout(){localStorage.removeItem('openclaw_email');showSection('auth-section');hideMsg('msg')}
 
 // Friendly error message mapper
 (function(){
