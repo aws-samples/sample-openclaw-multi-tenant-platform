@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as eks from 'aws-cdk-lib/aws-eks';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as events_targets from 'aws-cdk-lib/aws-events-targets';
@@ -13,7 +14,6 @@ import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
@@ -515,13 +515,24 @@ export class EksClusterStack extends cdk.Stack {
     });
     bedrockLatencyAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
 
-    // ── ECR: Pull-Through Cache for GHCR ──────────────────────────────────
-    new ecr.CfnPullThroughCacheRule(this, 'GhcrCache', {
-      ecrRepositoryPrefix: 'ghcr',
-      upstreamRegistryUrl: 'ghcr.io',
-    });
-
-    const openclawImageUri = `${this.account}.dkr.ecr.${this.region}.amazonaws.com/ghcr/openclaw/openclaw`;
+    // ── OpenClaw Image ──────────────────────────────────────────────────────
+    // Default: pull directly from ghcr.io (public, no credentials needed).
+    // To enable ECR pull-through cache for production:
+    //   1. Create a GHCR PAT and store in Secrets Manager (name: ecr-pullthroughcache/ghcr)
+    //   2. Set ghcrCredentialArn in cdk.json to the secret ARN
+    //   3. cdk deploy — images will be cached in ECR automatically
+    const ghcrCredentialArn = this.node.tryGetContext('ghcrCredentialArn') as string | undefined;
+    if (ghcrCredentialArn) {
+      new ecr.CfnPullThroughCacheRule(this, 'GhcrCache', {
+        ecrRepositoryPrefix: 'ghcr',
+        upstreamRegistryUrl: 'ghcr.io',
+        credentialArn: ghcrCredentialArn,
+      });
+    }
+    const openclawImage = this.node.tryGetContext('openclawImage')
+      || (ghcrCredentialArn
+        ? `${this.account}.dkr.ecr.${this.region}.amazonaws.com/ghcr/openclaw/openclaw:latest`
+        : 'ghcr.io/openclaw/openclaw:latest');
 
     // ── S3: Error Pages Bucket ──────────────────────────────────────────────
     const errorPagesBucket = new s3.Bucket(this, 'ErrorPagesBucket', {
@@ -561,7 +572,7 @@ export class EksClusterStack extends cdk.Stack {
         CLUSTER_NAME: cluster.clusterName,
         CERTIFICATE_ARN: certificate.certificateArn,
         DOMAIN: domainName,
-        OPENCLAW_IMAGE: this.node.tryGetContext('openclawImage') || `${openclawImageUri}:latest`,
+        OPENCLAW_IMAGE: openclawImage,
         TENANT_ROLE_ARN: tenantRole.roleArn,
         USER_POOL_ID: cognitoPoolId,
       },
@@ -910,6 +921,6 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
     new cdk.CfnOutput(this, 'WafAclArn', { value: wafAcl.attrArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
-    new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImageUri });
+    new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImage });
   }
 }
