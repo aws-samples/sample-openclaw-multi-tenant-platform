@@ -23,6 +23,14 @@ USER_POOL_ID = os.environ['USER_POOL_ID']
 
 ALLOWED_URL_SCHEMES = {'https'}
 
+# Cache EKS context within a single Lambda invocation.
+# - endpoint + CA cert don't change within an invocation
+# - EKS bearer token is valid for ~15 minutes (presigned STS GetCallerIdentity URL)
+#   ref: https://docs.aws.amazon.com/eks/latest/userguide/cluster-auth.html
+# - Lambda max timeout is 60s, well within token validity
+# - Saves ~1s per call (DescribeCluster + STS token generation) × 3 calls = ~3s
+_eks_context_cache = None
+
 
 def _validate_url(url):
     """Validate URL scheme is in the allowlist."""
@@ -32,7 +40,16 @@ def _validate_url(url):
 
 
 def _get_eks_context():
-    """Get EKS endpoint, CA cert SSL context, and bearer token."""
+    """Get EKS endpoint, CA cert SSL context, and bearer token.
+
+    Results are cached for the duration of the Lambda invocation.
+    The EKS bearer token (presigned STS URL) is valid for ~15 minutes,
+    so reuse within a single invocation (max 60s) is safe.
+    """
+    global _eks_context_cache
+    if _eks_context_cache is not None:
+        return _eks_context_cache
+
     import ssl
     import tempfile
     cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
@@ -45,7 +62,8 @@ def _get_eks_context():
     ca_file.close()
     ctx = ssl.create_default_context(cafile=ca_file.name)
 
-    return endpoint, ctx, get_eks_token()
+    _eks_context_cache = (endpoint, ctx, get_eks_token())
+    return _eks_context_cache
 
 
 def get_eks_token():
@@ -164,6 +182,12 @@ def create_gateway_secret(tenant, ns, token):
 
 
 def handler(event, context):
+    # Reset EKS context cache for each invocation.
+    # Token is valid ~15 min but Lambda containers can be reused for hours.
+    # Cache only saves repeated calls within a single invocation.
+    global _eks_context_cache
+    _eks_context_cache = None
+
     email = event['request']['userAttributes']['email']
     local = email.split('@')[0].lower()
     base_name = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
