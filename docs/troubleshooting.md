@@ -6,6 +6,26 @@ Common issues encountered when deploying and operating the OpenClaw Platform.
 
 ## Deployment Issues
 
+### User signed up but no workspace appears
+
+The PostConfirmation Lambda may have failed partway through. The user exists in Cognito but has no tenant resources.
+
+**Diagnose:**
+```bash
+# Check if Tenant CR exists
+kubectl get tenant -n openclaw-system | grep <tenant-id>
+
+# Check Lambda logs
+aws logs tail /aws/lambda/OpenClaw-PostConfirmation --since 1h --region us-west-2
+```
+
+**Fix:** Run the manual provisioning script:
+```bash
+./scripts/provision-tenant.sh <tenant-id> <email> [cognito-username]
+```
+
+See `scripts/provision-tenant.sh` for details and prerequisites.
+
 ### CDK deploy fails with "Resource already exists"
 
 **Symptom**: `cdk deploy` fails on second run.
