@@ -1,0 +1,49 @@
+# Example: Tenant Custom Resource
+#
+# Apply with: kubectl apply -f examples/tenant.yaml
+# Check status: kubectl get tenant example -n openclaw-system -o yaml
+#
+# The Operator reconciles this into:
+#   1. Namespace (tenant-example)
+#   2. ArgoCD Application (syncs Helm chart)
+#   3. ReferenceGrant (if scaleToZero enabled)
+#
+# Status phases: Provisioning → Ready (or Error)
+
+apiVersion: openclaw.snese.net/v1
+kind: Tenant
+metadata:
+  name: example
+  namespace: openclaw-system
+spec:
+  # Required: unique tenant identifier (used in URL path /t/{tenantId}/)
+  tenantId: "example"
+
+  # Required: workspace owner email
+  email: "user@example.com"
+
+  # Optional: custom container image override
+  # When omitted, uses the Helm chart default (Chart.AppVersion)
+  # image:
+  #   repository: "ghcr.io/openclaw/openclaw"
+  #   tag: "2026.3.24"
+  #   pullPolicy: "IfNotPresent"
+
+  # Optional: KEDA HTTP scale-to-zero (default: true when gateway is configured)
+  # Set to false to keep the pod running at all times
+  # scaleToZero: true
+
+  # Optional: keep pod running 24/7, skip scale-to-zero (default: false)
+  # Useful for tenants with cron jobs that need the pod always available
+  # alwaysOn: false
+
+  # Optional: monthly budget in USD (default: 100)
+  # budget:
+  #   monthlyUsd: 100
+
+  # Optional: skill packages to install
+  # skills: []
+
+  # Optional: extra environment variables
+  # env:
+  #   MY_VAR: "my-value"
