@@ -7,7 +7,7 @@ image:
   # ECR pull-through cache — auto-mirrors from ghcr.io/openclaw/openclaw
   # Replace ACCOUNT_ID and REGION with your values (from CDK output OpenClawImageUri)
   repository: ghcr.io/openclaw/openclaw
-  tag: "2026.3.24"
+  tag: ""  # Defaults to Chart.AppVersion if empty
   pullPolicy: IfNotPresent
 
 replicas: 1
