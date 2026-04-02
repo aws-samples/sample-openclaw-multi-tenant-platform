@@ -197,6 +197,8 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 | [GitOps](docs/components/gitops.md) | ArgoCD manages tenant resources via Helm chart |
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
 | [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
+| [ADRs](docs/adr.md) | Architecture decision records |
 
 ## Project Structure
 

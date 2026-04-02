@@ -72,12 +72,17 @@ See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
 
 ```bash
 # CDK
-cd cdk && npx tsc --noEmit
+cd cdk && npx tsc --noEmit && npx jest
+
+# Operator
+cd operator && cargo clippy -- -D warnings && cargo test --lib
 
 # Lambda
-python3 -m py_compile cdk/lambda/pre-signup/index.py
-python3 -m py_compile cdk/lambda/post-confirmation/index.py
-python3 -m py_compile cdk/lambda/cost-enforcer/index.py
+python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
+python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
+
+# Helm
+helm lint helm/charts/openclaw-platform/
 
 # Sensitive data scan
 grep -rn 'AKIA[A-Z0-9]\{16\}' \
