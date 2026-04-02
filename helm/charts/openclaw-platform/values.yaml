@@ -4,8 +4,8 @@
 fullnameOverride: ""
 
 image:
-  # ECR pull-through cache — auto-mirrors from ghcr.io/openclaw/openclaw
-  # Replace ACCOUNT_ID and REGION with your values (from CDK output OpenClawImageUri)
+  # Default: ghcr.io/openclaw/openclaw (direct pull, no credentials needed)
+  # With ECR pull-through cache: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw
   repository: ghcr.io/openclaw/openclaw
   tag: ""  # Defaults to Chart.AppVersion if empty
   pullPolicy: IfNotPresent

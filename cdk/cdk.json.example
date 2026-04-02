@@ -112,6 +112,8 @@
     "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role",
     "sesFromEmail": "noreply@your-domain.com",
     "albClientId": "YOUR_ALB_CLIENT_ID",
-    "openclawImage": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/ghcr/openclaw/openclaw:latest"
+    "openclawImage": "ghcr.io/openclaw/openclaw:latest",
+    "_comment_ghcrCredentialArn": "Optional: set to enable ECR pull-through cache for GHCR",
+    "ghcrCredentialArn": ""
   }
 }
