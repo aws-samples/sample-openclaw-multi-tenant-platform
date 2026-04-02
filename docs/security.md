@@ -9,7 +9,7 @@
 ```
 +-----------------------------------------------------------------------+
 |  1. Edge         CloudFront + WAF (Common Rules + rate limit)          |
-|  2. Signup       Turnstile CAPTCHA + email domain restriction          |
+|  2. Signup       WAF Bot Control (opt-in) + email domain restriction     |
 |  3. Network      Internet-facing ALB (CF prefix list SG) + NetworkPolicy|
 |  4. Auth         Cognito signup + gateway token auth + CF prefix list   |
 |  5. Tenant       Namespace isolation + ABAC + ResourceQuota            |
@@ -44,7 +44,7 @@ Prevents unauthorized account creation and bot signups.
 
 - Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS`)
 - Rate limiting: max 5 signups per email domain per hour
-- Cloudflare Turnstile CAPTCHA verification (if `TURNSTILE_SECRET` is set)
+- AWS WAF Bot Control (if `enableBotControl` CDK context is true)
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `PreSignupFn`
 
@@ -201,7 +201,7 @@ Records all Bedrock API calls for compliance and forensics.
 |---------------|------------|
 | DDoS | CloudFront edge caching + WAF rate limiting (2000 req/5min/IP) |
 | SQLi / XSS | WAF AWSManagedRulesCommonRuleSet |
-| Bot signups | Turnstile CAPTCHA + email domain allowlist + rate limiting |
+| Bot signups | WAF Bot Control (opt-in) + email domain allowlist + rate limiting |
 | Unauthenticated access | CF prefix list SG + WAF header + gateway token auth |
 | Cross-tenant data access | Namespace isolation + NetworkPolicy + ABAC on Secrets Manager |
 | Cross-tenant network | NetworkPolicy blocks 10.0.0.0/8 on egress port 443 |
@@ -223,7 +223,7 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
    |                          SG: CF prefix list only                  exec deny
    |                                                                   fs: workspaceOnly
    |
-   +-> Cognito --> Pre-signup Lambda --> Turnstile + domain check
+   +-> Cognito --> Pre-signup Lambda --> domain check + rate limit
                    Post-confirm Lambda --> SM + Pod Identity + Tenant CR
 ```
 

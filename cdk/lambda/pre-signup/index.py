@@ -1,27 +1,14 @@
 import os
 import json
-import urllib.request
-import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 import boto3
 
 ALLOWED_DOMAINS = [d.strip() for d in os.environ.get('ALLOWED_DOMAINS', 'example.com').split(',')]
-TURNSTILE_SECRET = os.environ.get('TURNSTILE_SECRET', '')
 USER_POOL_ID = os.environ.get('USER_POOL_ID', '')
 RATE_LIMIT = int(os.environ.get('SIGNUP_RATE_LIMIT', '5'))
 
-ALLOWED_URL_SCHEMES = {'https'}
-TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
-
 cognito_client = boto3.client('cognito-idp') if USER_POOL_ID else None
-
-
-def _validate_url(url):
-    """Validate URL scheme is in the allowlist."""
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ALLOWED_URL_SCHEMES:
-        raise ValueError(f'URL scheme {parsed.scheme!r} not allowed, must be one of {ALLOWED_URL_SCHEMES}')
 
 
 def _count_recent_signups(domain):
@@ -69,17 +56,5 @@ def handler(event, context):
     # Rate limit: max RATE_LIMIT signups per domain per hour
     if _count_recent_signups(domain) >= RATE_LIMIT:
         raise Exception(f'Too many signups from {domain}. Please try again later.')
-
-    if TURNSTILE_SECRET:
-        token = event['request'].get('clientMetadata', {}).get('turnstileToken', '')
-        if not token:
-            raise Exception('CAPTCHA verification required.')
-        data = json.dumps({'secret': TURNSTILE_SECRET, 'response': token}).encode()
-        _validate_url(TURNSTILE_VERIFY_URL)
-        req = urllib.request.Request(TURNSTILE_VERIFY_URL,
-                                     data=data, headers={'Content-Type': 'application/json'})
-        resp = json.loads(urllib.request.urlopen(req).read())  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310  # nosec B310 -- URL scheme validated by _validate_url()
-        if not resp.get('success'):
-            raise Exception('CAPTCHA verification failed.')
 
     return event
