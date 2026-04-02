@@ -88,11 +88,54 @@ The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over 
 
 Controls access before reaching a pod.
 
-- Cognito User Pool for signup identity management
-- OpenClaw gateway runs in `token` auth mode with `exec` SecretRef -> `aws-sm` -> Secrets Manager
-- No ALB Cognito auth -- gateway handles auth locally
-- Path-based routing via Gateway API HTTPRoute (`/t/{tenant}/`)
-- Traffic path: Internet -> CloudFront -> internet-facing ALB (CF prefix list SG) -> HTTPRoute -> Pod
+### Auth Flow
+
+```
+auth-ui (static S3 + CloudFront)
+  │
+  ├─ Sign Up: Cognito SignUp API → email verification → ConfirmSignUp
+  │   └─ PostConfirmation Lambda: provisions tenant (SM secret, Pod Identity,
+  │      Tenant CR, K8s Secret)
+  │
+  ├─ Sign In: Cognito InitiateAuth → ID token (contains custom:gateway_token)
+  │
+  └─ Redirect: /t/{tenant}/#token={gateway_token}
+       └─ OpenClaw gateway validates token → grants workspace access
+```
+
+### Components
+
+- **Cognito User Pool**: manages user identity (email + password), email verification, custom attributes (`custom:gateway_token`, `custom:tenant_name`)
+- **auth-ui**: custom sign-in/sign-up page (not Cognito Hosted UI). Calls Cognito API directly from browser via `AWSCognitoIdentityProviderService` JSON-RPC
+- **Gateway token**: static per-tenant secret stored in Secrets Manager (`openclaw/{tenant}/gateway-token`). Fetched by OpenClaw gateway via `exec` SecretRef on startup
+- **OpenClaw gateway**: runs in `token` auth mode. Validates the token passed via URL fragment (`#token=xxx`) or session cookie
+- **`dangerouslyDisableDeviceAuth: true`**: disables OpenClaw's device pairing flow (normally requires terminal confirmation on first connect). Required for web-only access where no terminal is available
+
+### What Cognito does NOT do
+
+- **No ALB-level Cognito auth**: HTTPRoute forwards directly to backend (or KEDA interceptor). ALB does not perform `authenticate-cognito` action on new tenant routes
+- **No session persistence**: auth-ui does not store Cognito tokens in localStorage or cookies. Closing the browser tab requires re-authentication
+- **No logout**: auth-ui has no sign-out button and does not call Cognito `GlobalSignOut`
+
+### Why no ALB Cognito auth
+
+ALB Cognito auth uses a 302 redirect flow to Cognito Hosted UI. This is incompatible with the current auth-ui architecture:
+1. auth-ui already authenticates via Cognito API (user would login twice)
+2. ALB 302 redirect strips URL fragments — the `#token=xxx` gateway token would be lost
+3. Adding ALB auth requires switching from auth-ui to Cognito Hosted UI, losing custom UX
+
+### Security properties
+
+| Property | Status | Notes |
+|----------|--------|-------|
+| User identity verification | ✅ | Cognito email verification |
+| Email domain restriction | ✅ | Pre-signup Lambda allowlist |
+| Signup rate limiting | ✅ | 5 per domain per hour |
+| Workspace access control | ✅ | Gateway token (static) |
+| Token expiry | ❌ | Gateway token never expires |
+| Token rotation | ❌ | Token set once at signup, never rotated |
+| Session management | ❌ | No persistent session, no logout |
+| Cross-tenant URL guessing | Low risk | Token is `secrets.token_urlsafe(32)` = 256-bit entropy |
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `UserPool` (imported)
 
@@ -233,6 +276,10 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 
 | Gap | Notes |
 |-----|-------|
+| ALB-level Cognito auth | Incompatible with auth-ui flow (see Layer 4). Gateway token is the auth boundary |
+| Gateway token rotation | Token set once at signup, never rotated. Leaked token = permanent access |
+| Session persistence | auth-ui doesn't store tokens. Each page load requires re-authentication |
+| Logout | No sign-out button. Closing tab is the only "logout" |
 | MFA | Cognito supports MFA but not enabled |
 | SAST/DAST | No static/dynamic security testing in CI |
 | Image signing | No Sigstore/Cosign verification |
@@ -240,6 +287,26 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 | WAF logging | Sampled requests only, no full logging |
 | GuardDuty | No runtime threat detection for EKS |
 | KMS encryption | EBS uses default encryption, no CMK |
+
+---
+
+## Production Hardening Recommendations
+
+For production deployments, consider the following enhancements:
+
+### Authentication
+1. **Gateway token rotation**: rotate token on each sign-in (update Secrets Manager + K8s Secret + Cognito attribute in PostConfirmation or a dedicated sign-in Lambda)
+2. **Session persistence**: store Cognito refresh token in secure httpOnly cookie, implement silent token refresh
+3. **Logout**: add sign-out button that calls Cognito `GlobalSignOut` and clears gateway session
+4. **MFA**: enable Cognito MFA (TOTP or SMS) for admin accounts at minimum
+5. **JWT-based auth**: if OpenClaw adds JWT validation support, replace static gateway token with Cognito ID token for time-limited, rotatable auth
+
+### Infrastructure
+6. **WAF Bot Control**: enable via `cdk deploy -c enableBotControl=true` (additional WAF charges apply)
+7. **WAF logging**: enable full request logging to S3 for forensics
+8. **GuardDuty EKS Runtime Monitoring**: detect container-level threats
+9. **KMS CMK**: use customer-managed keys for EBS encryption and Secrets Manager
+10. **Secrets rotation**: enable Secrets Manager automatic rotation with a Lambda rotator
 
 ---
 
