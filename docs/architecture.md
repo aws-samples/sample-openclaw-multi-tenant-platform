@@ -116,7 +116,7 @@ The operator updates `Tenant.status.conditions` during reconciliation:
 | Layer | Control |
 |-------|--------|
 | Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
-| Signup | Cloudflare Turnstile CAPTCHA + email domain restriction |
+| Signup | WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + WAF + HTTPS |
 | Auth | Cognito + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |

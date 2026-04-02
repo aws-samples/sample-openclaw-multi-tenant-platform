@@ -29,16 +29,16 @@ User -> Custom Auth UI (auth-ui/index.html)
 
 Single-page app that talks directly to Cognito API via raw `fetch()`. No SDK dependency.
 
-Why not Cognito Hosted UI: ugly URLs, limited customization, can't integrate Turnstile CAPTCHA.
+Why not Cognito Hosted UI: ugly URLs, limited customization.
 
-Features: sign in/up tabs, forgot password, Turnstile CAPTCHA, password strength indicator.
+Features: sign in/up tabs, forgot password, password strength indicator.
 
 ## Pre-Signup Lambda
 
 **Location:** `cdk/lambda/pre-signup/index.py`
 
 - Email domain restriction (`ALLOWED_DOMAINS`)
-- Turnstile CAPTCHA verification (if configured)
+- WAF Bot Control (opt-in, server-side)
 - `autoConfirmUser = true`, `autoVerifyEmail = true`
 - SNS notify admin
 
@@ -111,6 +111,6 @@ user.name+tag@example.com -> usernamtag (max 20 chars, [a-z0-9-] only)
 
 - Public client -- no client secret (safe for browser SPA)
 - Email domain restriction -- pre-signup Lambda rejects non-allowed domains
-- CAPTCHA -- Turnstile on signup (server-side verification)
+- Bot protection -- WAF Bot Control (opt-in via CDK context)
 - Gateway token -- `secrets.token_urlsafe(32)`, stored in SM with ABAC tags
 - Password policy -- min 12 chars, uppercase + lowercase + numbers

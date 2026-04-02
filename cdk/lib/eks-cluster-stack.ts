@@ -700,15 +700,9 @@ export class EksClusterStack extends cdk.Stack {
     }));
 
     // ── CloudFront + WAF ────────────────────────────────────────────────────
-    const wafAcl = new wafv2.CfnWebACL(this, 'WafAcl', {
-      defaultAction: { allow: {} },
-      scope: 'REGIONAL',
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: 'OpenClawWaf',
-        sampledRequestsEnabled: true,
-      },
-      rules: [
+    const enableBotControl = this.node.tryGetContext('enableBotControl') === true;
+
+    const wafRules: wafv2.CfnWebACL.RuleProperty[] = [
         {
           name: 'AWSManagedRulesCommonRuleSet',
           priority: 1,
@@ -741,7 +735,42 @@ export class EksClusterStack extends cdk.Stack {
             sampledRequestsEnabled: true,
           },
         },
-      ],
+    ];
+
+    // Bot Control: opt-in via CDK context (incurs additional WAF charges)
+    if (enableBotControl) {
+      wafRules.push({
+        name: 'AWSManagedRulesBotControlRuleSet',
+        priority: 3,
+        overrideAction: { none: {} },
+        statement: {
+          managedRuleGroupStatement: {
+            vendorName: 'AWS',
+            name: 'AWSManagedRulesBotControlRuleSet',
+            managedRuleGroupConfigs: [{
+              awsManagedRulesBotControlRuleSet: {
+                inspectionLevel: 'COMMON',
+              },
+            }],
+          },
+        },
+        visibilityConfig: {
+          cloudWatchMetricsEnabled: true,
+          metricName: 'BotControl',
+          sampledRequestsEnabled: true,
+        },
+      });
+    }
+
+    const wafAcl = new wafv2.CfnWebACL(this, 'WafAcl', {
+      defaultAction: { allow: {} },
+      scope: 'REGIONAL',
+      visibilityConfig: {
+        cloudWatchMetricsEnabled: true,
+        metricName: 'OpenClawWaf',
+        sampledRequestsEnabled: true,
+      },
+      rules: wafRules,
     });
 
     // S3 bucket for auth UI static site
@@ -789,8 +818,7 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── Auth UI: Deploy static files + generate config.js ───────────────────
-    const turnstileSiteKey = this.node.tryGetContext('turnstileSiteKey') || '';
-    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${domainName}',turnstileSiteKey:'${turnstileSiteKey}'};`;
+    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${domainName}'};`;
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [

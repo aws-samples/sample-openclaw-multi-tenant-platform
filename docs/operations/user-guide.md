@@ -41,7 +41,7 @@
 
 - Email must match allowed domain
 - Password: min 12 chars, uppercase, lowercase, numbers
-- Cloudflare Turnstile CAPTCHA (optional)
+- AWS WAF Bot Control (optional, enable via CDK context)
 - Cognito SDK `SignUp` API call (no Hosted UI redirect)
 
 ### Workspace Provisioning
