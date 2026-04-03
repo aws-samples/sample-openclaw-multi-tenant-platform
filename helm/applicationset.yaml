@@ -1,0 +1,91 @@
+# ApplicationSet for multi-tenant OpenClaw workspaces.
+#
+# How it works:
+#   - Each element in generators[0].list.elements represents one tenant
+#   - ApplicationSet controller creates one ArgoCD Application per element
+#   - Each Application syncs helm/charts/openclaw-platform with per-tenant values
+#   - Adding/removing elements automatically creates/deletes tenant workspaces
+#
+# Placeholders (injected by deploy-platform.sh):
+#   HELM_REPO_URL, DOMAIN, COGNITO_POOL_ARN, COGNITO_CLIENT_ID, COGNITO_DOMAIN
+#
+# To add a tenant manually:
+#   See examples/add-tenant.sh
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: openclaw-tenants
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-options: Delete=false
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements: []  # PostConfirmation Lambda appends here via K8s API
+  template:
+    metadata:
+      name: "tenant-{{.name}}"
+      labels:
+        openclaw.io/tenant: "{{.name}}"
+        app.kubernetes.io/managed-by: openclaw-applicationset
+    spec:
+      project: default
+      source:
+        repoURL: "HELM_REPO_URL"
+        targetRevision: main
+        path: helm/charts/openclaw-platform
+        helm:
+          values: |
+            fullnameOverride: "{{.name}}"
+            tenant:
+              name: "{{.name}}"
+              email: "{{.email}}"
+              enabled: true
+              budget: 100
+            skills:
+              - weather
+              - gog
+            scaleToZero:
+              enabled: true
+              minReplicas: 0
+            ingress:
+              host: "DOMAIN"
+            gateway:
+              enabled: true
+              domain: "DOMAIN"
+              gatewayName: openclaw-gateway
+              gatewayNamespace: openclaw-system
+              cognito:
+                enabled: true
+                clientId: "COGNITO_CLIENT_ID"
+                domain: "COGNITO_DOMAIN"
+                userPoolArn: "COGNITO_POOL_ARN"
+      destination:
+        name: in-cluster
+        namespace: "openclaw-{{.name}}"
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+        - group: gateway.k8s.aws
+          kind: TargetGroupConfiguration
+          jsonPointers:
+            - /spec/defaultConfiguration/healthCheckConfig/healthCheckInterval
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        managedNamespaceMetadata:
+          labels:
+            openclaw.io/tenant: "{{.name}}"
+            app.kubernetes.io/managed-by: openclaw-applicationset
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/warn: restricted
+            pod-security.kubernetes.io/audit: restricted

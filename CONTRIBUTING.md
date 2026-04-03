@@ -11,7 +11,6 @@ Thank you for your interest in contributing to OpenClaw Platform!
 - Helm 3
 - Python 3.12+
 - Docker (for CDK asset bundling)
-- Rust toolchain (only if modifying operator code)
 
 ## Quick Setup
 
@@ -27,23 +26,10 @@ cp cdk/cdk.json.example cdk/cdk.json
 # Edit cdk/cdk.json with your AWS account details
 ```
 
-## Operator Build
+## Platform Build
 
-The Operator image is pre-built via GitHub Actions and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS nodes pull it directly from GHCR -- no local build needed.
+The Platform uses ArgoCD ApplicationSet for multi-tenant management. No Operator build needed.
 
-If you modify `operator/src/`, the image is automatically rebuilt on push to main. For local development:
-
-```bash
-cd operator
-cargo build --release
-cargo clippy -- -D warnings
-cargo test --lib
-```
-
-To build and push a custom image to your own ECR:
-
-```bash
-bash scripts/build-operator.sh
 ```
 
 ## Project Structure
@@ -57,7 +43,6 @@ helm/                   # Helm chart (source of truth, synced by ArgoCD)
   charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
   tenants/values-template.yaml  # Per-tenant values template
 auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
-operator/               # Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application + ReferenceGrant
 scripts/                # Operational scripts (Bash)
 docs/                   # Architecture and operations docs
 ```
@@ -74,8 +59,7 @@ See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
 # CDK
 cd cdk && npx tsc --noEmit && npx jest
 
-# Operator
-cd operator && cargo clippy -- -D warnings && cargo test --lib
+# Platform
 
 # Lambda
 python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
@@ -127,8 +111,6 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 
 The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
 
-1. **Rust**: format check, clippy, unit tests, CRD generation verify
-2. **Rust**: cargo-deny (license + security advisory audit)
 3. **Platform**: CDK compile + synth with cdk-nag, Helm lint, Python syntax, Shell syntax, ShellCheck
 4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit`, Semgrep, Trivy
 5. **Main-only**: Docker smoke test (build image + verify binary starts)
@@ -143,7 +125,7 @@ All PR checks must pass before merge.
 
 Key design decisions documented in:
 
-- `docs/architecture.md` -- System overview, Operator + ArgoCD flow
+- `docs/architecture.md` -- System overview, ApplicationSet + ArgoCD flow
 - `docs/security.md` -- Security model (10 layers)
 - `docs/components/` -- Per-component deep dives
 

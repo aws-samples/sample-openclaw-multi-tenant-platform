@@ -12,7 +12,7 @@ The PostConfirmation Lambda may have failed partway through. The user exists in 
 
 **Diagnose:**
 ```bash
-# Check if Tenant CR exists
+# Check if ApplicationSet element exists
 kubectl get tenant -n openclaw-system | grep <tenant-id>
 
 # Check Lambda logs
@@ -45,7 +45,7 @@ See `scripts/provision-tenant.sh` for details and prerequisites.
 **Fix**:
 ```bash
 # Check logs
-kubectl logs deployment/tenant-operator -n openclaw-system
+kubectl logs deployment/applicationset -n openclaw-system
 
 # Verify CRD exists
 kubectl get crd tenants.openclaw.io
@@ -61,16 +61,16 @@ kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}'
 
 **Symptom**: `GATEWAY_DOMAIN=DOMAIN` instead of actual domain.
 
-**Cause**: `build-operator.sh` or `setup.sh` sed replacement didn't run, or `cdk.json` has empty values.
+**Cause**: `deploy-platform.sh` or `setup.sh` sed replacement didn't run, or `cdk.json` has empty values.
 
 **Fix**: The Operator code filters known placeholder values (`REGION`, `DOMAIN`, `COGNITO_POOL_ARN`, etc.) and treats them as empty. But for correct operation, patch the deployment:
 ```bash
-kubectl set env deployment/tenant-operator -n openclaw-system \
+kubectl set env deployment/applicationset -n openclaw-system \
   GATEWAY_DOMAIN=<your-domain> \
   AWS_REGION=<your-region>
 ```
 
-**Prevention**: `build-operator.sh` now fails early if `cdk.json` values are empty.
+**Prevention**: `deploy-platform.sh` now fails early if `cdk.json` values are empty.
 
 ---
 
@@ -90,7 +90,7 @@ kubectl get targetgroupconfiguration -n keda
 
 If missing, check Operator RBAC:
 ```bash
-kubectl get clusterrole tenant-operator -o yaml | grep targetgroupconfigurations
+kubectl get clusterrole applicationset -o yaml | grep targetgroupconfigurations
 ```
 
 ---
@@ -136,7 +136,7 @@ kubectl get application tenant-<name> -n argocd -o jsonpath='{.spec.ignoreDiffer
 
 **Possible causes**:
 1. **KEDA scale-from-zero broken** — see "Pods stuck at 0 replicas" above
-2. **Lambda namespace race condition** — PostConfirmation Lambda creates K8s Secret before Operator creates namespace. Lambda retries with backoff (up to 5 attempts).
+2. **Lambda namespace race condition** — PostConfirmation Lambda creates K8s Secret before ApplicationSet manages namespace. Lambda retries with backoff (up to 5 attempts).
 3. **Cognito triggers missing** — CDK Custom Resource should set PreSignUp + PostConfirmation triggers. Verify:
 ```bash
 aws cognito-idp describe-user-pool --user-pool-id <pool-id> \
@@ -218,5 +218,5 @@ Common blockers:
 
 **Fix**: Read the error message in the condition, then check Operator logs:
 ```bash
-kubectl logs deployment/tenant-operator -n openclaw-system --tail=20 | grep -i error
+kubectl logs deployment/applicationset -n openclaw-system --tail=20 | grep -i error
 ```

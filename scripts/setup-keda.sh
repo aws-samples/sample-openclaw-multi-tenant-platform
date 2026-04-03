@@ -27,8 +27,30 @@ if ! $DRY_RUN; then
 fi
 
 echo ""
+echo "==> Creating shared interceptor TargetGroupConfiguration"
+kubectl apply -f - <<'EOF'
+apiVersion: gateway.k8s.aws/v1beta1
+kind: TargetGroupConfiguration
+metadata:
+  name: keda-interceptor-tg
+  namespace: keda
+  labels:
+    app.kubernetes.io/managed-by: setup-keda
+spec:
+  targetReference:
+    name: keda-add-ons-http-interceptor-proxy
+  defaultConfiguration:
+    targetType: ip
+    healthCheckConfig:
+      healthCheckPath: /readyz
+      healthCheckPort: "9090"
+      healthyThresholdCount: 2
+      unhealthyThresholdCount: 2
+      healthCheckInterval: 15
+EOF
+
+echo ""
 echo "=== KEDA Installed ==="
-echo "  To enable scale-to-zero for a tenant:"
-echo "    helm upgrade openclaw-<name> helm/charts/openclaw-platform \\"
-echo "      -n openclaw-<name> --set scaleToZero.enabled=true"
+echo "  Interceptor TGC created in keda namespace."
+echo "  Scale-to-zero is managed by ApplicationSet per-tenant values."
 echo "======================"

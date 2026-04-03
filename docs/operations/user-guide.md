@@ -13,7 +13,7 @@
    -> Post-confirmation Lambda:
      a. Secrets Manager secret
      b. Pod Identity Association
-     c. Tenant CR -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
+     c. ApplicationSet element -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
      d. SES welcome email
 
 4. User receives email: "Your URL is claw.your-domain.com/t/alice/"
@@ -46,7 +46,7 @@
 
 ### Workspace Provisioning
 
-- Post-confirmation Lambda creates Tenant CR
+- Post-confirmation Lambda creates ApplicationSet element
 - Operator provisions Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 - ArgoCD syncs Helm chart -> Deployment, Service, ConfigMap, NetworkPolicy, etc.
 - User receives welcome email with workspace URL

@@ -5,7 +5,7 @@
 ```
 1. Configure    -> cp cdk.json.example cdk.json (fill context values)
 2. Deploy infra -> npx cdk deploy (~15-20 min)
-3. K8s setup    -> bash scripts/build-operator.sh (CRD + Operator + Gateway)
+3. K8s setup    -> bash scripts/deploy-platform.sh (CRD + Operator + Gateway)
 4. KEDA         -> bash scripts/setup-keda.sh
 5. First tenant -> scripts/create-tenant.sh alice
 6. ALB setup    -> scripts/post-deploy.sh (CloudFront #2, Route53, WAF)
@@ -21,7 +21,7 @@
 2. Post-confirmation Lambda runs automatically:
    a. Creates Secrets Manager secret (gateway token)
    b. Creates EKS Pod Identity Association
-   c. Creates Tenant CR -> Operator reconciles (NS, PVC, SA, ArgoCD App, KEDA HSO)
+   c. Creates ApplicationSet element -> ApplicationSet generates Applications (NS, PVC, SA, ArgoCD App, KEDA HSO)
    d. ArgoCD syncs Helm chart -> tenant resources created
    e. Sends SES welcome email
 3. ~2 minutes later, tenant pod is running
@@ -40,7 +40,7 @@
 
 ### Create Tenant (Manual -- bypasses Cognito)
 
-`create-tenant.sh` creates a Tenant CR directly. The Operator then reconciles it (creates namespace, ArgoCD Application, etc.):
+`create-tenant.sh` creates a ApplicationSet element directly. The Operator then reconciles it (creates namespace, ArgoCD Application, etc.):
 
 ```bash
 ./scripts/create-tenant.sh alice \
@@ -51,7 +51,7 @@
 
 This is useful for testing without going through the Cognito signup flow.
 
-> Note: This only creates the Tenant CR. It does NOT create Secrets Manager secrets, Pod Identity Associations, or Cognito user attributes. For a full recovery (when PostConfirmation Lambda fails), use `provision-tenant.sh` instead.
+> Note: This only creates the ApplicationSet element. It does NOT create Secrets Manager secrets, Pod Identity Associations, or Cognito user attributes. For a full recovery (when PostConfirmation Lambda fails), use `provision-tenant.sh` instead.
 
 ### Recover Failed Signup
 
@@ -61,7 +61,7 @@ If a user signed up via Cognito but their workspace didn't appear (PostConfirmat
 ./scripts/provision-tenant.sh <tenant-id> <email> [cognito-username]
 ```
 
-This mirrors the full Lambda provisioning flow: Pod Identity, Secrets Manager, Cognito attributes, Tenant CR, and K8s gateway-token Secret. See the script header for prerequisites.
+This mirrors the full Lambda provisioning flow: Pod Identity, Secrets Manager, Cognito attributes, ApplicationSet element, and K8s gateway-token Secret. See the script header for prerequisites.
 
 ### Delete Tenant
 
@@ -83,7 +83,7 @@ This mirrors the full Lambda provisioning flow: Pod Identity, Secrets Manager, C
 
 Update `image.tag` in `helm/charts/openclaw-platform/values.yaml`, commit, and push. ArgoCD auto-syncs the change to all tenant deployments.
 
-For per-tenant overrides, set `spec.image.tag` on the Tenant CR.
+For per-tenant overrides, set `spec.image.tag` on the ApplicationSet element.
 
 ### CDK Stack Update
 
@@ -106,7 +106,7 @@ cd cdk && npx cdk deploy
 | Action | Automated | Manual |
 |--------|-----------|--------|
 | User signup | Cognito + Lambda | -- |
-| Tenant provisioning | Lambda -> Tenant CR -> Operator -> ArgoCD | -- |
+| Tenant provisioning | Lambda -> ApplicationSet element -> Operator -> ArgoCD | -- |
 | Welcome email | SES | -- |
 | Scale to zero / up | KEDA | -- |
 | PVC backup | CronJob (daily) | -- |

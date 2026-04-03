@@ -3,7 +3,6 @@
   <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
   <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
-  <a href="https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator"><img src="https://img.shields.io/badge/GHCR-Operator_Image-blue?logo=github" alt="Operator Image"></a>
   <img src="https://img.shields.io/badge/License-MIT--0-green" alt="MIT-0">
   <img src="https://img.shields.io/badge/Status-Experimental-yellow" alt="Experimental">
 </p>
@@ -24,7 +23,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **3-layer origin protection** -- internet-facing ALB with CF-only SG + WAF + HTTPS
 - **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
 - **Self-service signup** -- Cognito + Lambda auto-provisions tenants
-- **Operator + ArgoCD managed** -- Operator creates Namespace + ArgoCD Application + ReferenceGrant; ArgoCD syncs Helm chart for remaining resources ([details](docs/architecture.md))
+- **ArgoCD ApplicationSet managed** -- ApplicationSet generates per-tenant ArgoCD Applications; each syncs Helm chart with tenant-specific values ([details](docs/architecture.md))
 - **Cost control** -- per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** -- 20% cheaper compute with t4g instances
 
@@ -50,7 +49,7 @@ EKS Cluster
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   Operator-managed:               ArgoCD-managed (Helm chart):
+|   ApplicationSet-managed (ArgoCD):
 |     Namespace                      PVC (10Gi gp3)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (keda ns)      Deployment + Service + ConfigMap
@@ -79,7 +78,6 @@ cd sample-openclaw-multi-tenant-platform
 - kubectl + Helm 3, Node.js 22+
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** -- public client for SPA)
-- Docker (only if modifying Operator source code)
 
 #### 1. Configure
 
@@ -97,20 +95,18 @@ npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 
 Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
 
-#### 3. Deploy Operator
+#### 3. Deploy Platform
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
-bash scripts/build-operator.sh
+bash scripts/deploy-platform.sh
 ```
 
-`build-operator.sh` applies the CRD, injects real values from `cdk/cdk.json` into the deployment manifest (replacing placeholders), and deploys the Operator.
+`deploy-platform.sh` injects values from `cdk/cdk.json` into the ApplicationSet and Gateway manifests, then applies them.
 
-The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS nodes pull it directly from GHCR -- no local Docker or Rust toolchain needed.
 
 > **ECR Pull-Through Cache (optional)**: For production, you can enable ECR pull-through cache to avoid GHCR rate limits. Set `ghcrCredentialArn` in `cdk.json` -- see `cdk.json.example` for details.
 
-> **Customizing the Operator**: If you modify `operator/src/`, the GitHub Actions workflow (`operator-build.yml`) automatically builds and pushes a new multi-arch image to GHCR on push to main.
 
 #### 4. Post-Deploy Setup
 
@@ -179,14 +175,14 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 
 | Doc | Description |
 |-----|-------------|
-| [Architecture](docs/architecture.md) | Operator + ArgoCD flow, tenant lifecycle |
+| [Architecture](docs/architecture.md) | ApplicationSet + ArgoCD flow, tenant lifecycle |
 | [Security](docs/security.md) | 10-layer security model |
 | [EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
 | [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, WAF |
 | [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
 | [GitOps](docs/components/gitops.md) | ArgoCD manages tenant resources via Helm chart |
-| [Operator](docs/components/operator.md) | Tenant lifecycle, CRD reference, reconcile flow |
+| [ApplicationSet](docs/components/applicationset.md) | Multi-tenant ArgoCD generator, tenant lifecycle |
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
 | [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
@@ -204,9 +200,8 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 |   +-- charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, etc.)
 |   +-- gateway.yaml            # Gateway API resource
 |   +-- tenants/values-template.yaml  # Example values
-+-- operator/                   # Tenant Operator (Rust/kube-rs)
++-- helm/applicationset.yaml    # ArgoCD ApplicationSet (multi-tenant generator)
 |   +-- src/                    # Creates Namespace + ArgoCD Application + ReferenceGrant
-|   +-- yaml/                   # CRD manifest, operator deployment
 +-- docs/                       # Architecture, security, components, operations
 +-- scripts/                    # 20+ operations scripts
 +-- .github/workflows/ci.yml   # CI pipeline
@@ -237,10 +232,8 @@ After pulling new changes (`git pull`), update the deployed components:
 # 1. Infrastructure + Lambda code + Auth UI (CDK deploys all three)
 cd cdk && npx cdk deploy OpenClawEksStack
 
-# 2. Tenant Operator (re-apply manifests to pick up new image tag)
-kubectl apply -f operator/yaml/crd.yaml
-kubectl apply -f operator/yaml/deployment.yaml
-kubectl rollout restart deployment/tenant-operator -n openclaw-system
+# 2. Re-apply platform manifests
+bash scripts/deploy-platform.sh
 
 # 3. Auth UI (if you use deploy-auth-ui.sh instead of CDK BucketDeployment)
 bash scripts/deploy-auth-ui.sh

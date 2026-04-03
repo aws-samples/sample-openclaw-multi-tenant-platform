@@ -1,9 +1,9 @@
-.PHONY: lint test validate check-cdk check-helm check-python check-rust check-sensitive check-cjk check-shell check-deny check-cdk-test test-operator test-lambda
+.PHONY: lint test validate check-cdk check-helm check-python check-sensitive check-cjk check-shell check-cdk-test test-lambda
 
 # --- Aggregates ---
-lint: check-cdk check-cdk-test check-helm check-python check-rust check-deny check-shell check-sensitive check-cjk
+lint: check-cdk check-cdk-test check-helm check-python check-shell check-sensitive check-cjk
 
-test: test-operator check-cdk-test test-lambda
+test: check-cdk-test test-lambda
 
 validate: lint test
 
@@ -21,12 +21,6 @@ check-python:
 	python3 -m py_compile cdk/lambda/post-confirmation/index.py
 	python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 
-check-rust:
-	cd operator && cargo clippy --all-targets --all-features -- -D warnings
-
-check-deny:
-	cd operator && cargo deny check 2>/dev/null || echo "Install cargo-deny: cargo install cargo-deny"
-
 check-shell:
 	-shellcheck scripts/*.sh
 
@@ -39,13 +33,10 @@ check-cjk:
 	@python3 -c "\
 	import glob; found=[]; \
 	[found.extend(f'{f}:{i}' for i,l in enumerate(open(f),1) if any('\u4e00'<=c<='\u9fff' for c in l)) \
-	 for ext in ['*.ts','*.py','*.rs','*.html'] \
+	 for ext in ['*.ts','*.py','*.html'] \
 	 for f in glob.glob(f'**/{ext}',recursive=True) \
-	 if not any(x in f for x in ['node_modules','cdk.out','.git','target/'])]; \
+	 if not any(x in f for x in ['node_modules','cdk.out','.git'])]; \
 	exit(1) if found and [print(f'CJK found in {len(found)} lines:')] and [print(f'  {f}') for f in found[:10]] else print('Clean')"
-
-test-operator:
-	cd operator && cargo test --lib
 
 test-lambda:
 	python3 -m pytest cdk/lambda/pre-signup/test_index.py -v

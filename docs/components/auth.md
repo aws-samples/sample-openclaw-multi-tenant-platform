@@ -2,7 +2,7 @@
 
 ## Overview
 
-Cognito User Pool for identity, custom auth UI (no Hosted UI). Gateway runs in token auth mode with exec SecretRef -> Secrets Manager. Signup auto-provisions tenant infrastructure via Lambda triggers and the Tenant Operator.
+Cognito User Pool for identity, custom auth UI (no Hosted UI). Gateway runs in token auth mode with exec SecretRef -> Secrets Manager. Signup auto-provisions tenant infrastructure via Lambda triggers and the ApplicationSet.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ User -> Custom Auth UI (auth-ui/index.html)
          |              -> Post-Confirmation Lambda:
          |                 a. Secrets Manager secret (gateway token)
          |                 b. Pod Identity Association
-         |                 c. Tenant CR -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
+         |                 c. ApplicationSet element -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
          |                 d. SES welcome email
          |
          +- Sign In -> Cognito InitiateAuth (USER_PASSWORD_AUTH)
@@ -48,7 +48,7 @@ Features: sign in/up tabs, forgot password, password strength indicator.
 
 1. Create Secrets Manager secret: `openclaw/{tenant}/gateway-token` (tagged for ABAC)
 2. Create EKS Pod Identity Association (namespace `openclaw-{tenant}`, SA `{tenant}`)
-3. Create Tenant CR -> Operator reconciles (NS, PVC, SA, ArgoCD App, KEDA HSO)
+3. Create ApplicationSet element -> ApplicationSet generates Applications (NS, PVC, SA, ArgoCD App, KEDA HSO)
 4. SNS notify admin + SES welcome email
 
 ## Gateway Auth Mode

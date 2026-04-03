@@ -79,10 +79,10 @@ EBS volumes ($0.08/GB/mo for gp3) always charged: $0.80/mo per tenant at 10Gi.
 
 By default, tenant Pods scale to zero after 15 minutes of no HTTP traffic. This is ideal for interactive workspaces but breaks background tasks like OpenClaw cron jobs, which run inside the gateway process and don't generate external HTTP requests.
 
-Set `alwaysOn: true` in the Tenant CR spec to keep the Pod running 24/7:
+Set `alwaysOn: true` in the ApplicationSet element spec to keep the Pod running 24/7:
 
 ```yaml
-apiVersion: openclaw.io/v1alpha1
+apiVersion: argoproj.io/v1alpha1
 kind: Tenant
 metadata:
   name: my-tenant
@@ -96,7 +96,7 @@ spec:
 | `alwaysOn: false` (default) | 0 | Stop when Pod scales down | Pay per use |
 | `alwaysOn: true` | 1 | Run 24/7 | ~$15-30/mo per tenant |
 
-The Operator passes `scaleToZero.enabled` and `scaleToZero.minReplicas` to the Helm chart via ArgoCD Application values, based on the Tenant CR `alwaysOn` field.
+The Operator passes `scaleToZero.enabled` and `scaleToZero.minReplicas` to the Helm chart via ArgoCD Application values, based on the ApplicationSet element `alwaysOn` field.
 
 ## Manual Override
 

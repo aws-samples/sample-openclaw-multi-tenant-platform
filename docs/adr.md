@@ -22,7 +22,7 @@ Key design decisions and their rationale.
 
 ## ADR-002: Operator + ArgoCD + Helm (3-layer model)
 
-**Decision**: Operator creates 3 resources (Namespace, ArgoCD Application, ReferenceGrant). ArgoCD syncs Helm chart for everything else.
+**Decision**: ApplicationSet manages 3 resources (Namespace, ArgoCD Application, ReferenceGrant). ArgoCD syncs Helm chart for everything else.
 
 **Context**: Need automated tenant provisioning with GitOps drift detection.
 
@@ -33,7 +33,7 @@ Key design decisions and their rationale.
 - Helm chart is the single source of truth for tenant workload configuration
 
 **Alternatives considered**:
-- Operator creates everything: 800+ lines, duplicates Helm logic, no drift detection
+- ApplicationSet manages everything: 800+ lines, duplicates Helm logic, no drift detection
 - Pure Helm (no Operator): no automated provisioning from Cognito signup flow
 - Kustomize: less flexible than Helm for per-tenant value injection
 

@@ -17,11 +17,11 @@ Defined in `.github/workflows/ci.yml`. Runs on push/PR to `main`.
 
 Tenant provisioning uses ArgoCD:
 
-1. Post-Confirmation Lambda creates a Tenant CR
-2. Operator reconciles: creates Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
+1. Post-Confirmation Lambda creates a ApplicationSet element
+2. ApplicationSet generates Applications: creates Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 3. ArgoCD syncs the Helm chart: creates Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
 
-For manual provisioning without Cognito, `create-tenant.sh` creates a Tenant CR directly (Operator + ArgoCD handle the rest).
+For manual provisioning without Cognito, `create-tenant.sh` creates a ApplicationSet element directly (Operator + ArgoCD handle the rest).
 
 ## Image Upgrade
 
@@ -31,7 +31,7 @@ To upgrade the OpenClaw image across all tenants, update the Helm chart values:
 2. Commit and push to the main branch
 3. ArgoCD auto-syncs the change to all tenant deployments
 
-For per-tenant image overrides, set `spec.image.tag` on the Tenant CR (see `examples/tenant.yaml`).
+For per-tenant image overrides, set `spec.image.tag` on the ApplicationSet element (see `examples/tenant.yaml`).
 
 > **Why not `kubectl set image`?** ArgoCD `selfHeal: true` reverts any live mutation within seconds. The Helm chart is the single source of truth for deployments.
 

@@ -22,8 +22,8 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain
 ```
 Cognito SignUp
   -> Pre-signup Lambda (email domain gate)
-  -> Post-confirmation Lambda (creates Tenant CR)
-  -> Operator reconciles via SSA:
+  -> Post-confirmation Lambda (creates ApplicationSet element)
+  -> ApplicationSet generates Applications via SSA:
        1. Namespace (openclaw-{tenant})
        2. ArgoCD Application (points to helm/charts/openclaw-platform, auto-sync prune+selfHeal)
        3. ReferenceGrant (in keda namespace, when scaleToZero enabled)
@@ -33,15 +33,15 @@ Cognito SignUp
   -> Pod ready, HTTPRoute active, scale-to-zero armed
 ```
 
-## Operator + ArgoCD Split
+## ApplicationSet + ArgoCD
 
-The Tenant Operator (Rust/kube-rs) creates 3 bootstrap resources via Server-Side Apply, then delegates all workload resources to ArgoCD + Helm.
+The ArgoCD ApplicationSet generates per-tenant Applications. Each Application syncs the Helm chart with tenant-specific values.
 
 ```
-Tenant CR
+ApplicationSet element
   |
   v
-Operator (SSA)                    ArgoCD (Helm sync)
+ApplicationSet (generator)        ArgoCD (Helm sync)
   |                                 |
   +-- Namespace                     +-- PVC
   +-- ArgoCD Application ---------> +-- ServiceAccount
@@ -58,7 +58,7 @@ Operator (SSA)                    ArgoCD (Helm sync)
 
 The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync enabled (prune + selfHeal), pointing to `helm/charts/openclaw-platform`.
 
-**Cleanup:** On Tenant CR deletion, the operator deletes the ArgoCD Application, the ReferenceGrant (if exists), then the namespace. Kubernetes cascades all resources inside the namespace.
+**Cleanup:** On ApplicationSet element deletion, the operator deletes the ArgoCD Application, the ReferenceGrant (if exists), then the namespace. Kubernetes cascades all resources inside the namespace.
 
 ## EKS Cluster
 
@@ -69,7 +69,7 @@ EKS Cluster (v1.35)
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
-|   Operator-managed:               ArgoCD-managed (Helm chart):
+|   All managed by ArgoCD (Helm chart):
 |     Namespace                      PVC (10Gi gp3)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (in keda ns)   Deployment + Service + ConfigMap
@@ -77,7 +77,7 @@ EKS Cluster (v1.35)
 |                                    ResourceQuota + PDB + KEDA HSO
 |
 +-- namespace: openclaw-system
-|   +-- Tenant Operator (Rust/kube-rs)
+|   +-- ApplicationSet (ArgoCD generator)
 |
 +-- namespace: argocd
 |   +-- ArgoCD (EKS add-on)
@@ -89,7 +89,7 @@ EKS Cluster (v1.35)
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
 | Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, WAF |
-| Operator | Rust / kube-rs (SSA) | Creates Namespace + ArgoCD Application + ReferenceGrant |
+| ApplicationSet | ArgoCD generator | Generates per-tenant Applications from list elements |
 | Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
 | Auth | Cognito + custom UI | Signup, login, email domain gate |
 | Scaling | KEDA HTTP Add-on | Scale-to-zero (15min idle) |
@@ -135,8 +135,8 @@ User Request:
 
 Tenant Provisioning:
   Cognito SignUp -> Pre-signup Lambda (email gate)
-  Cognito Confirm -> Post-confirmation Lambda -> Tenant CR
-  Operator (SSA) -> Namespace + ArgoCD Application + ReferenceGrant
+  Cognito Confirm -> Post-confirmation Lambda -> ApplicationSet element
+  ApplicationSet -> per-tenant ArgoCD Application -> Helm chart sync
   ArgoCD -> Helm sync -> PVC + SA + Deployment + Service + ConfigMap
             + HTTPRoute + TGC + NetworkPolicy + ResourceQuota + PDB + KEDA HSO
 ```
