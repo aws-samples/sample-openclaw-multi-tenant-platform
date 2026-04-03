@@ -124,7 +124,7 @@ cargo clippy -- -D warnings
 # Operator creates: Namespace, ArgoCD Application, ReferenceGrant
 # Everything else is managed by ArgoCD + Helm chart
 # Image is pre-built via GitHub Actions and published to GHCR
-# Customers pull via ECR pull-through cache -- no local build needed
+# EKS nodes pull directly from ghcr.io (ECR pull-through cache is opt-in)
 # Only run build-operator.sh if you modify operator/src/
 ```
 
