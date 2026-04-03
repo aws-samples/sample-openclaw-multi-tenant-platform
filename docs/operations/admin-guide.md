@@ -39,27 +39,28 @@
 
 ### Create Tenant (Manual -- bypasses Cognito)
 
-`create-tenant.sh` provisions a tenant using `helm install` directly (not via Tenant CR / ArgoCD):
+`create-tenant.sh` creates a Tenant CR directly. The Operator then reconciles it (creates namespace, ArgoCD Application, etc.):
 
 ```bash
-export OPENCLAW_TENANT_ROLE_ARN=$(aws cloudformation describe-stacks \
-  --stack-name OpenClawEksStack \
-  --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)
-
 ./scripts/create-tenant.sh alice \
+  --email alice@example.com \
   --display-name "Alice" \
-  --skills "weather,gog" \
   --budget 100
 ```
 
-What it does:
-1. Generates tenant values file from template
-2. Creates Secrets Manager secret + Pod Identity Association
-3. Creates K8s namespace + gateway-token Secret
-4. `helm install` with tenant values
-5. Waits for pod Ready
+This is useful for testing without going through the Cognito signup flow.
 
-> Note: Tenants created via `create-tenant.sh` are NOT managed by ArgoCD. For ArgoCD-managed tenants, use the Cognito signup flow (which creates a Tenant CR -> Operator -> ArgoCD).
+> Note: This only creates the Tenant CR. It does NOT create Secrets Manager secrets, Pod Identity Associations, or Cognito user attributes. For a full recovery (when PostConfirmation Lambda fails), use `provision-tenant.sh` instead.
+
+### Recover Failed Signup
+
+If a user signed up via Cognito but their workspace didn't appear (PostConfirmation Lambda failed), use `provision-tenant.sh`:
+
+```bash
+./scripts/provision-tenant.sh <tenant-id> <email> [cognito-username]
+```
+
+This mirrors the full Lambda provisioning flow: Pod Identity, Secrets Manager, Cognito attributes, Tenant CR, and K8s gateway-token Secret. See the script header for prerequisites.
 
 ### Delete Tenant
 

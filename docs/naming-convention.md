@@ -40,7 +40,8 @@ The tenant name (e.g., `alice`) is the single input; all other names are derived
 | PostConfirmation Lambda | SM Secret, Pod Identity Association, Tenant CR, K8s gateway-token Secret |
 | Operator (5 ensure_* functions) | Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO |
 | ArgoCD (syncs Helm chart) | Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration |
-| create-tenant.sh (manual) | SM Secret, Pod Identity Association, K8s gateway-token Secret, all Helm resources (via `helm install`, bypasses ArgoCD) |
+| create-tenant.sh (manual) | Tenant CR only (Operator + ArgoCD handle the rest) |
+| provision-tenant.sh (recovery) | Pod Identity, SM Secret, Cognito attributes, Tenant CR, K8s gateway-token Secret |
 
 ## Validation
 

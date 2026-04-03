@@ -21,7 +21,7 @@ Tenant provisioning uses ArgoCD:
 2. Operator reconciles: creates Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 3. ArgoCD syncs the Helm chart: creates Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
 
-For manual provisioning without Cognito, `create-tenant.sh` uses `helm install` directly (bypasses ArgoCD).
+For manual provisioning without Cognito, `create-tenant.sh` creates a Tenant CR directly (Operator + ArgoCD handle the rest).
 
 ## Image Upgrade
 
