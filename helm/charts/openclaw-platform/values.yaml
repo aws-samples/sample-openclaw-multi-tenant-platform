@@ -194,6 +194,17 @@ env: {}
 
 envFrom: []
 
+nodeOptions:
+  # Cap Node.js heap to prevent silent OOM kills (exit 137).
+  # Set ~512Mi below the memory limit. Set to 0 to disable.
+  maxOldSpaceSize: 1536
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
 fetchSecret: |
   #!/usr/bin/env node
   import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";

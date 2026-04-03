@@ -179,6 +179,10 @@ spec:
               fieldPath: metadata.namespace
         - name: NODE_PATH
           value: /home/node/.openclaw/workspace/node_modules
+        {{- if .Values.nodeOptions.maxOldSpaceSize }}
+        - name: NODE_OPTIONS
+          value: "--max-old-space-size={{ .Values.nodeOptions.maxOldSpaceSize }}"
+        {{- end }}
         {{- range $key, $value := .Values.env }}
         - name: {{ $key }}
           value: {{ $value | quote }}
@@ -211,3 +215,15 @@ spec:
           claimName: {{ include "openclaw-helm.fullname" . }}
       - name: tmp
         emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
