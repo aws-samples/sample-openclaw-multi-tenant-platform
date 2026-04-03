@@ -80,6 +80,7 @@ cd operator && cargo clippy -- -D warnings && cargo test --lib
 # Lambda
 python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
 python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
+python3 -m pytest cdk/lambda/cost-enforcer/test_index.py -v
 
 # Helm
 helm lint helm/charts/openclaw-platform/

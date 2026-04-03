@@ -50,3 +50,4 @@ test-operator:
 test-lambda:
 	python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
 	python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
+	python3 -m pytest cdk/lambda/cost-enforcer/test_index.py -v

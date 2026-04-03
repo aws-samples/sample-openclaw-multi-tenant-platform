@@ -381,4 +381,68 @@ mod tests {
         unsafe { std::env::remove_var("TEST_EODR_UNSET") };
         assert_eq!(env_or_default("TEST_EODR_UNSET", "fb"), "fb");
     }
+
+    #[test]
+    fn image_override_inserts_into_values() {
+        // Simulates the image pass-through logic from ensure_argocd_app
+        use crate::types::TenantImage;
+        let img = TenantImage {
+            repository: Some("custom-repo".into()),
+            tag: Some("v1.0".into()),
+            pull_policy: "Always".into(),
+        };
+        let mut values = json!({"tenant": {"name": "test"}});
+        if let Some(obj) = values.as_object_mut() {
+            let image = obj.entry("image").or_insert_with(|| json!({}));
+            if let Some(ref repo) = img.repository {
+                image["repository"] = json!(repo);
+            }
+            if let Some(ref tag) = img.tag {
+                image["tag"] = json!(tag);
+            }
+            image["pullPolicy"] = json!(&img.pull_policy);
+        }
+        assert_eq!(values["image"]["repository"], "custom-repo");
+        assert_eq!(values["image"]["tag"], "v1.0");
+        assert_eq!(values["image"]["pullPolicy"], "Always");
+    }
+
+    #[test]
+    fn image_override_skipped_when_none() {
+        let image: Option<crate::types::TenantImage> = None;
+        let mut values = json!({"tenant": {"name": "test"}});
+        if let Some(ref img) = image
+            && let Some(obj) = values.as_object_mut()
+        {
+            let entry = obj.entry("image").or_insert_with(|| json!({}));
+            if let Some(ref tag) = img.tag {
+                entry["tag"] = json!(tag);
+            }
+        }
+        assert!(values.get("image").is_none());
+    }
+
+    #[test]
+    fn image_override_partial_only_tag() {
+        use crate::types::TenantImage;
+        let img = TenantImage {
+            repository: None,
+            tag: Some("custom-tag".into()),
+            pull_policy: "IfNotPresent".into(),
+        };
+        let mut values = json!({"tenant": {"name": "test"}});
+        if let Some(obj) = values.as_object_mut() {
+            let image = obj.entry("image").or_insert_with(|| json!({}));
+            if let Some(ref repo) = img.repository {
+                image["repository"] = json!(repo);
+            }
+            if let Some(ref tag) = img.tag {
+                image["tag"] = json!(tag);
+            }
+            image["pullPolicy"] = json!(&img.pull_policy);
+        }
+        assert!(values["image"].get("repository").is_none());
+        assert_eq!(values["image"]["tag"], "custom-tag");
+        assert_eq!(values["image"]["pullPolicy"], "IfNotPresent");
+    }
 }
