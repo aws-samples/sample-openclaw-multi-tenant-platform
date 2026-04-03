@@ -153,4 +153,4 @@ Key design decisions documented in:
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT-0 -- see [LICENSE](LICENSE).
