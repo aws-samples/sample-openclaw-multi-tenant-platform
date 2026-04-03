@@ -57,12 +57,17 @@ cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
 operator/src/types.rs  <- Tenant CRD definition (TenantSpec, TenantStatus)
 operator/src/controller.rs  <- Reconciles Tenant CR -> creates Namespace + ArgoCD Application + ReferenceGrant via SSA
 operator/src/resources.rs  <- ensure_namespace, ensure_argocd_app, ensure_reference_grant
-operator/yaml/deployment.yaml  <- Operator deployment + RBAC
+operator/yaml/deployment.yaml  <- Operator deployment + RBAC (contains placeholders -- use build-operator.sh to inject real values)
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
 setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
 scripts/lib/preflight.sh  <- Pre-flight checks (tools, AWS, cdk.json)
 scripts/lib/generate-config.sh  <- Interactive cdk.json generator
+scripts/build-operator.sh  <- Builds Operator image + injects env vars via sed + kubectl apply
 scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
+scripts/create-tenant.sh  <- Creates Tenant CR (Operator handles the rest)
+scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation Lambda fails
+examples/tenant.yaml  <- Example Tenant CR with all spec fields documented
+Makefile  <- Aggregate lint/test/validate targets for all components
 helm/tenants/values-template.yaml  <- Reference tenant Helm values
 auth-ui/index.html  <- SPA, config injected by deploy-auth-ui.sh via sed
 auth-ui/admin.html  <- Admin dashboard, same sed injection pattern

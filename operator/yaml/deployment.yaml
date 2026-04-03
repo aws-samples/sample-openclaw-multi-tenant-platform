@@ -1,3 +1,7 @@
+# WARNING: This file contains placeholder values (REGION, COGNITO_POOL_ARN, etc.)
+# Do NOT apply directly: kubectl apply -f deployment.yaml
+# Use build-operator.sh which runs sed to inject real values from cdk.json:
+#   bash scripts/build-operator.sh
 apiVersion: v1
 kind: Namespace
 metadata:
