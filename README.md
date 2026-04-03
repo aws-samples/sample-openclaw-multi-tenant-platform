@@ -100,26 +100,16 @@ Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, S
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
-kubectl apply -f operator/yaml/crd.yaml
-
-# Replace placeholders with your account/region values
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-REGION=<region>
-DOMAIN=<your-domain>  # e.g. openclaw.example.com
-ECR="${ACCOUNT}.dkr.ecr.${REGION}.amazonaws.com"
-
-sed \
-  -e "s|ghcr.io/snese/openclaw-tenant-operator|${ECR}/ghcr/snese/openclaw-tenant-operator|g" \
-  -e "s|\"REGION\"|\"${REGION}\"|g" \
-  -e "s|value: \"DOMAIN\"|value: \"${DOMAIN}\"|g" \
-  operator/yaml/deployment.yaml | kubectl apply -f -
+bash scripts/build-operator.sh
 ```
 
-> **Note**: `setup.sh` does this substitution automatically. The manual steps above are only needed if you're deploying step-by-step.
+`build-operator.sh` applies the CRD, injects real values from `cdk/cdk.json` into the deployment manifest (replacing placeholders), and deploys the Operator.
 
-The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS pulls it automatically via ECR pull-through cache -- no local Docker or Rust toolchain needed.
+The Operator image is pre-built and published to GHCR ([`ghcr.io/snese/openclaw-tenant-operator`](https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator)). EKS nodes pull it directly from GHCR -- no local Docker or Rust toolchain needed.
 
-> **Customizing the Operator**: If you modify `operator/src/`, use `scripts/build-operator.sh` to build and push your own image to ECR.
+> **ECR Pull-Through Cache (optional)**: For production, you can enable ECR pull-through cache to avoid GHCR rate limits. Set `ghcrCredentialArn` in `cdk.json` -- see `cdk.json.example` for details.
+
+> **Customizing the Operator**: If you modify `operator/src/`, the GitHub Actions workflow (`operator-build.yml`) automatically builds and pushes a new multi-arch image to GHCR on push to main.
 
 #### 4. Post-Deploy Setup
 
@@ -132,7 +122,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 #### 5. Create First Tenant
 
 ```bash
-./scripts/create-tenant.sh alice --display-name "Alice" --emoji "robot"
+./scripts/create-tenant.sh alice --email alice@example.com --display-name "Alice"
 ```
 
 #### 6. Finalize
