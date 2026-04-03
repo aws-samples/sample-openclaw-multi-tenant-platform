@@ -323,10 +323,10 @@ mod tests {
 
     #[test]
     fn env_or_default_returns_real_value() {
-        unsafe { std::env::set_var("TEST_EODR_REAL", "claw.snese.net") };
+        unsafe { std::env::set_var("TEST_EODR_REAL", "claw.example.com") };
         assert_eq!(
             env_or_default("TEST_EODR_REAL", "fallback"),
-            "claw.snese.net"
+            "claw.example.com"
         );
         unsafe { std::env::remove_var("TEST_EODR_REAL") };
     }
