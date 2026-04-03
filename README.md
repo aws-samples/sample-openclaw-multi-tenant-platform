@@ -4,7 +4,8 @@
   <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
   <a href="https://github.com/snese/sample-openclaw-multi-tenant-platform/pkgs/container/openclaw-tenant-operator"><img src="https://img.shields.io/badge/GHCR-Operator_Image-blue?logo=github" alt="Operator Image"></a>
-  <img src="https://img.shields.io/badge/License-MIT-green" alt="MIT">
+  <img src="https://img.shields.io/badge/License-MIT--0-green" alt="MIT-0">
+  <img src="https://img.shields.io/badge/Status-Experimental-yellow" alt="Experimental">
 </p>
 
 # OpenClaw Platform
@@ -13,7 +14,7 @@
 
 Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 
-> **Important:** This is a sample project for demonstration and learning. Not intended for production without thorough review and hardening. See [Security](docs/security.md) for known gaps.
+> **Experimental** — This project is provided for experimentation and learning purposes only. It is **not intended for production use**. APIs, architecture, and configuration may change without notice. See [Security](docs/security.md) for details.
 
 ## Features
 
@@ -252,7 +253,7 @@ Contributions welcome. Please open an issue first to discuss changes.
 
 ## License
 
-[MIT](LICENSE)
+[MIT-0](LICENSE)
 
 ---
 
