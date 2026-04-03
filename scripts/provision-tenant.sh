@@ -13,9 +13,9 @@
 #   1. Create Pod Identity Association
 #   2. Create gateway token in Secrets Manager
 #   3. Update Cognito user attributes
-#   4. Create Tenant CR (Operator handles namespace + ArgoCD)
+#   4. Add tenant to ApplicationSet (ArgoCD creates namespace + syncs Helm chart)
 #   5. Create K8s Secret with gateway token
-#   6. Wait for tenant to reach Ready state
+#   6. Wait for tenant to reach Healthy state
 
 set -euo pipefail
 
@@ -82,18 +82,23 @@ aws cognito-idp admin-update-user-attributes \
   --user-attributes "Name=custom:gateway_token,Value=$TOKEN" "Name=custom:tenant_name,Value=$TENANT" \
   --region "$REGION"
 
-# Step 4: Create Tenant CR
-echo "[4/6] Creating Tenant CR..."
-kubectl apply -f - <<EOF
-apiVersion: openclaw.io/v1alpha1
-kind: Tenant
-metadata:
-  name: $TENANT
-  namespace: openclaw-system
-spec:
-  email: "$EMAIL"
-  displayName: "OpenClaw"
-EOF
+# Step 4: Add tenant to ApplicationSet
+echo "[4/6] Adding tenant to ApplicationSet..."
+APPSET=$(kubectl get applicationset openclaw-tenants -n argocd -o json)
+UPDATED=$(echo "$APPSET" | TENANT="$TENANT" EMAIL="$EMAIL" python3 -c "
+import json, sys, os
+try:
+    d = json.load(sys.stdin)
+    elements = d['spec']['generators'][0]['list']['elements']
+    t, e = os.environ['TENANT'], os.environ['EMAIL']
+    if not any(el.get('name') == t for el in elements):
+        elements.append({'name': t, 'email': e})
+    json.dump(d, sys.stdout)
+except (KeyError, IndexError, TypeError) as err:
+    print(f'ERROR: ApplicationSet has invalid structure: {err}', file=sys.stderr)
+    sys.exit(1)
+")
+echo "$UPDATED" | kubectl apply -f - >/dev/null
 
 # Step 5: Wait for namespace, then create K8s Secret
 echo "[5/6] Waiting for namespace and creating gateway secret..."
@@ -122,26 +127,26 @@ done
 
 if [[ "$SECRET_CREATED" != "true" ]]; then
   echo "ERROR: Namespace $NS was not created within 60s."
-  echo "Check: kubectl get tenant $TENANT -n openclaw-system -o yaml"
+  echo "Check: kubectl get applicationset openclaw-tenants -n argocd -o yaml"
   exit 1
 fi
 
-# Step 6: Wait for Ready
-echo "[6/6] Waiting for tenant to reach Ready..."
+# Step 6: Wait for Healthy
+echo "[6/6] Waiting for tenant to reach Healthy..."
 for i in $(seq 1 30); do
-  PHASE=$(kubectl get tenant "$TENANT" -n openclaw-system -o jsonpath='{.status.phase}' 2>/dev/null || echo "unknown")
-  if [[ "$PHASE" == "Ready" ]]; then
+  HEALTH=$(kubectl get application "tenant-$TENANT" -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo "unknown")
+  if [[ "$HEALTH" == "Healthy" ]]; then
     echo ""
-    echo "=== Tenant $TENANT is Ready ==="
+    echo "=== Tenant $TENANT is Healthy ==="
     echo "  Workspace URL: https://$(kubectl get gateway openclaw-gateway -n openclaw-system -o jsonpath='{.spec.listeners[0].hostname}' 2>/dev/null)/t/$TENANT/"
     exit 0
   fi
-  echo "  Phase: $PHASE (attempt $i/30)"
+  echo "  Health: $HEALTH (attempt $i/30)"
   sleep 5
 done
 
 echo ""
-echo "WARNING: Tenant did not reach Ready within 150s."
-echo "Check: kubectl get tenant $TENANT -n openclaw-system -o yaml"
+echo "WARNING: Tenant did not reach Healthy within 150s."
+echo "Check: kubectl get application tenant-$TENANT -n argocd -o yaml"
 echo "       kubectl get pods -n $NS"
 exit 1

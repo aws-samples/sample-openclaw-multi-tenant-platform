@@ -1,11 +1,11 @@
-# Tenant Operator
+# ApplicationSet
 
 ## Role in the Architecture
 
 The platform uses a 3-layer model for tenant management:
 
 ```
-Layer 1: Operator (Rust/kube-rs)     → Bootstrap: Namespace + ArgoCD App + ReferenceGrant
+Layer 1: ApplicationSet (ArgoCD)  → Generates per-tenant Applications from list elements
 Layer 2: ArgoCD (EKS add-on)         → GitOps: syncs Helm chart, drift detection, self-heal
 Layer 3: Helm chart                   → Workload: Deployment, Service, ConfigMap, NetworkPolicy, etc.
 ```
@@ -18,19 +18,19 @@ The PostConfirmation Lambda could create all resources directly, but:
 
 - **No reconcile loop**: Lambda is fire-and-forget. If a resource is accidentally deleted, nothing recreates it
 - **No drift detection**: without ArgoCD, manual changes persist
-- **No declarative state**: `kubectl get tenants` gives a single view of all tenants with their phase
+- **No declarative state**: `kubectl get applications -n argocd -l openclaw.io/tenant` gives a single view of all tenants with their phase
 
 ### Why Not Operator-Creates-Everything?
 
 The Operator could create Deployments, Services, etc. directly, but:
 
-- **Duplicates Helm**: every template would need equivalent Rust code
+- **Duplicates Helm**: every resource would need separate management
 - **No GitOps**: changes require Operator redeployment, not just a git push
 - **800+ lines**: vs ~400 lines with the ArgoCD delegation model
 
 ## Server-Side Apply (SSA)
 
-The Operator uses [Server-Side Apply](https://kubernetes.io/docs/reference/using-api/server-side-apply/) with field manager `tenant-operator` and `force: true`.
+The Operator uses [Server-Side Apply](https://kubernetes.io/docs/reference/using-api/server-side-apply/) with field manager `applicationset` and `force: true`.
 
 SSA advantages over `kubectl apply`:
 - **Create-or-update** in a single API call (no "get then create/patch" race)
@@ -40,10 +40,10 @@ SSA advantages over `kubectl apply`:
 ## Reconcile Loop
 
 ```
-Watch: Tenant CRs in openclaw-system namespace
+Watch: ApplicationSet elements in openclaw-system namespace
   │
   ▼
-For each Tenant CR change:
+For each ApplicationSet element change:
   │
   ├── apply_inner():
   │   ├── ensure_namespace (SSA)
@@ -61,7 +61,7 @@ For each Tenant CR change:
   │
   └── On error:
       ├── phase = Error + ReconcileError condition with message
-      └── requeue with backoff (kube-rs default)
+      └── ArgoCD auto-retry
 ```
 
 ## Helm Values Generation

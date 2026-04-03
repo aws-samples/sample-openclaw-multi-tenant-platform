@@ -1,0 +1,21 @@
+{{- if .Values.scaleToZero.enabled }}
+# ReferenceGrant allows this tenant's HTTPRoute to reference the KEDA
+# interceptor Service in the keda namespace (cross-namespace backendRef).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-{{ include "openclaw-helm.fullname" . }}
+  namespace: keda
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+    openclaw.io/tenant: {{ include "openclaw-helm.fullname" . }}
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: {{ .Release.Namespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: keda-add-ons-http-interceptor-proxy
+{{- end }}

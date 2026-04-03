@@ -2,12 +2,12 @@
 
 ## Architecture
 
-ArgoCD manages tenant resources. The Operator creates ArgoCD Application CRs, and ArgoCD syncs the Helm chart to create all tenant K8s resources.
+ArgoCD manages tenant resources. The ApplicationSet manages ArgoCD Application CRs, and ArgoCD syncs the Helm chart to create all tenant K8s resources.
 
 ```
 Tenant Provisioning:
-  Cognito SignUp -> PostConfirmation Lambda -> Tenant CR
-    -> Operator reconciles:
+  Cognito SignUp -> PostConfirmation Lambda -> ApplicationSet element
+    -> ApplicationSet generates Applications:
          ensure_namespace    -> Namespace
          ensure_argocd_app   -> ArgoCD Application (in argocd namespace)
     -> ArgoCD syncs Helm chart:
@@ -37,7 +37,7 @@ Tenant Provisioning:
 
 ## ArgoCD Application
 
-The Operator creates an ArgoCD Application per tenant via SSA:
+The ApplicationSet manages an ArgoCD Application per tenant via SSA:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -47,7 +47,7 @@ metadata:
   namespace: argocd
   labels:
     openclaw.io/tenant: {name}
-    app.kubernetes.io/managed-by: tenant-operator
+    app.kubernetes.io/managed-by: applicationset
 spec:
   project: default
   source:
@@ -86,6 +86,5 @@ ArgoCD runs as a fully managed [EKS Capability](https://docs.aws.amazon.com/eks/
 
 ## References
 
-- [Operator source](../../operator/src/controller.rs) -- 5 ensure_* functions
 - [Helm chart](../../helm/charts/openclaw-platform/) -- tenant resource templates
 - [Naming Convention](../naming-convention.md)

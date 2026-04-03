@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# Create a tenant by applying a Tenant CR. The Operator handles the rest.
-# Usage: ./scripts/create-tenant.sh <name> [--email <email>] [--display-name <name>] [--budget <usd>] [--always-on]
+# Create a tenant by adding it to the ApplicationSet.
+# ArgoCD automatically creates the Application → Helm syncs all resources.
+# Usage: ./scripts/create-tenant.sh <name> [--email <email>]
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <tenant-name> [--email <email>] [--display-name <name>] [--budget <usd>] [--always-on]"
+  echo "Usage: $0 <tenant-name> [--email <email>]"
   exit 1
 }
 
-TENANT="" EMAIL="" DISPLAY_NAME="OpenClaw" BUDGET="100" ALWAYS_ON="false"
+TENANT="" EMAIL=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --email) EMAIL="$2"; shift 2 ;;
-    --display-name) DISPLAY_NAME="$2"; shift 2 ;;
-    --budget) BUDGET="$2"; shift 2 ;;
-    --always-on) ALWAYS_ON="true"; shift ;;
     --help|-h) usage ;;
     -*) echo "Unknown option: $1"; usage ;;
     *) TENANT="$1"; shift ;;
@@ -26,26 +24,37 @@ done
 [[ -z "$EMAIL" ]] && EMAIL="${TENANT}@example.com"
 
 echo "Creating tenant: ${TENANT}"
-echo "  Email:      ${EMAIL}"
-echo "  Budget:     \$${BUDGET}/mo"
-echo "  AlwaysOn:   ${ALWAYS_ON}"
+echo "  Email: ${EMAIL}"
 
-kubectl apply -f - <<EOF
-apiVersion: openclaw.io/v1alpha1
-kind: Tenant
-metadata:
-  name: ${TENANT}
-  namespace: openclaw-system
-spec:
-  email: "${EMAIL}"
-  displayName: "${DISPLAY_NAME}"
-  skills: [weather, gog]
-  budget:
-    monthlyUSD: ${BUDGET}
-  enabled: true
-  alwaysOn: ${ALWAYS_ON}
-EOF
+# Read current ApplicationSet, append element, write back
+APPSET=$(kubectl get applicationset openclaw-tenants -n argocd -o json)
+
+# Check if tenant already exists
+if echo "$APPSET" | TENANT="$TENANT" python3 -c "
+import json, sys, os
+d = json.load(sys.stdin)
+elements = d.get('spec',{}).get('generators',[{}])[0].get('list',{}).get('elements',[])
+sys.exit(0 if any(e.get('name')==os.environ['TENANT'] for e in elements) else 1)
+" 2>/dev/null; then
+  echo "Tenant ${TENANT} already exists in ApplicationSet"
+  exit 0
+fi
+
+# Append new element
+UPDATED=$(echo "$APPSET" | TENANT="$TENANT" EMAIL="$EMAIL" python3 -c "
+import json, sys, os
+d = json.load(sys.stdin)
+try:
+    elements = d['spec']['generators'][0]['list']['elements']
+    elements.append({'name': os.environ['TENANT'], 'email': os.environ['EMAIL']})
+    json.dump(d, sys.stdout)
+except (KeyError, IndexError, TypeError) as e:
+    print(f'Error: ApplicationSet structure is invalid: {e}', file=sys.stderr)
+    sys.exit(1)
+")
+
+echo "$UPDATED" | kubectl apply -f - >/dev/null
 
 echo ""
-echo "Tenant CR created. Operator will reconcile:"
-echo "  kubectl get tenant ${TENANT} -w"
+echo "Tenant added to ApplicationSet. ArgoCD will create the workspace:"
+echo "  kubectl get application tenant-${TENANT} -n argocd -w"

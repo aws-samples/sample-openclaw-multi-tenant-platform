@@ -16,9 +16,9 @@ User -> CloudFront -> Internet-facing ALB (CF-only SG + WAF) -> EKS Pod (per-ten
 
 Tenant lifecycle:
 ```
-Cognito SignUp -> Lambda (post-confirmation) -> Tenant CR
-  -> Operator reconciles via SSA:
-       Namespace, ArgoCD Application
+Cognito SignUp -> Lambda (post-confirmation) -> ApplicationSet element
+  -> ApplicationSet generates ArgoCD Applications:
+       Per-tenant Application (auto-sync Helm chart)
   -> ArgoCD auto-syncs helm/charts/openclaw-platform:
        Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota,
        PDB, HTTPRoute, TargetGroupConfiguration
@@ -30,7 +30,6 @@ Key components:
 - `helm/` -- Helm chart (source of truth for tenant K8s resources, synced by ArgoCD)
 - `auth-ui/` -- Auth UI pages (vanilla JS, no framework) -- index.html, admin.html, terms, privacy
 - `cdk/lambda/` -- Cognito trigger functions + cost enforcement (Python)
-- `operator/` -- Tenant Operator (Rust/kube-rs) -- creates Namespace + ArgoCD Application + ReferenceGrant via SSA
 - `scripts/` -- Operational scripts (Bash)
 - `docs/` -- Architecture and operations documentation
 
@@ -43,8 +42,7 @@ These MUST be true at all times. Violating any = broken deployment.
 3. **Zero CJK characters** -- All code, comments, docs, issue titles, PR titles, and issue/PR bodies in English
 4. **Helm chart is source of truth** -- `helm/charts/openclaw-platform/` is the source of truth for tenant K8s resources, synced by ArgoCD with auto-prune and selfHeal
 5. **Cognito triggers survive `update-user-pool`** -- Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
-6. **Operator + ArgoCD split** -- Operator creates 3 resources via SSA (Namespace, ArgoCD Application, ReferenceGrant). ArgoCD + Helm creates everything else (PVC, SA, Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TGC, KEDA HSO)
-7. **Operator stays distroless** -- `operator/Dockerfile` uses `gcr.io/distroless/cc-debian12`. No external binary dependencies (no helm, no aws CLI). All K8s operations via kube-rs API.
+6. **ApplicationSet + ArgoCD** -- ApplicationSet generates per-tenant ArgoCD Applications. ArgoCD + Helm creates all tenant resources (Namespace, PVC, SA, Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TGC, KEDA HSO, ReferenceGrant)
 
 ## File Relationships
 
@@ -52,21 +50,19 @@ These MUST be true at all times. Violating any = broken deployment.
 cdk/cdk.json.example  <- Template for cdk.json (real values gitignored)
 cdk/lib/eks-cluster-stack.ts  <- Main CDK stack, references Lambda code
 cdk/lambda/pre-signup/index.py  <- Email domain gate
-cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (creates Tenant CR)
+cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (adds element to ApplicationSet)
 cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
-operator/src/types.rs  <- Tenant CRD definition (TenantSpec, TenantStatus)
-operator/src/controller.rs  <- Reconciles Tenant CR -> creates Namespace + ArgoCD Application + ReferenceGrant via SSA
-operator/src/resources.rs  <- ensure_namespace, ensure_argocd_app, ensure_reference_grant
-operator/yaml/deployment.yaml  <- Operator deployment + RBAC (contains placeholders -- use build-operator.sh to inject real values)
+helm/applicationset.yaml  <- ArgoCD ApplicationSet (multi-tenant generator)
+scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (replaces build-operator.sh)
+scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
 setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
 scripts/lib/preflight.sh  <- Pre-flight checks (tools, AWS, cdk.json)
 scripts/lib/generate-config.sh  <- Interactive cdk.json generator
-scripts/build-operator.sh  <- Builds Operator image + injects env vars via sed + kubectl apply
+scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (injects cdk.json values)
 scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
-scripts/create-tenant.sh  <- Creates Tenant CR (Operator handles the rest)
+scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
 scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation Lambda fails
-examples/tenant.yaml  <- Example Tenant CR with all spec fields documented
 Makefile  <- Aggregate lint/test/validate targets for all components
 helm/tenants/values-template.yaml  <- Reference tenant Helm values
 auth-ui/index.html  <- SPA, config injected by deploy-auth-ui.sh via sed
@@ -114,18 +110,6 @@ cd cdk && npx cdk deploy OpenClawEksStack --require-approval broadening
 # Cognito triggers managed by CDK CognitoTriggers custom resource
 ```
 
-### Operator
-```bash
-cd operator
-cargo build --release
-cargo clippy -- -D warnings
-# Dockerfile is distroless -- do NOT add external binary dependencies
-# All K8s operations must use kube-rs API (no Command::new)
-# Operator creates: Namespace, ArgoCD Application, ReferenceGrant
-# Everything else is managed by ArgoCD + Helm chart
-# Image is pre-built via GitHub Actions and published to GHCR
-# EKS nodes pull directly from ghcr.io (ECR pull-through cache is opt-in)
-# Only run build-operator.sh if you modify operator/src/
 ```
 
 ## Testing Checklist
@@ -135,7 +119,6 @@ Before declaring any change complete:
 - [ ] `cd cdk && npx tsc --noEmit` -- CDK compiles
 - [ ] `cd cdk && npx cdk synth --no-staging` -- cdk-nag runs (review findings, suppress with rationale if needed)
 - [ ] `cd cdk && npx cdk diff` -- Shows expected changes (or no differences)
-- [ ] `cd operator && cargo clippy -- -D warnings && cargo test --lib` -- Operator compiles + tests pass
 - [ ] `python3 -m py_compile cdk/lambda/pre-signup/index.py` -- Lambda syntax OK
 - [ ] `python3 -m py_compile cdk/lambda/post-confirmation/index.py` -- Lambda syntax OK
 - [ ] `python3 -m py_compile cdk/lambda/cost-enforcer/index.py` -- Lambda syntax OK
@@ -152,7 +135,6 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 - **`permissions: contents: read`** at workflow level -- least privilege by default
 - **`npm ci --ignore-scripts`** in security job -- blocks postinstall hook attacks
 - **cdk-nag integrated** -- `AwsSolutionsChecks` runs on every `cdk synth` via `cdk/bin/cdk.ts`
-- **PR jobs are fast (~5 min)**, Docker smoke test only on merge to main. Multi-arch image build + push via `operator-build.yml`
 
 ## Common Pitfalls
 
@@ -162,7 +144,6 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 | `deploy-auth-ui.sh` sed fails silently | Spaces in minified JS patterns | Match exact minified format: `clientId:''` not `clientId: ''` |
 | CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
 | Namespace stuck in Terminating | TargetGroupBinding finalizer | Recreate ns -> delete TGB -> delete ns |
-| Operator binary not found | Dockerfile changed from distroless | Keep `gcr.io/distroless/cc-debian12`, use kube-rs API only |
 | ArgoCD sync conflict | Manual kubectl edit conflicts with ArgoCD selfHeal | Never manually edit ArgoCD-managed resources; change Helm chart instead |
 
 ## Conventions

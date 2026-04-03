@@ -95,7 +95,7 @@ auth-ui (static S3 + CloudFront)
   │
   ├─ Sign Up: Cognito SignUp API → email verification → ConfirmSignUp
   │   └─ PostConfirmation Lambda: provisions tenant (SM secret, Pod Identity,
-  │      Tenant CR, K8s Secret)
+  │      ApplicationSet element, K8s Secret)
   │
   ├─ Sign In: Cognito InitiateAuth → ID token (contains custom:gateway_token)
   │
@@ -267,7 +267,7 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
    |                                                                   fs: workspaceOnly
    |
    +-> Cognito --> Pre-signup Lambda --> domain check + rate limit
-                   Post-confirm Lambda --> SM + Pod Identity + Tenant CR
+                   Post-confirm Lambda --> SM + Pod Identity + ApplicationSet element
 ```
 
 ---

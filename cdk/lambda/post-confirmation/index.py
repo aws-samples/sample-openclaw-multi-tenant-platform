@@ -120,44 +120,64 @@ def _k8s_get(endpoint, ssl_ctx, bearer, url):
 
 
 def _resolve_tenant_name(base_name, email):
-    """Resolve a unique tenant name by checking existing Tenant CRs.
+    """Resolve a unique tenant name by checking ApplicationSet elements.
 
     If base_name is not taken (or is owned by the same email), return it.
     Otherwise, append -2, -3, ... up to -9 to find a free name.
     Raises if no free name found within 9 attempts.
     """
     endpoint, ssl_ctx, bearer = _get_eks_context()
+    appset = _k8s_get(endpoint, ssl_ctx, bearer,
+        f"{endpoint}/apis/argoproj.io/v1alpha1/namespaces/argocd/applicationsets/openclaw-tenants")
+    try:
+        elements = appset.get('spec', {}).get('generators', [{}])[0].get('list', {}).get('elements', []) if appset else []
+        taken = {e['name']: e.get('email', '') for e in elements if 'name' in e}
+    except (KeyError, IndexError, TypeError):
+        taken = {}
 
     for suffix in ['', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']:
-        candidate = f'{base_name}{suffix}'[:63]  # K8s name limit
-        url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{candidate}"
-        existing = _k8s_get(endpoint, ssl_ctx, bearer, url)
-        if existing is None:
-            return candidate  # Name is free
-        existing_email = existing.get('spec', {}).get('email', '')
-        if existing_email == email:
-            return candidate  # Same user re-confirming, reuse existing tenant
+        candidate = f'{base_name}{suffix}'[:63]
+        if candidate not in taken:
+            return candidate
+        if taken[candidate] == email:
+            return candidate  # Same user re-confirming
     raise Exception(f'Could not find a unique tenant name for {base_name} after 9 attempts')
 
 
-def create_tenant_cr(tenant, email):
-    """Create a Tenant CR via K8s API."""
+def add_tenant_to_applicationset(tenant, email):
+    """Add a tenant element to the ApplicationSet via K8s API (read-modify-write)."""
     endpoint, ssl_ctx, bearer = _get_eks_context()
-    url = f"{endpoint}/apis/openclaw.io/v1alpha1/namespaces/openclaw-system/tenants/{tenant}"
-    body = {
-        "apiVersion": "openclaw.io/v1alpha1",
-        "kind": "Tenant",
-        "metadata": {"name": tenant, "namespace": "openclaw-system"},
-        "spec": {
-            "email": email,
-            "displayName": "OpenClaw",
-            "emoji": "",
-            "skills": ["weather", "gog"],
-            "budget": {"monthlyUSD": 100},
-            "enabled": True,
-        }
-    }
-    _k8s_apply(endpoint, ssl_ctx, bearer, url, body)
+    url = f"{endpoint}/apis/argoproj.io/v1alpha1/namespaces/argocd/applicationsets/openclaw-tenants"
+
+    for attempt in range(3):
+        appset = _k8s_get(endpoint, ssl_ctx, bearer, url)
+        if not appset:
+            raise Exception('ApplicationSet openclaw-tenants not found in argocd namespace')
+
+        elements = appset.get('spec', {}).get('generators', [{}])[0].get('list', {}).get('elements', [])
+
+        # Idempotent: skip if tenant already exists
+        if any(e.get('name') == tenant for e in elements):
+            return
+
+        elements.append({'name': tenant, 'email': email})
+        try:
+            appset['spec']['generators'][0]['list']['elements'] = elements
+        except (KeyError, IndexError, TypeError) as e:
+            raise Exception(f'ApplicationSet has unexpected structure: {e}')
+
+        # PUT with resourceVersion for optimistic locking
+        _validate_url(url)
+        data = json.dumps(appset).encode()
+        req = urllib.request.Request(url, data=data, method='PUT',
+            headers={'Authorization': f'Bearer {bearer}', 'Content-Type': 'application/json'})
+        try:
+            urllib.request.urlopen(req, context=ssl_ctx)  # nosemgrep: dynamic-urllib-use-detected  # noqa: B310  # nosec B310
+            return
+        except urllib.error.HTTPError as e:
+            if e.code == 409 and attempt < 2:  # Conflict — retry with fresh resourceVersion
+                continue
+            raise
 
 
 def create_gateway_secret(tenant, ns, token):
@@ -236,11 +256,11 @@ def handler(event, context):
             {'Name': 'custom:tenant_name', 'Value': tenant},
         ])
 
-    # 6. Create Tenant CR -> Operator handles the rest
-    create_tenant_cr(tenant, email)
+    # 6. Add tenant to ApplicationSet -> ArgoCD creates Application -> Helm syncs resources
+    add_tenant_to_applicationset(tenant, email)
 
     # 7. Create K8s Secret with gateway token
-    # Race condition: Operator creates namespace async after step 6.
+    # Race condition: ArgoCD creates namespace async after step 6 (CreateNamespace=true).
     # Retry with backoff until namespace exists.
     import time
     for attempt in range(5):

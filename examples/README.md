@@ -1,28 +1,21 @@
 # Examples
 
-Sample manifests for manual testing and exploration.
+## Add a Tenant
 
-## Tenant CR
-
-Create a tenant without going through Cognito signup:
+Add a tenant to the ApplicationSet (ArgoCD creates the workspace automatically):
 
 ```bash
-kubectl apply -f examples/tenant.yaml
+./scripts/create-tenant.sh alice --email alice@example.com
 ```
 
 Check status:
 
 ```bash
-kubectl get tenant -n openclaw-system
-kubectl get tenant example -n openclaw-system -o yaml
+kubectl get applications -n argocd -l openclaw.io/tenant
 ```
 
-Expected status progression: `Provisioning` → `Ready`
+## Remove a Tenant
 
-Delete:
+Remove a tenant element from the ApplicationSet. ArgoCD will prune the Application and all resources.
 
-```bash
-kubectl delete tenant example -n openclaw-system
-```
-
-> **Note:** The Operator creates the namespace and ArgoCD Application. Deleting the Tenant CR does not automatically clean up the namespace — see `docs/operations/admin-guide.md` for cleanup steps.
+> **Note:** PVC data is retained by default (`Delete=false`). To fully clean up, also delete the namespace: `kubectl delete namespace openclaw-alice`
