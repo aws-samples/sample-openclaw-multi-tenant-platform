@@ -13,7 +13,8 @@ metadata:
 spec:
   scheme: internet-facing
   securityGroupPrefixes:
-    - "pl-82a045eb"
+    # CloudFront managed prefix list — region-specific, injected by build-operator.sh
+    - "CF_PREFIX_LIST_ID"
   manageBackendSecurityGroupRules: true
   loadBalancerAttributes:
     - key: idle_timeout.timeout_seconds
@@ -33,7 +34,7 @@ spec:
       group: gateway.k8s.aws
   listeners:
     - name: https
-      hostname: "claw.snese.net"
+      hostname: "DOMAIN"
       protocol: HTTPS
       port: 443
       allowedRoutes:

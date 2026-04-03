@@ -5,14 +5,15 @@
 ```
 1. Configure    -> cp cdk.json.example cdk.json (fill context values)
 2. Deploy infra -> npx cdk deploy (~15-20 min)
-3. K8s setup    -> setup-keda.sh
-4. Gateway API  -> kubectl apply -f helm/gateway.yaml
-5. First tenant -> create-tenant.sh alice
-6. ALB setup    -> post-deploy.sh (CloudFront #2, Route53, WAF)
-7. Auth UI      -> deploy-auth-ui.sh
-8. ArgoCD       -> setup-argocd.sh + setup-argocd-apps.sh
-9. Verify       -> health-check.sh
+3. K8s setup    -> bash scripts/build-operator.sh (CRD + Operator + Gateway)
+4. KEDA         -> bash scripts/setup-keda.sh
+5. First tenant -> scripts/create-tenant.sh alice
+6. ALB setup    -> scripts/post-deploy.sh (CloudFront #2, Route53, WAF)
+7. Auth UI      -> scripts/deploy-auth-ui.sh
+8. Verify       -> scripts/health-check.sh
 ```
+
+> **Note**: ArgoCD is managed via the EKS ArgoCD add-on (EKS Capability). No manual ArgoCD setup is needed.
 
 ## User Signup (Automated)
 
