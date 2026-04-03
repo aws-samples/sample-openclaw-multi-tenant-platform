@@ -63,5 +63,18 @@ sed \
 echo "==> Waiting for operator pod"
 kubectl rollout status deployment/tenant-operator -n openclaw-system --timeout=120s
 
+echo "==> Applying Gateway API resources (patching domain + prefix list)"
+CF_PREFIX_LIST=$(aws ec2 describe-managed-prefix-lists \
+  --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
+  --query 'PrefixLists[0].PrefixListId' --output text --region "${REGION}")
+if [ -z "$CF_PREFIX_LIST" ] || [ "$CF_PREFIX_LIST" = "None" ]; then
+  echo "ERROR: Could not find CloudFront managed prefix list in ${REGION}"
+  exit 1
+fi
+sed \
+  -e "s|\"DOMAIN\"|\"${DOMAIN}\"|g" \
+  -e "s|\"CF_PREFIX_LIST_ID\"|\"${CF_PREFIX_LIST}\"|g" \
+  helm/gateway.yaml | kubectl apply -f -
+
 echo "==> Done. Operator running:"
 kubectl get pods -n openclaw-system -l app=tenant-operator
