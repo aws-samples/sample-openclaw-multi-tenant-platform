@@ -8,7 +8,14 @@
 set -euo pipefail
 
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-REGION=$(aws configure get region 2>/dev/null || echo "${AWS_DEFAULT_REGION:-us-west-2}")
+# Region: prefer AWS_REGION env, then extract from EKS cluster endpoint URL
+if [ -z "${AWS_REGION:-}" ]; then
+  _EKS_URL=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)
+  REGION=$(echo "$_EKS_URL" | sed -n 's|.*\.\([a-z]*-[a-z]*-[0-9]*\)\.eks\..*|\1|p')
+  REGION="${REGION:-us-west-2}"
+else
+  REGION="$AWS_REGION"
+fi
 
 echo "==> Reading config from cdk.json"
 CDK_JSON="cdk/cdk.json"
