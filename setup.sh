@@ -74,30 +74,11 @@ phase1_verify() {
 }
 
 phase2_run() {
-  echo "  Applying CRD + operator deployment..."
-  kubectl apply -f operator/yaml/crd.yaml
-  kubectl wait --for=condition=Established crd/tenants.openclaw.io --timeout=30s
-
-  # Read config from cdk.json for env var substitution
-  CDK_JSON="cdk/cdk.json"
-  local DOMAIN="" REGION_VAL=""
-  if [[ -f "$CDK_JSON" ]]; then
-    DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')")
-  fi
-  REGION_VAL=$(aws configure get region 2>/dev/null || echo "${AWS_DEFAULT_REGION:-us-west-2}")
-  ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-  ECR="${ACCOUNT}.dkr.ecr.${REGION_VAL}.amazonaws.com"
-
-  sed \
-    -e "s|ghcr.io/snese/openclaw-tenant-operator|${ECR}/ghcr/snese/openclaw-tenant-operator|g" \
-    -e "s|\"REGION\"|\"${REGION_VAL}\"|g" \
-    -e "s|value: \"DOMAIN\"|value: \"${DOMAIN}\"|g" \
-    operator/yaml/deployment.yaml | kubectl apply -f -
-
-  kubectl rollout status deployment/tenant-operator -n openclaw-system --timeout=120s
+  echo "  Deploying ApplicationSet + Gateway..."
+  bash scripts/deploy-platform.sh
 }
 phase2_verify() {
-  kubectl get pods -n openclaw-system -l app=tenant-operator --no-headers 2>/dev/null | grep -q Running
+  kubectl get applicationset openclaw-tenants -n argocd --no-headers 2>/dev/null | grep -q openclaw-tenants
 }
 
 phase3_run() {

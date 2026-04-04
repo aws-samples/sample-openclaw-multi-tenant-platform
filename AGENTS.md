@@ -53,7 +53,7 @@ cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (adds element to ApplicationSet)
 cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
 helm/applicationset.yaml  <- ArgoCD ApplicationSet (multi-tenant generator)
-scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (replaces build-operator.sh)
+scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway 
 scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
 setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)

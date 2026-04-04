@@ -13,7 +13,7 @@ metadata:
 spec:
   scheme: internet-facing
   securityGroupPrefixes:
-    # CloudFront managed prefix list — region-specific, injected by build-operator.sh
+    # CloudFront managed prefix list — region-specific, injected by deploy-platform.sh
     - "CF_PREFIX_LIST_ID"
   manageBackendSecurityGroupRules: true
   loadBalancerAttributes:
