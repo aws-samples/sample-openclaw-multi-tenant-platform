@@ -211,8 +211,12 @@ spec:
         configMap:
           name: {{ include "openclaw-helm.fullname" . }}
       - name: data
+        {{- if .Values.persistence.enabled }}
         persistentVolumeClaim:
           claimName: {{ include "openclaw-helm.fullname" . }}
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
       - name: tmp
         emptyDir: {}
       {{- with .Values.nodeSelector }}

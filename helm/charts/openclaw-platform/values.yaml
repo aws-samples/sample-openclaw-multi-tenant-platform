@@ -26,7 +26,8 @@ service:
 
 persistence:
   enabled: true
-  storageClass: "gp3"
+  storageClass: "efs-sc"
+  accessMode: ReadWriteMany
   size: 10Gi
 
 serviceAccount:
