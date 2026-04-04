@@ -2,7 +2,7 @@ apiVersion: v2
 name: openclaw-platform
 description: |
   OpenClaw AI Agent Helm chart -- reference templates for documentation and manual debugging.
-  Tenant provisioning is handled by the Tenant Operator (Rust/kube-rs SSA), not Helm.
+  Tenant provisioning is handled by ArgoCD ApplicationSet. Each tenant gets an ArgoCD Application that syncs this chart.
 type: application
 version: 1.3.14
 appVersion: "2026.3.24"
