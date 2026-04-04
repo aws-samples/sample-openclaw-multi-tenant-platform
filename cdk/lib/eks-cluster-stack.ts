@@ -141,15 +141,19 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // gp3 StorageClass — kept for backward compatibility during EFS migration
-    cluster.addManifest('Gp3StorageClass', {
-      apiVersion: 'storage.k8s.io/v1',
-      kind: 'StorageClass',
-      metadata: { name: 'gp3' },
-      provisioner: 'ebs.csi.aws.com',
-      parameters: { type: 'gp3', fsType: 'ext4' },
-      reclaimPolicy: 'Delete',
-      volumeBindingMode: 'WaitForFirstConsumer',
-      allowVolumeExpansion: true,
+    new eks.KubernetesManifest(this, 'Gp3StorageClass', {
+      cluster,
+      manifest: [{
+        apiVersion: 'storage.k8s.io/v1',
+        kind: 'StorageClass',
+        metadata: { name: 'gp3' },
+        provisioner: 'ebs.csi.aws.com',
+        parameters: { type: 'gp3', fsType: 'ext4' },
+        reclaimPolicy: 'Delete',
+        volumeBindingMode: 'WaitForFirstConsumer',
+        allowVolumeExpansion: true,
+      }],
+      overwrite: true,
     });
 
     // ── EFS FileSystem (multi-AZ, per-tenant access points via CSI dynamic provisioning) ──
@@ -162,7 +166,7 @@ export class EksClusterStack extends cdk.Stack {
       lifecyclePolicy: efs.LifecyclePolicy.AFTER_30_DAYS,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
-    fileSystem.connections.allowFrom(cluster, ec2.Port.tcp(2049), 'EKS nodes → EFS NFS');
+    fileSystem.connections.allowFrom(cluster, ec2.Port.tcp(2049), 'EKS nodes to EFS NFS');
 
     // ── EFS CSI Driver (with Pod Identity IAM) ──────────────────────────────
     const efsCsiRole = new iam.Role(this, 'EfsCsiRole', {
@@ -188,27 +192,31 @@ export class EksClusterStack extends cdk.Stack {
     efsCsiAddon.node.addDependency(fileSystem);
 
     // efs-sc StorageClass — dynamic provisioning creates per-tenant access points
-    const efsStorageClass = cluster.addManifest('EfsStorageClass', {
-      apiVersion: 'storage.k8s.io/v1',
-      kind: 'StorageClass',
-      metadata: { name: 'efs-sc' },
-      provisioner: 'efs.csi.aws.com',
-      parameters: {
-        provisioningMode: 'efs-ap',
-        fileSystemId: fileSystem.fileSystemId,
-        directoryPerms: '0755',
-        basePath: '/tenants',
-        subPathPattern: '${.PVC.namespace}',
-        ensureUniqueDirectory: 'false',
-        // OpenClaw runs as uid:gid 1000:1000 (node user). All APs use the same
-        // GID so the container can read/write without running as root.
-        // GID 1000 for all APs — matches OpenClaw container user (node:1000:1000).
-        // Intentionally same start/end: all tenants share UID/GID, isolation is via AP chroot.
-        gidRangeStart: '1000',
-        gidRangeEnd: '1000',
-      },
-      reclaimPolicy: 'Delete',
-      volumeBindingMode: 'Immediate',
+    const efsStorageClass = new eks.KubernetesManifest(this, 'EfsStorageClass', {
+      cluster,
+      manifest: [{
+        apiVersion: 'storage.k8s.io/v1',
+        kind: 'StorageClass',
+        metadata: { name: 'efs-sc' },
+        provisioner: 'efs.csi.aws.com',
+        parameters: {
+          provisioningMode: 'efs-ap',
+          fileSystemId: fileSystem.fileSystemId,
+          directoryPerms: '0755',
+          basePath: '/tenants',
+          subPathPattern: '${.PVC.namespace}',
+          ensureUniqueDirectory: 'false',
+          // OpenClaw runs as uid:gid 1000:1000 (node user). All APs use the same
+          // GID so the container can read/write without running as root.
+          // GID 1000 for all APs — matches OpenClaw container user (node:1000:1000).
+          // Intentionally same start/end: all tenants share UID/GID, isolation is via AP chroot.
+          gidRangeStart: '1000',
+          gidRangeEnd: '1000',
+        },
+        reclaimPolicy: 'Delete',
+        volumeBindingMode: 'Immediate',
+      }],
+      overwrite: true,
     });
     efsStorageClass.node.addDependency(fileSystem);
     efsStorageClass.node.addDependency(efsCsiAddon);
@@ -216,17 +224,21 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'EfsFileSystemId', { value: fileSystem.fileSystemId });
 
     // ── Pod Security Standards ─────────────────────────────────────────────
-    cluster.addManifest('PodSecurityStandards', {
-      apiVersion: 'v1',
-      kind: 'Namespace',
-      metadata: {
-        name: 'openclaw-system',
-        labels: {
-          'pod-security.kubernetes.io/enforce': 'restricted',
-          'pod-security.kubernetes.io/warn': 'restricted',
-          'pod-security.kubernetes.io/audit': 'restricted',
+    new eks.KubernetesManifest(this, 'PodSecurityStandards', {
+      cluster,
+      manifest: [{
+        apiVersion: 'v1',
+        kind: 'Namespace',
+        metadata: {
+          name: 'openclaw-system',
+          labels: {
+            'pod-security.kubernetes.io/enforce': 'restricted',
+            'pod-security.kubernetes.io/warn': 'restricted',
+            'pod-security.kubernetes.io/audit': 'restricted',
+          },
         },
-      },
+      }],
+      overwrite: true,
     });
 
     // ── AWS Load Balancer Controller ────────────────────────────────────────
@@ -316,10 +328,14 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // Namespace (must exist before SA)
-    const karpenterNs = cluster.addManifest('KarpenterNs', {
-      apiVersion: 'v1',
-      kind: 'Namespace',
-      metadata: { name: 'karpenter' },
+    const karpenterNs = new eks.KubernetesManifest(this, 'KarpenterNs', {
+      cluster,
+      manifest: [{
+        apiVersion: 'v1',
+        kind: 'Namespace',
+        metadata: { name: 'karpenter' },
+      }],
+      overwrite: true,
     });
 
     // Controller SA
@@ -374,46 +390,54 @@ export class EksClusterStack extends cdk.Stack {
     karpenterChart.node.addDependency(karpenterSa);
 
     // EC2NodeClass — use internal-elb tag for private subnets, cluster SG tag for security groups
-    const nodeClass = cluster.addManifest('KarpenterNodeClass', {
-      apiVersion: 'karpenter.k8s.aws/v1',
-      kind: 'EC2NodeClass',
-      metadata: { name: 'default' },
-      spec: {
-        amiSelectorTerms: [{ alias: 'al2023@latest' }],
-        role: karpenterNodeRole.roleName,
-        subnetSelectorTerms: [
-          { tags: { 'kubernetes.io/role/internal-elb': '1', [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
-        ],
-        securityGroupSelectorTerms: [
-          { tags: { [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
-        ],
-      },
+    const nodeClass = new eks.KubernetesManifest(this, 'KarpenterNodeClass', {
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.k8s.aws/v1',
+        kind: 'EC2NodeClass',
+        metadata: { name: 'default' },
+        spec: {
+          amiSelectorTerms: [{ alias: 'al2023@latest' }],
+          role: karpenterNodeRole.roleName,
+          subnetSelectorTerms: [
+            { tags: { 'kubernetes.io/role/internal-elb': '1', [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+          securityGroupSelectorTerms: [
+            { tags: { [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+        },
+      }],
+      overwrite: true,
     });
     nodeClass.node.addDependency(karpenterChart);
 
     // NodePool
-    const nodePool = cluster.addManifest('KarpenterNodePool', {
-      apiVersion: 'karpenter.sh/v1',
-      kind: 'NodePool',
-      metadata: { name: 'default' },
-      spec: {
-        template: {
-          spec: {
-            nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'default' },
-            requirements: [
-              { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand', 'spot'] },
-              { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
-              { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r'] },
-              { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
-            ],
+    const nodePool = new eks.KubernetesManifest(this, 'KarpenterNodePool', {
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.sh/v1',
+        kind: 'NodePool',
+        metadata: { name: 'default' },
+        spec: {
+          template: {
+            spec: {
+              nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'default' },
+              requirements: [
+                { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand', 'spot'] },
+                { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r'] },
+                { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+              ],
+            },
+          },
+          limits: { cpu: '100' },
+          disruption: {
+            consolidationPolicy: 'WhenEmptyOrUnderutilized',
+            consolidateAfter: '1m',
           },
         },
-        limits: { cpu: '100' },
-        disruption: {
-          consolidationPolicy: 'WhenEmptyOrUnderutilized',
-          consolidateAfter: '1m',
-        },
-      },
+      }],
+      overwrite: true,
     });
     nodePool.node.addDependency(nodeClass);
 
