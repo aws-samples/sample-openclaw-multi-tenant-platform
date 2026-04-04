@@ -16,7 +16,7 @@
 |  6. Secrets      exec SecretRef -- on-demand fetch, never persisted    |
 |  7. LLM          Bedrock via Pod Identity -- zero API keys             |
 |  8. Cost         Per-tenant budget enforcement + daily Lambda scan     |
-|  9. Data         PVC persistence + daily EBS snapshots + 7d retention  |
+|  9. Data         PVC persistence (EFS, multi-AZ) + AWS Backup  |
 | 10. Audit        CloudTrail -> S3 -> Athena (Bedrock-specific trail)   |
 +-----------------------------------------------------------------------+
 ```
@@ -213,8 +213,8 @@ Prevents runaway LLM costs with per-tenant budgets.
 
 Ensures tenant data survives pod restarts, scale-to-zero, and failures.
 
-- PVC (gp3 EBS) per tenant -- persists across pod restarts and scale-to-zero
-- Daily EBS snapshot CronJob with 7-day retention
+- PVC (EFS) per tenant -- persists across pod restarts, scale-to-zero, and AZ failures
+- AWS Backup for EFS (replaces EBS snapshots)
 - Container runs as non-root (UID 1000) with `fsGroup: 1000`
 - `runAsNonRoot: true`, `readOnlyRootFilesystem: true`
 
@@ -252,7 +252,7 @@ Records all Bedrock API calls for compliance and forensics.
 | Secret persistence on disk | exec SecretRef -- fetched on demand, never written |
 | Prompt injection -> system access | `exec: deny`, `elevated: disabled`, `fs: workspaceOnly` |
 | Runaway LLM costs | Daily cost enforcer Lambda + per-tenant budget + SNS alerts |
-| Data loss | PVC persistence + daily EBS snapshots + 7-day retention |
+| Data loss | PVC persistence (EFS, multi-AZ) + AWS Backup |
 | Privilege escalation | Non-root container, `runAsNonRoot: true`, `readOnlyRootFilesystem: true` |
 | Karpenter subnet confusion | EC2NodeClass requires both `internal-elb` AND cluster-owned tags |
 
@@ -286,7 +286,7 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 | Secrets rotation | SM secrets not auto-rotated |
 | WAF logging | Sampled requests only, no full logging |
 | GuardDuty | No runtime threat detection for EKS |
-| KMS encryption | EBS uses default encryption, no CMK |
+| KMS encryption | EFS encrypted at rest (AWS managed key) |
 
 ---
 

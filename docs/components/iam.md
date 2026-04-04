@@ -50,6 +50,7 @@ The fetch-secret script uses `TENANT_NAMESPACE` env var (Kubernetes downward API
 | Role | Type | Purpose |
 |------|------|---------|
 | `EbsCsiDriverRole` | Pod Identity | EBS CSI driver (`AmazonEBSCSIDriverPolicy`) |
+| `EfsCsiDriverRole` | Pod Identity | EFS CSI driver (`AmazonEFSCSIDriverPolicy`) |
 | `CwObservabilityRole` | Pod Identity | CloudWatch agent + X-Ray |
 | LB Controller SA | IRSA | AWS Load Balancer Controller |
 | Karpenter SA | IRSA | Karpenter controller |

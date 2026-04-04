@@ -9,7 +9,7 @@ Idle tenant pods scale to 0 replicas via KEDA HTTP Add-on. When an HTTP request 
 ```
 Client -> ALB -> KEDA HTTP Interceptor Proxy -> Pod (0->1)
                    (holds request if pod=0)       |
-                                                  PVC (gp3 10Gi)
+                                                  PVC (EFS)
 ```
 
 1. Pod running -> interceptor proxies directly to pod
@@ -73,7 +73,7 @@ During cold start, the KEDA interceptor holds the request. Custom 503 page with 
 | 3 tenants, 70% idle | 3 pods always -> ~$48/mo | ~0.9 pods avg -> ~$15/mo | ~69% |
 | 100 tenants, 20% concurrency | 100 pods | ~20 pods peak | ~80% |
 
-EBS volumes ($0.08/GB/mo for gp3) always charged: $0.80/mo per tenant at 10Gi.
+EFS billed per actual usage ($0.30/GB standard, $0.025/GB IA after 30d). No fixed allocation cost.
 
 ## Always-On Mode
 
