@@ -17,6 +17,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as efs from 'aws-cdk-lib/aws-efs';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { Construct } from 'constructs';
@@ -139,7 +140,7 @@ export class EksClusterStack extends cdk.Stack {
       }],
     });
 
-    // gp3 StorageClass — set as default for tenant PVCs
+    // gp3 StorageClass — kept for backward compatibility during EFS migration
     cluster.addManifest('Gp3StorageClass', {
       apiVersion: 'storage.k8s.io/v1',
       kind: 'StorageClass',
@@ -150,6 +151,69 @@ export class EksClusterStack extends cdk.Stack {
       volumeBindingMode: 'WaitForFirstConsumer',
       allowVolumeExpansion: true,
     });
+
+    // ── EFS FileSystem (multi-AZ, per-tenant access points via CSI dynamic provisioning) ──
+    const fileSystem = new efs.FileSystem(this, 'TenantEfs', {
+      vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      encrypted: true,
+      performanceMode: efs.PerformanceMode.GENERAL_PURPOSE,
+      throughputMode: efs.ThroughputMode.ELASTIC,
+      lifecyclePolicy: efs.LifecyclePolicy.AFTER_30_DAYS,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+    fileSystem.connections.allowFrom(cluster, ec2.Port.tcp(2049), 'EKS nodes → EFS NFS');
+
+    // ── EFS CSI Driver (with Pod Identity IAM) ──────────────────────────────
+    const efsCsiRole = new iam.Role(this, 'EfsCsiRole', {
+      roleName: `EfsCsiDriverRole-${cluster.clusterName}`,
+      assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonEFSCSIDriverPolicy'),
+      ],
+    });
+    efsCsiRole.assumeRolePolicy!.addStatements(new iam.PolicyStatement({
+      actions: ['sts:TagSession'],
+      principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
+    }));
+
+    const efsCsiAddon = new eks.CfnAddon(this, 'EfsCsiDriver', {
+      clusterName: cluster.clusterName,
+      addonName: 'aws-efs-csi-driver',
+      podIdentityAssociations: [{
+        roleArn: efsCsiRole.roleArn,
+        serviceAccount: 'efs-csi-controller-sa',
+      }],
+    });
+    efsCsiAddon.node.addDependency(fileSystem);
+
+    // efs-sc StorageClass — dynamic provisioning creates per-tenant access points
+    const efsStorageClass = cluster.addManifest('EfsStorageClass', {
+      apiVersion: 'storage.k8s.io/v1',
+      kind: 'StorageClass',
+      metadata: { name: 'efs-sc' },
+      provisioner: 'efs.csi.aws.com',
+      parameters: {
+        provisioningMode: 'efs-ap',
+        fileSystemId: fileSystem.fileSystemId,
+        directoryPerms: '0755',
+        basePath: '/tenants',
+        subPathPattern: '${.PVC.namespace}',
+        ensureUniqueDirectory: 'false',
+        // OpenClaw runs as uid:gid 1000:1000 (node user). All APs use the same
+        // GID so the container can read/write without running as root.
+        // GID 1000 for all APs — matches OpenClaw container user (node:1000:1000).
+        // Intentionally same start/end: all tenants share UID/GID, isolation is via AP chroot.
+        gidRangeStart: '1000',
+        gidRangeEnd: '1000',
+      },
+      reclaimPolicy: 'Delete',
+      volumeBindingMode: 'Immediate',
+    });
+    efsStorageClass.node.addDependency(fileSystem);
+    efsStorageClass.node.addDependency(efsCsiAddon);
+
+    new cdk.CfnOutput(this, 'EfsFileSystemId', { value: fileSystem.fileSystemId });
 
     // ── Pod Security Standards ─────────────────────────────────────────────
     cluster.addManifest('PodSecurityStandards', {
