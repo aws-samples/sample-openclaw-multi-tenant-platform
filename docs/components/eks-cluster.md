@@ -42,6 +42,7 @@ Elastic scaling for tenant workloads. Provisions Spot instances to minimize cost
 | Add-on | IAM | Notes |
 |--------|-----|-------|
 | `aws-ebs-csi-driver` | Pod Identity -> `EbsCsiDriverRole` | `AmazonEBSCSIDriverPolicy` |
+| `aws-efs-csi-driver` | Pod Identity -> `EfsCsiDriverRole` | `AmazonEFSCSIDriverPolicy` |
 | `eks-pod-identity-agent` | None | Enables Pod Identity |
 | `vpc-cni` | None | Default config |
 | `coredns` | None | Default config |
@@ -67,9 +68,9 @@ The platform uses Gateway API (not Ingress) for tenant traffic routing. Resource
 
 Per-tenant HTTPRoute and TargetGroupConfiguration are created by the Helm chart (synced by ArgoCD).
 
-## gp3 StorageClass
+## StorageClasses
 
-Default StorageClass for tenant PVCs:
+StorageClasses for tenant PVCs (EFS is default):
 
 ```yaml
 provisioner: ebs.csi.aws.com

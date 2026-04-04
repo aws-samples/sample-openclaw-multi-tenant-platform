@@ -66,7 +66,7 @@
 ### Scale to Zero
 
 - After 15 minutes of no HTTP requests, KEDA scales pod to 0
-- PVC (EBS volume) is NOT deleted -- all data preserved
+- PVC (EFS) is NOT deleted -- all data preserved
 - No cost for idle tenants
 
 ### Cold Start

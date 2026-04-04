@@ -45,12 +45,12 @@ Internet
 ```
 EKS Cluster
 |  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
-|  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
+|  Add-ons: ALB Controller, EBS CSI, EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
 |   ApplicationSet-managed (ArgoCD):
-|     Namespace                      PVC (10Gi gp3)
+|     Namespace                      PVC (EFS)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (keda ns)      Deployment + Service + ConfigMap
 |                                    HTTPRoute + TGC + NetworkPolicy + PDB + KEDA HSO
@@ -154,7 +154,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
 | LLM | Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
-| Data | PVC persists across scale-to-zero; daily EBS snapshots |
+| Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
 | Audit | CloudTrail + S3 + Athena + EKS control plane logging |
 
 ## Cost
@@ -163,7 +163,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 |----------|-----------|-------------|
 | EKS control plane | ~$73 | ~$73 |
 | EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
-| EBS (10Gi per tenant) | ~$2 | ~$80 |
+| EFS (per actual usage) | ~$0.15 | ~$75 |
 | ALB + NAT (x2) + CloudFront + WAF | ~$60 | ~$65 |
 | CloudWatch + Lambda + S3 | ~$15 | ~$20 |
 | Bedrock | varies | varies |

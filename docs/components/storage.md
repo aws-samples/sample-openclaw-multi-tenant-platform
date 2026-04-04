@@ -2,58 +2,110 @@
 
 ## Overview
 
-Each tenant gets a 10Gi gp3 EBS PVC that persists across pod restarts and scale-to-zero. Two backup strategies: daily EBS snapshots (CronJob) and on-demand S3 backup/restore (scripts).
+Each tenant gets an EFS-backed PVC that persists across pod restarts, scale-to-zero, and AZ failures. EFS CSI driver dynamically provisions per-tenant Access Points for isolation.
+
+## Storage Architecture
+
+```
+EFS FileSystem (encrypted, elastic throughput)
+  ├─ /tenants/openclaw-alice/    ← Access Point (auto-created by CSI driver)
+  ├─ /tenants/openclaw-bob/      ← Access Point
+  └─ /tenants/openclaw-demo/     ← Access Point
+
+Each AP enforces:
+  - RootDirectory chroot (tenant cannot traverse up)
+  - POSIX UID/GID 1000:1000 (matches OpenClaw container user)
+```
 
 ## PVC Configuration
 
-**Helm chart template**: `helm/charts/openclaw-platform/templates/pvc.yaml`
-
-The PVC is created by the Helm chart (`templates/pvc.yaml`), synced by ArgoCD.
+**Helm values** (`values.yaml`):
 
 ```yaml
-spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: gp3
-  resources:
-    requests:
-      storage: 10Gi
+persistence:
+  enabled: true
+  storageClass: "efs-sc"    # EFS dynamic provisioning
+  accessMode: ReadWriteMany  # EFS supports multi-AZ
+  size: 10Gi                 # EFS auto-scales; this is a K8s formality
+```
+
+**StorageClass** (`efs-sc`, created by CDK):
+
+```yaml
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-xxx
+  directoryPerms: "0755"
+  basePath: "/tenants"
+  subPathPattern: "${.PVC.namespace}"
 ```
 
 **Mount point:** `/home/node/.openclaw`
 
 **Lifecycle:**
-- PVC is **not deleted** on `helm uninstall` (Kubernetes default)
-- Survives pod restart and scale-to-zero
-- `ReadWriteOnce` -- enforces single-replica constraint
+- PVC created automatically when ArgoCD syncs tenant Helm chart
+- CSI driver creates EFS Access Point on PVC creation
+- PVC survives pod restart, scale-to-zero, and node failure
+- `ReadWriteMany` — pod can start on any AZ node
 
-**Cost:** gp3 at $0.08/GB/mo -> $0.80/mo per tenant for 10Gi.
+## Cost
 
-## Daily EBS Snapshot CronJob
+EFS charges per actual usage, not allocated capacity:
 
-**Location:** `scripts/pvc-backup-cronjob.yaml`
+| Tier | Price | When |
+|------|-------|------|
+| Standard | $0.30/GB/mo | Frequently accessed |
+| Infrequent Access | $0.025/GB/mo | After 30 days without access |
 
-Runs daily at 03:00 UTC. Discovers all OpenClaw PVCs, creates EBS snapshots, cleans up snapshots older than 7 days.
+Typical tenant: ~500MB actual usage → ~$0.15/mo (vs $0.80/mo with EBS 10Gi).
 
-Works regardless of pod state -- snapshots are at the EBS volume level.
+## Isolation
 
-## S3 Backup / Restore Scripts
+| Layer | Mechanism |
+|-------|-----------|
+| Access Point chroot | EFS server-side enforced, cannot traverse up |
+| K8s PV binding | Pod can only mount its assigned PV |
+| Pod Security Standards | `restricted` profile, no CAP_SYS_ADMIN |
+| K8s RBAC | No cross-namespace access |
 
-For on-demand backup and cross-region restore. KEDA-aware -- auto-scales pod up if at 0.
+## Backup
+
+EFS supports AWS Backup natively. For on-demand backup/restore:
 
 ```bash
-# Backup
+# Backup tenant data to S3
 ./scripts/backup-tenant.sh <tenant-name> <s3-bucket>
-# -> s3://<bucket>/backups/<tenant>/<tenant>-<timestamp>.tar.gz
 
-# Restore
+# Restore from S3
 ./scripts/restore-tenant.sh <tenant-name> s3://<bucket>/backups/<tenant>/<file>.tar.gz
 ```
 
-**Naming convention:** namespace is `openclaw-{name}`, deployment is `{name}`.
+## Migration from EBS
 
-## Backup Strategy Summary
+For existing tenants on EBS (gp3):
 
-| Method | Frequency | Scope | Requires Pod | Retention |
-|--------|-----------|-------|-------------|-----------|
-| EBS snapshot (CronJob) | Daily 03:00 UTC | All tenants | No | 7 days |
-| S3 backup (script) | On-demand | Single tenant | Yes (auto-scales) | Manual |
+```bash
+kubectl scale deployment <tenant> -n openclaw-<tenant> --replicas=0
+./scripts/backup-tenant.sh <tenant> <s3-bucket>  # safety net
+./scripts/migrate-tenant-ebs-to-efs.sh <tenant>
+# ArgoCD auto-syncs new EFS PVC
+```
+
+## Production: Per-Tenant Quota
+
+EFS has no per-access-point quota. For hard quota requirements:
+
+| Solution | Hard Quota | Min Cost |
+|----------|-----------|----------|
+| EFS + CronJob monitoring | Soft only | ~$0.30/GB |
+| FSx for OpenZFS | ✅ Native UserQuota | ~$150/mo |
+| FSx for NetApp ONTAP | ✅ Native Volume quota | ~$300/mo |
+
+The Helm chart's StorageClass abstraction works with all three — migration to FSx requires no Helm chart changes.
+
+## Limits
+
+- EFS Access Points: 1000 per filesystem
+- EFS throughput: elastic mode auto-scales (up to 10 GiB/s read, 3 GiB/s write)
+- No per-AP storage quota (see Production section above)

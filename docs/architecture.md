@@ -65,12 +65,12 @@ The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync en
 ```
 EKS Cluster (v1.35)
 |  Managed Node Group (Graviton ARM64 t4g.medium) + Karpenter (arm64 spot)
-|  Add-ons: ALB Controller, EBS CSI, Pod Identity, CloudWatch Insights
+|  Add-ons: ALB Controller, EBS CSI, EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
 |   All managed by ArgoCD (Helm chart):
-|     Namespace                      PVC (10Gi gp3)
+|     Namespace                      PVC (EFS)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (in keda ns)   Deployment + Service + ConfigMap
 |                                    HTTPRoute + TGC + NetworkPolicy
@@ -123,7 +123,7 @@ The operator updates `Tenant.status.conditions` during reconciliation:
 | Secrets | exec SecretRef -- fetched on-demand via aws-sm provider |
 | LLM | Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
-| Data | PVC persists across scale-to-zero; daily EBS snapshots |
+| Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
 | Audit | CloudTrail + S3 + Athena + EKS control plane logging |
 
 ## Data Flow
