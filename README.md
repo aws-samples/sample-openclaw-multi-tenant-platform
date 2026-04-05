@@ -209,7 +209,6 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 |   +-- gateway.yaml            # Gateway API resource
 |   +-- tenants/values-template.yaml  # Example values
 +-- helm/applicationset.yaml    # ArgoCD ApplicationSet (multi-tenant generator)
-|   +-- src/                    # Creates Namespace + ArgoCD Application + ReferenceGrant
 +-- docs/                       # Architecture, security, components, operations
 +-- scripts/                    # 20+ operations scripts
 +-- .github/workflows/ci.yml   # CI pipeline
