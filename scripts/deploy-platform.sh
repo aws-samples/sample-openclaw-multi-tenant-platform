@@ -50,6 +50,10 @@ sed \
   -e "s|\"COGNITO_DOMAIN\"|\"${COGNITO_DOMAIN}\"|g" \
   helm/applicationset.yaml | kubectl apply -f -
 
+echo "==> Installing Gateway API CRDs (required by ALB Controller)"
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+kubectl wait --for=condition=Established crd/gatewayclasses.gateway.networking.k8s.io --timeout=30s || echo "  (CRDs already established)"
+
 echo "==> Ensuring openclaw-system namespace (with Pod Security Standards)"
 kubectl apply -f - <<'NS'
 apiVersion: v1
