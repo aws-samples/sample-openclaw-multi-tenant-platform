@@ -7,6 +7,9 @@
 #   2. Gateway API resources (GatewayClass + LoadBalancerConfiguration + Gateway)
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+require_cluster
+
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 # Region: prefer AWS_REGION env, then extract from EKS cluster endpoint URL
 if [ -z "${AWS_REGION:-}" ]; then

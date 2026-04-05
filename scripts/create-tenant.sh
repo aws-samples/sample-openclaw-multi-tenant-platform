@@ -4,6 +4,9 @@
 # Usage: ./scripts/create-tenant.sh <name> [--email <email>]
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+require_cluster
+
 usage() {
   echo "Usage: $0 <tenant-name> [--email <email>]"
   exit 1

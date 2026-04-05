@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+require_cluster
+
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 
@@ -16,10 +19,10 @@ run helm repo add kedacore https://kedacore.github.io/charts
 run helm repo update kedacore
 
 echo "  Step 2: Install KEDA"
-run helm install keda kedacore/keda --namespace keda --create-namespace --wait --timeout 120s
+run helm upgrade --install keda kedacore/keda --namespace keda --create-namespace --wait --timeout 120s
 
 echo "  Step 3: Install HTTP Add-on"
-run helm install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 120s
+run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 120s
 
 echo "  Step 4: Verify"
 if ! $DRY_RUN; then

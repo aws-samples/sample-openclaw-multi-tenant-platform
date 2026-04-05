@@ -47,3 +47,12 @@ ensure_idempotent() {
   fi
   return 0
 }
+
+# Verify kubectl can reach the cluster
+require_cluster() {
+  if ! kubectl cluster-info &>/dev/null; then
+    log_error "Cannot connect to Kubernetes cluster."
+    log_error "Run: aws eks update-kubeconfig --region <region> --name openclaw-cluster"
+    exit 1
+  fi
+}
