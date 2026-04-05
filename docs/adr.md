@@ -20,7 +20,7 @@ Key design decisions and their rationale.
 
 ---
 
-## ADR-002: Operator + ArgoCD + Helm (3-layer model)
+## ADR-002: Operator + ArgoCD + Helm (3-layer model) — superseded by ADR in PR #273
 
 **Decision**: ApplicationSet manages 3 resources (Namespace, ArgoCD Application, ReferenceGrant). ArgoCD syncs Helm chart for everything else.
 

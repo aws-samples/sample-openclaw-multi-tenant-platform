@@ -10,7 +10,9 @@ Layer 2: ArgoCD (EKS add-on)         → GitOps: syncs Helm chart, drift detecti
 Layer 3: Helm chart                   → Workload: Deployment, Service, ConfigMap, NetworkPolicy, etc.
 ```
 
-The Operator is intentionally thin (~400 lines of logic in `resources.rs` + `controller.rs`). It only creates the "envelope" (namespace + ArgoCD pointer), then ArgoCD + Helm handle everything inside.
+> **Note**: The Operator was replaced by ArgoCD ApplicationSet in PR #273. This section is kept for historical context.
+
+The Operator was intentionally thin (~400 lines of logic in `resources.rs` + `controller.rs`). It only creates the "envelope" (namespace + ArgoCD pointer), then ArgoCD + Helm handle everything inside.
 
 ### Why Not Lambda-Only?
 

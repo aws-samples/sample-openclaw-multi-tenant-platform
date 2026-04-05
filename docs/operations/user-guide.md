@@ -47,7 +47,7 @@
 ### Workspace Provisioning
 
 - Post-confirmation Lambda creates ApplicationSet element
-- Operator provisions Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
+- ApplicationSet + ArgoCD provisions Namespace, PVC, ServiceAccount, Deployment, KEDA HSO
 - ArgoCD syncs Helm chart -> Deployment, Service, ConfigMap, NetworkPolicy, etc.
 - User receives welcome email with workspace URL
 
