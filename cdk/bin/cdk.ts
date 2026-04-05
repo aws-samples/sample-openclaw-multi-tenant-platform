@@ -6,7 +6,10 @@ import { EksClusterStack } from '../lib/eks-cluster-stack';
 
 const app = new cdk.App();
 new EksClusterStack(app, 'OpenClawEksStack', {
-  env: { region: 'us-west-2' },
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION,
+  },
 });
 
 // cdk-nag: AWS Solutions checks on every synth
