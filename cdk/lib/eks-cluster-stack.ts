@@ -26,6 +26,33 @@ export class EksClusterStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // ── Validate required CDK context (before any resource creation) ─────
+    // Skip validation during CI synth (uses placeholder values from cdk.json.example)
+    if (!this.node.tryGetContext('@ci-synth')) {
+      const requiredContext: Record<string, string> = {
+        hostedZoneId: 'Route53 Hosted Zone ID',
+        zoneName: 'Domain name (e.g., example.com)',
+        certificateArn: 'ACM certificate ARN (deployment region)',
+        cognitoPoolId: 'Cognito User Pool ID',
+        cognitoClientId: 'Cognito App Client ID',
+        cognitoDomain: 'Cognito domain prefix',
+      };
+      const missingCtx = Object.entries(requiredContext)
+        .filter(([key]) => {
+          const val = this.node.tryGetContext(key);
+          if (typeof val !== 'string' || !val) return true;
+          return val.startsWith('your-') || val === 'us-west-2_XXXXXXXXX' || val === 'xxxxxxxxxxxxxxxxxx';
+        })
+        .map(([key, desc]) => `  - ${key}: ${desc}`);
+      if (missingCtx.length > 0) {
+        throw new Error(
+          `Missing required CDK context values in cdk.json:\n${missingCtx.join('\n')}\n\n` +
+          'Copy cdk/cdk.json.example to cdk/cdk.json and fill in your values.\n' +
+          'See README.md "Prerequisites" for details.',
+        );
+      }
+    }
+
     // ── VPC ─────────────────────────────────────────────────────────────────
     const vpc = new ec2.Vpc(this, 'Vpc', {
       maxAzs: 2,

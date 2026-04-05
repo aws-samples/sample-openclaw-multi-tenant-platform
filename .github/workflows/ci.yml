@@ -41,7 +41,7 @@ jobs:
         working-directory: cdk
         run: |
           cp cdk.json.example cdk.json
-          npx cdk synth --no-staging 2>&1 | tee /tmp/synth.log || true
+          npx cdk synth --no-staging -c @ci-synth=true 2>&1 | tee /tmp/synth.log || true
           # Fail on real CDK synth errors (not cdk-nag findings)
           if grep -qP '^Error:' /tmp/synth.log; then
             echo "::error::CDK synth failed"
