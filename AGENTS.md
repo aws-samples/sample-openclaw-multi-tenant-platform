@@ -53,18 +53,21 @@ cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (adds element to ApplicationSet)
 cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
 helm/applicationset.yaml  <- ArgoCD ApplicationSet (multi-tenant generator)
-scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway 
-scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
 helm/charts/openclaw-platform/  <- Helm chart synced by ArgoCD (Deployment, Service, ConfigMap, NetworkPolicy, etc.)
-setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
+helm/tenants/values-template.yaml  <- Reference tenant Helm values (for dry-run testing)
+helm/gateway.yaml  <- Gateway API resources (GatewayClass + LoadBalancerConfiguration + Gateway)
+scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (injects cdk.json values)
+scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
+scripts/delete-tenant.sh  <- Removes tenant from ApplicationSet + cleanup
+scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation Lambda fails
+scripts/setup-argocd.sh  <- ArgoCD via Helm
+scripts/setup-keda.sh  <- KEDA + HTTP Add-on
+scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
 scripts/lib/preflight.sh  <- Pre-flight checks (tools, AWS, cdk.json)
 scripts/lib/generate-config.sh  <- Interactive cdk.json generator
-scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (injects cdk.json values)
-scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
-scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
-scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation Lambda fails
+scripts/lib/common.sh  <- Shared helpers (require_cluster, get_output, log)
+setup.sh  <- One-command deployment (sources scripts/lib/preflight.sh + generate-config.sh)
 Makefile  <- Aggregate lint/test/validate targets for all components
-helm/tenants/values-template.yaml  <- Reference tenant Helm values
 auth-ui/index.html  <- SPA, config injected by deploy-auth-ui.sh via sed
 auth-ui/admin.html  <- Admin dashboard, same sed injection pattern
 ```
