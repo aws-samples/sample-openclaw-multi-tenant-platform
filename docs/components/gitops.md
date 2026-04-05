@@ -15,12 +15,12 @@ Tenant Provisioning:
          ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
 ```
 
-### What the Operator Creates Directly (SSA)
+### What ApplicationSet Creates
 
 | Resource | Function |
 |----------|----------|
-| Namespace (`openclaw-{tenant}`) | `ensure_namespace` |
-| ArgoCD Application (`tenant-{name}` in `argocd` ns) | `ensure_argocd_app` |
+| Namespace (`openclaw-{tenant}`) | ApplicationSet `managedNamespaceMetadata` + `CreateNamespace=true` |
+| ArgoCD Application (`{tenant}` in `argocd` ns) | ApplicationSet List generator |
 
 ### What ArgoCD Syncs (Helm Chart)
 
@@ -68,13 +68,13 @@ spec:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=false    # Operator already created the namespace
+      - CreateNamespace=true    # ApplicationSet creates the namespace
 ```
 
 Key points:
 - `fullnameOverride: {name}` -- all Helm resource names = tenant name
 - `selfHeal: true` -- ArgoCD reverts manual changes (including direct `helm upgrade`)
-- `CreateNamespace=false` -- namespace is created by the Operator, not ArgoCD
+- `CreateNamespace=true` -- ApplicationSet creates namespace with PSS labels
 
 ## ArgoCD as EKS Capability
 

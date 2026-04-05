@@ -156,7 +156,7 @@ Prevents one tenant from accessing another tenant's resources.
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
 
-**Operator**: `ensure_namespace` (creates Namespace). PVC and SA are managed by Helm/ArgoCD.
+**ApplicationSet**: creates Namespace (managedNamespaceMetadata). PVC and SA are managed by Helm/ArgoCD.
 
 **Helm chart templates**: `resourcequota.yaml`, `networkpolicy.yaml`, `pdb.yaml`
 

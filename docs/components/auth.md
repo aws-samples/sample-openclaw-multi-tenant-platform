@@ -14,8 +14,7 @@ User -> Custom Auth UI (auth-ui/index.html)
          |              -> Post-Confirmation Lambda:
          |                 a. Secrets Manager secret (gateway token)
          |                 b. Pod Identity Association
-         |                 c. ApplicationSet element -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
-         |                 d. SES welcome email
+         |                 c. ApplicationSet element -> ArgoCD -> Helm -> pod ready (~2 min)
          |
          +- Sign In -> Cognito InitiateAuth (USER_PASSWORD_AUTH)
                         -> Redirect to https://claw.{domain}/t/{tenant}/
@@ -49,7 +48,6 @@ Features: sign in/up tabs, forgot password, password strength indicator.
 1. Create Secrets Manager secret: `openclaw/{tenant}/gateway-token` (tagged for ABAC)
 2. Create EKS Pod Identity Association (namespace `openclaw-{tenant}`, SA `{tenant}`)
 3. Create ApplicationSet element -> ApplicationSet generates Applications (NS, PVC, SA, ArgoCD App, KEDA HSO)
-4. SNS notify admin + SES welcome email
 
 ## Gateway Auth Mode
 

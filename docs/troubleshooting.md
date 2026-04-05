@@ -35,45 +35,6 @@ See `scripts/provision-tenant.sh` for details and prerequisites.
 **Fix**: Delete the conflicting resource manually, then re-run `cdk deploy`.
 
 ---
-
-### Operator pod CrashLoopBackOff
-
-**Symptom**: `kubectl get pods -n openclaw-system` shows CrashLoopBackOff.
-
-**Cause**: Usually missing CRD or wrong image architecture.
-
-**Fix**:
-```bash
-# Check logs
-kubectl logs deployment/applicationset -n openclaw-system
-
-# Verify CRD exists
-kubectl get crd tenants.openclaw.io
-
-# Verify image architecture matches node
-kubectl get nodes -o jsonpath='{.items[0].status.nodeInfo.architecture}'
-# Should match the operator image (arm64 for Graviton, amd64 for x86)
-```
-
----
-
-### Operator env vars show placeholder values (DOMAIN, REGION)
-
-**Symptom**: `GATEWAY_DOMAIN=DOMAIN` instead of actual domain.
-
-**Cause**: `deploy-platform.sh` or `setup.sh` sed replacement didn't run, or `cdk.json` has empty values.
-
-**Fix**: The Operator code filters known placeholder values (`REGION`, `DOMAIN`, `COGNITO_POOL_ARN`, etc.) and treats them as empty. But for correct operation, patch the deployment:
-```bash
-kubectl set env deployment/applicationset -n openclaw-system \
-  GATEWAY_DOMAIN=<your-domain> \
-  AWS_REGION=<your-region>
-```
-
-**Prevention**: `deploy-platform.sh` now fails early if `cdk.json` values are empty.
-
----
-
 ## KEDA / Scale-to-Zero Issues
 
 ### Pods stuck at 0 replicas, never scale up
@@ -82,13 +43,13 @@ kubectl set env deployment/applicationset -n openclaw-system \
 
 **Cause**: Missing TargetGroupConfiguration for KEDA interceptor in `keda` namespace. Without it, ALB controller defaults to Instance target type, but the interceptor Service is ClusterIP.
 
-**Fix**: The Operator automatically creates the interceptor TGC. Verify it exists:
+**Fix**: The interceptor TGC is created by setup-keda.sh. Verify it exists:
 ```bash
 kubectl get targetgroupconfiguration -n keda
 # Should show: keda-interceptor-tg
 ```
 
-If missing, check Operator RBAC:
+If missing, check setup-keda.sh ran correctly:
 ```bash
 kubectl get clusterrole applicationset -o yaml | grep targetgroupconfigurations
 ```
@@ -101,7 +62,7 @@ kubectl get clusterrole applicationset -o yaml | grep targetgroupconfigurations
 
 **Cause**: Same as above — missing interceptor TGC. This error blocks the entire Gateway reconcile, affecting ALL tenants.
 
-**Fix**: Ensure the Operator has RBAC for `targetgroupconfigurations` and is running the latest image.
+**Fix**: Ensure the setup-keda.sh creates `targetgroupconfigurations` and is running the latest image.
 
 ---
 
@@ -111,7 +72,7 @@ kubectl get clusterrole applicationset -o yaml | grep targetgroupconfigurations
 
 **Cause**: KEDA modifies `spec.replicas` at runtime. ArgoCD sees the diff.
 
-**Fix**: The Operator sets `ignoreDifferences` for `/spec/replicas` on Deployments and `/spec/defaultConfiguration/healthCheckConfig/healthCheckInterval` on TargetGroupConfigurations. Verify the ArgoCD Application has these:
+**Fix**: The ApplicationSet sets `ignoreDifferences` for `/spec/replicas` on Deployments and `/spec/defaultConfiguration/healthCheckConfig/healthCheckInterval` on TargetGroupConfigurations. Verify the ArgoCD Application has these:
 ```bash
 kubectl get application tenant-<name> -n argocd -o jsonpath='{.spec.ignoreDifferences}' | python3 -m json.tool
 ```
@@ -192,31 +153,3 @@ aws ssm send-command --instance-ids <instance-id> \
 **Prevention**: Consider adding `RestartForceExitStatus=5` to the systemd service to auto-restart on SessionConflict.
 
 ---
-
-## Operator Status Issues
-
-### Tenant stuck in "Provisioning" phase
-
-**Symptom**: `kubectl get tenant <name> -n openclaw-system` shows `phase: Provisioning` even though pod is running.
-
-**Cause**: Operator requires both `ArgoSyncHealthy=True` AND `DeploymentAvailable=True` for Ready phase. Check conditions:
-```bash
-kubectl get tenant <name> -n openclaw-system -o jsonpath='{.status.conditions}' | python3 -m json.tool
-```
-
-Common blockers:
-- `ArgoSyncHealthy: False` — ArgoCD OutOfSync (see above)
-- `DeploymentAvailable: False` — Pod not running or KEDA scaled to 0
-
----
-
-### Tenant shows "Error" phase
-
-**Symptom**: `phase: Error` with `ReconcileError` condition.
-
-**Cause**: An ensure step failed (namespace, ArgoCD app, or ReferenceGrant creation).
-
-**Fix**: Read the error message in the condition, then check Operator logs:
-```bash
-kubectl logs deployment/applicationset -n openclaw-system --tail=20 | grep -i error
-```

@@ -19,9 +19,9 @@ Client -> ALB -> KEDA HTTP Interceptor Proxy -> Pod (0->1)
 
 ## HTTPScaledObject
 
-The KEDA HTTPScaledObject is created by the Helm chart (`templates/httpscaledobject.yaml`), synced by ArgoCD. The Operator passes `scaleToZero` settings via the ArgoCD Application helm values.
+The KEDA HTTPScaledObject is created by the Helm chart (`templates/httpscaledobject.yaml`), synced by ArgoCD. The ApplicationSet passes `scaleToZero` settings via Helm values.
 
-The Helm chart also has a template (`httpscaledobject.yaml`) for `scaleToZero.enabled = true`, but for ArgoCD-managed tenants the Operator's HSO takes precedence.
+The Helm chart also has a template (`httpscaledobject.yaml`) for `scaleToZero.enabled = true`, but the ApplicationSet Helm values control the HSO configuration.
 
 ```yaml
 apiVersion: http.keda.sh/v1alpha1
@@ -96,11 +96,11 @@ spec:
 | `alwaysOn: false` (default) | 0 | Stop when Pod scales down | Pay per use |
 | `alwaysOn: true` | 1 | Run 24/7 | ~$15-30/mo per tenant |
 
-The Operator passes `scaleToZero.enabled` and `scaleToZero.minReplicas` to the Helm chart via ArgoCD Application values, based on the ApplicationSet element `alwaysOn` field.
+The ApplicationSet passes `scaleToZero.enabled` and `scaleToZero.minReplicas` to the Helm chart via Application values.
 
 ## Manual Override
 
-> Note: For ArgoCD-managed tenants, direct `helm upgrade` changes will be reverted by ArgoCD's selfHeal. To change scale-to-zero settings, update the Operator's KEDA HSO logic or the ArgoCD Application values.
+> Note: For ArgoCD-managed tenants, direct `helm upgrade` changes will be reverted by ArgoCD's selfHeal. To change scale-to-zero settings, update the ApplicationSet Helm values.
 
 ## Prerequisites
 

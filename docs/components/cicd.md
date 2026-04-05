@@ -21,7 +21,7 @@ Tenant provisioning uses ArgoCD:
 2. ApplicationSet generates Applications: creates Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 3. ArgoCD syncs the Helm chart: creates Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
 
-For manual provisioning without Cognito, `create-tenant.sh` creates a ApplicationSet element directly (Operator + ArgoCD handle the rest).
+For manual provisioning without Cognito, `create-tenant.sh` creates a ApplicationSet element directly (ArgoCD handles the rest).
 
 ## Image Upgrade
 
