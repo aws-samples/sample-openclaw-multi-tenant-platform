@@ -8,6 +8,9 @@
 # Usage: bash scripts/setup-argocd.sh
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+require_cluster
+
 NAMESPACE="argocd"
 RELEASE="argocd"
 

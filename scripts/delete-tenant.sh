@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+require_cluster
+
 FORCE=false
-TENANT="" CLUSTER="openclaw-cluster" REGION="us-west-2"
+TENANT="" CLUSTER="openclaw-cluster"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="us-west-2"
+REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}"
 STACK="OpenClawEksStack"
 while [[ $# -gt 0 ]]; do
   case "$1" in
