@@ -90,7 +90,7 @@ cp cdk/cdk.json.example cdk/cdk.json
 
 ```bash
 cd cdk && npm install
-npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
+npx cdk deploy
 ```
 
 Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
