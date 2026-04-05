@@ -153,3 +153,40 @@ aws ssm send-command --instance-ids <instance-id> \
 **Prevention**: Consider adding `RestartForceExitStatus=5` to the systemd service to auto-restart on SessionConflict.
 
 ---
+
+---
+
+## Destroy / Redeploy Issues
+
+### `cdk destroy` takes a long time (30+ minutes)
+
+**Cause**: CDK's KubectlHandler Lambda tries to `kubectl delete` K8s resources, but may lose network connectivity if VPC/NAT is deleted first. Each Custom Resource can hang up to 1 hour.
+
+**Fix**: This is mitigated by `removalPolicy: RETAIN` on KubernetesManifest resources (PR #311). If you still see hangs on older deployments, use `--retain-resources` to skip stuck resources:
+
+```bash
+aws cloudformation delete-stack --stack-name OpenClawEksStack \
+  --retain-resources <stuck-resource-1> <stuck-resource-2>
+```
+
+### `cdk deploy` fails with "already exists" after failed destroy
+
+**Cause**: Previous `cdk destroy` used `--retain-resources` to skip stuck resources. IAM roles or EKS cluster remain in the account.
+
+**Fix**: Clean up orphan resources before redeploying:
+
+```bash
+# Check for orphan EKS cluster
+aws eks describe-cluster --name openclaw-cluster --query 'cluster.status' 2>/dev/null
+
+# Check for orphan IAM roles
+aws iam list-roles --query 'Roles[?contains(RoleName,`openclaw-cluster`)].RoleName' --output text
+
+# Delete orphan cluster (delete nodegroups first)
+aws eks delete-nodegroup --cluster-name openclaw-cluster --nodegroup-name <name>
+aws eks delete-cluster --name openclaw-cluster
+```
+
+### Retained resources after `cdk destroy`
+
+EFS file systems and S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
