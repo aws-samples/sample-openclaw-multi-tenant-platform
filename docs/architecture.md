@@ -58,7 +58,7 @@ ApplicationSet (generator)        ArgoCD (Helm sync)
 
 The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync enabled (prune + selfHeal), pointing to `helm/charts/openclaw-platform`.
 
-**Cleanup:** On ApplicationSet element deletion, the operator deletes the ArgoCD Application, the ReferenceGrant (if exists), then the namespace. Kubernetes cascades all resources inside the namespace.
+**Cleanup:** On ApplicationSet element deletion, ArgoCD deletes the Application and its managed resources, then the namespace is cleaned up. Kubernetes cascades all resources inside the namespace.
 
 ## EKS Cluster
 
@@ -99,7 +99,7 @@ EKS Cluster (v1.35)
 
 ## Status Conditions
 
-The operator updates `Tenant.status.conditions` during reconciliation:
+ArgoCD tracks sync status for each tenant Application:
 
 | Condition | Meaning |
 |-----------|--------|

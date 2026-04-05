@@ -41,7 +41,7 @@
 
 ### Create Tenant (Manual -- bypasses Cognito)
 
-`create-tenant.sh` creates a ApplicationSet element directly. The Operator then reconciles it (creates namespace, ArgoCD Application, etc.):
+`create-tenant.sh` creates a ApplicationSet element directly. ArgoCD then syncs the Helm chart (creates namespace, Deployment, Service, etc.):
 
 ```bash
 ./scripts/create-tenant.sh alice \
@@ -107,7 +107,7 @@ cd cdk && npx cdk deploy
 | Action | Automated | Manual |
 |--------|-----------|--------|
 | User signup | Cognito + Lambda | -- |
-| Tenant provisioning | Lambda -> ApplicationSet element -> Operator -> ArgoCD | -- |
+| Tenant provisioning | Lambda -> ApplicationSet element -> ArgoCD -> Helm | -- |
 | Welcome email | SES | -- |
 | Scale to zero / up | KEDA | -- |
 | PVC backup | AWS Backup / on-demand scripts | -- |
