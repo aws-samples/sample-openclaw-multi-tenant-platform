@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib/common.sh"
 require_cluster
 
 FORCE=false
-TENANT="" CLUSTER="openclaw-cluster"
+TENANT=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

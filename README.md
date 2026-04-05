@@ -98,7 +98,7 @@ Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, WAF, CloudWat
 #### 3. Setup ArgoCD
 
 ```bash
-aws eks update-kubeconfig --region <region> --name openclaw-cluster
+aws eks update-kubeconfig --region <region> --name <cluster-name>
 bash scripts/setup-argocd.sh
 ```
 

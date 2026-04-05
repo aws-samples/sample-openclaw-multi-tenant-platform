@@ -75,7 +75,7 @@ export class EksClusterStack extends cdk.Stack {
       vpc,
       version: eks.KubernetesVersion.V1_35,
       defaultCapacity: 0,
-      clusterName: 'openclaw-cluster',
+      clusterName: (this.node.tryGetContext('clusterName') as string) || 'openclaw-cluster',
       authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
       kubectlLayer: new KubectlV35Layer(this, 'KubectlLayer'),
       clusterLogging: [
@@ -580,7 +580,7 @@ export class EksClusterStack extends cdk.Stack {
       metric: new cloudwatch.Metric({
         namespace: 'ContainerInsights',
         metricName: 'pod_number_of_container_restarts',
-        dimensionsMap: { ClusterName: 'openclaw-cluster' },
+        dimensionsMap: { ClusterName: cluster.clusterName },
         period: cdk.Duration.seconds(300),
         statistic: 'Sum',
       }),
