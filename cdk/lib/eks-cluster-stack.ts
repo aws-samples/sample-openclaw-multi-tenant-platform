@@ -60,14 +60,14 @@ export class EksClusterStack extends cdk.Stack {
       ],
     });
 
-    // ── Cluster Access: allow deployer's SSO role to use kubectl ─────────
-    // Users must set CDK context 'ssoRoleArn' to their SSO role ARN.
-    // Example: cdk deploy -c ssoRoleArn=arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/MyRole
-    const ssoRoleArn = this.node.tryGetContext('ssoRoleArn');
-    if (ssoRoleArn) {
+    // ── Cluster Access: allow deployer to use kubectl ─────────
+    // Users must set 'deployerPrincipalArn' to their IAM principal ARN (SSO role, IAM role, or IAM user).
+    // Example: cdk deploy -c deployerPrincipalArn=arn:aws:iam::123456789012:role/MyRole
+    const deployerArn = this.node.tryGetContext('deployerPrincipalArn') || this.node.tryGetContext('ssoRoleArn');
+    if (deployerArn) {
       new eks.CfnAccessEntry(this, 'DeployerAccess', {
         clusterName: cluster.clusterName,
-        principalArn: ssoRoleArn,
+        principalArn: deployerArn,
         type: 'STANDARD',
         accessPolicies: [{
           accessScope: { type: 'cluster' },

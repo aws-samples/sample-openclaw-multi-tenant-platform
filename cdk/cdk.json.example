@@ -109,7 +109,7 @@
     "githubOwner": "your-org",
     "githubRepo": "openclaw-platform",
     "cloudfrontCertificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/xxx",
-    "ssoRoleArn": "arn:aws:iam::123456789012:role/your-sso-role",
+    "deployerPrincipalArn": "arn:aws:iam::123456789012:role/your-deployer-role",
     "sesFromEmail": "noreply@your-domain.com",
     "albClientId": "YOUR_ALB_CLIENT_ID",
     "openclawImage": "ghcr.io/openclaw/openclaw:latest",
