@@ -93,22 +93,30 @@ cd cdk && npm install
 npx cdk deploy -c ssoRoleArn=<your-sso-role-arn>
 ```
 
-Creates: EKS cluster, VPC, IAM roles, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
+Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
 
-#### 3. Deploy Platform
+#### 3. Setup ArgoCD
 
 ```bash
 aws eks update-kubeconfig --region <region> --name openclaw-cluster
+bash scripts/setup-argocd.sh
+```
+
+Installs ArgoCD via Helm. For production, consider EKS ArgoCD Capability (managed).
+
+#### 4. Deploy Platform
+
+```bash
 bash scripts/deploy-platform.sh
 ```
 
-`deploy-platform.sh` injects values from `cdk/cdk.json` into the ApplicationSet and Gateway manifests, then applies them.
+`deploy-platform.sh` creates the `openclaw-system` namespace, injects values from `cdk/cdk.json` into the ApplicationSet and Gateway manifests, then applies them.
 
 
 > **ECR Pull-Through Cache (optional)**: For production, you can enable ECR pull-through cache to avoid GHCR rate limits. Set `ghcrCredentialArn` in `cdk.json` -- see `cdk.json.example` for details.
 
 
-#### 4. Post-Deploy Setup
+#### 5. Post-Deploy Setup
 
 ```bash
 ./scripts/setup-keda.sh                    # Scale-to-zero
@@ -116,13 +124,13 @@ bash scripts/deploy-platform.sh
 
 Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all managed by CDK -- no manual setup needed.
 
-#### 5. Create First Tenant
+#### 6. Create First Tenant
 
 ```bash
 ./scripts/create-tenant.sh alice --email alice@example.com --display-name "Alice"
 ```
 
-#### 6. Finalize
+#### 7. Finalize
 
 ```bash
 ./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF->ALB

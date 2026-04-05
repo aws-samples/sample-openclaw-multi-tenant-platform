@@ -74,36 +74,26 @@ phase1_verify() {
 }
 
 phase2_run() {
-  echo "  Deploying ApplicationSet + Gateway..."
-  bash scripts/deploy-platform.sh
+  echo "  Installing ArgoCD via Helm..."
+  bash scripts/setup-argocd.sh
 }
 phase2_verify() {
-  kubectl get applicationset openclaw-tenants -n argocd --no-headers 2>/dev/null | grep -q openclaw-tenants
+  kubectl get crd applicationsets.argoproj.io &>/dev/null
 }
 
 phase3_run() {
-  bash scripts/setup-keda.sh
-  # Cognito triggers are now managed by CDK Custom Resource — no manual setup needed
+  echo "  Deploying ApplicationSet + Gateway..."
+  bash scripts/deploy-platform.sh
 }
 phase3_verify() {
-  kubectl get pods -n keda --no-headers 2>/dev/null | grep -q Running
+  kubectl get applicationset openclaw-tenants -n argocd --no-headers 2>/dev/null | grep -q openclaw-tenants
 }
 
 phase4_run() {
-  # Auth UI is now deployed by CDK BucketDeployment — no manual step needed
-  echo "  Auth UI deployed automatically by CDK (BucketDeployment + config.js)"
-  return 0
+  bash scripts/setup-keda.sh
 }
 phase4_verify() {
-  local domain
-  domain=$(node -e "console.log(require('./cdk/cdk.json').context.zoneName)" 2>/dev/null || echo "")
-  if [[ -z "$domain" ]]; then
-    echo "  (skipping URL check — domain not configured)"
-    return 0
-  fi
-  local code
-  code=$(curl -s -o /dev/null -w '%{http_code}' "https://${domain}/" 2>/dev/null || echo "000")
-  [[ "$code" == "200" || "$code" == "403" ]]
+  kubectl get pods -n keda --no-headers 2>/dev/null | grep -q Running
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────
@@ -140,9 +130,9 @@ fi
 echo ""
 echo "Phases:"
 echo "  1/4: Infrastructure (CDK)       ~15 min"
-echo "  2/4: Platform (ApplicationSet + Gateway)  ~1 min"
-echo "  3/4: Platform (KEDA + Cognito)  ~2 min"
-echo "  4/4: Auth UI                    ~1 min"
+echo "  2/4: ArgoCD (Helm)    ~3 min"
+echo "  3/4: Platform (ApplicationSet)  ~1 min"
+echo "  4/4: KEDA (scale-to-zero)       ~2 min"
 echo ""
 printf "Start? (Y/n) "
 read -r answer
@@ -152,9 +142,9 @@ if [[ "$answer" == "n" || "$answer" == "N" ]]; then
 fi
 
 run_phase 1 "Infrastructure (CDK)"      phase1_run phase1_verify
-run_phase 2 "Platform (ApplicationSet + Gateway)" phase2_run phase2_verify
-run_phase 3 "Platform (KEDA + Cognito)" phase3_run phase3_verify
-run_phase 4 "Auth UI"                   phase4_run phase4_verify
+run_phase 2 "ArgoCD (Helm)" phase2_run phase2_verify
+run_phase 3 "Platform (ApplicationSet + Gateway)" phase3_run phase3_verify
+run_phase 4 "KEDA (scale-to-zero)" phase4_run phase4_verify
 
 END_TIME=$(date +%s)
 ELAPSED=$(( END_TIME - START_TIME ))

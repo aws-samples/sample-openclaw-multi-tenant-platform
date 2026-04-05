@@ -49,6 +49,7 @@ The fetch-secret script uses `TENANT_NAMESPACE` env var (Kubernetes downward API
 
 | Role | Type | Purpose |
 |------|------|---------|
+| `EKSArgoCDCapabilityRole` | EKS Capability | ArgoCD EKS Capability (trust: `capabilities.eks.amazonaws.com`) |
 | `EbsCsiDriverRole` | Pod Identity | EBS CSI driver (`AmazonEBSCSIDriverPolicy`) |
 | `EfsCsiDriverRole` | Pod Identity | EFS CSI driver (`AmazonEFSCSIDriverPolicy`) |
 | `CwObservabilityRole` | Pod Identity | CloudWatch agent + X-Ray |
