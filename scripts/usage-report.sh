@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}"
 MONTH=$(date -d "$(date +%Y-%m-01) -1 day" +%Y-%m 2>/dev/null || date -v-1m +%Y-%m)
 while [[ $# -gt 0 ]]; do
@@ -11,7 +13,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LOG_GROUP="/aws/containerinsights/openclaw-cluster/application"
+LOG_GROUP="/aws/containerinsights/${CLUSTER}/application"
 START=$(date -d "${MONTH}-01" +%s 2>/dev/null || date -jf "%Y-%m-%d" "${MONTH}-01" +%s)
 END=$(date -d "${MONTH}-01 +1 month" +%s 2>/dev/null || date -v+1m -jf "%Y-%m-%d" "${MONTH}-01" +%s)
 

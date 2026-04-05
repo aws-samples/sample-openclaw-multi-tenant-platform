@@ -99,6 +99,7 @@
     "@aws-cdk/aws-elasticloadbalancingv2:networkLoadBalancerWithSecurityGroupByDefault": true,
     "@aws-cdk/aws-ecs-patterns:uniqueTargetGroupId": true,
     "@aws-cdk/aws-route53-patterns:useDistribution": true,
+    "clusterName": "openclaw-cluster",
     "hostedZoneId": "<HOSTED_ZONE_ID>",
     "zoneName": "your-domain.com",
     "certificateArn": "arn:aws:acm:us-west-2:123456789012:certificate/xxx",

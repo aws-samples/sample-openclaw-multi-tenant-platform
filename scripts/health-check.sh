@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CLUSTER="openclaw-cluster"
+source "$(dirname "$0")/lib/common.sh"
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}"
 STATUS="healthy"
 COMPONENTS="{}"

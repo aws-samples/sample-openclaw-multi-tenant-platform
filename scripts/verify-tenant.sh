@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "$0")/lib/common.sh"
+
 TENANT="${1:?Usage: $0 <tenant-name> [--region <region>]}"
 REGION="${3:-us-west-2}"
 NAMESPACE="openclaw-${TENANT}"
@@ -42,7 +44,7 @@ check "PVC bound" bash -c "kubectl get pvc -n ${NAMESPACE} ${RELEASE} -o jsonpat
 echo ""
 echo "--- IAM & Secrets ---"
 check "ServiceAccount exists" kubectl get sa -n "${NAMESPACE}" "${RELEASE}"
-check "Pod Identity association" aws eks list-pod-identity-associations --region "${REGION}" --cluster-name openclaw-cluster --namespace "${NAMESPACE}" --query 'associations[0].associationId' --output text
+check "Pod Identity association" aws eks list-pod-identity-associations --region "${REGION}" --cluster-name "${CLUSTER}" --namespace "${NAMESPACE}" --query 'associations[0].associationId' --output text
 check "Secret accessible" aws secretsmanager get-secret-value --region "${REGION}" --secret-id "openclaw/${TENANT}/gateway-token" --query 'Name' --output text
 
 # 5. Gateway health (port-forward + curl)
