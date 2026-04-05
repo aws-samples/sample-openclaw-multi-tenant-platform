@@ -159,7 +159,7 @@ config:
   models:
     bedrockDiscovery:
       enabled: true
-      region: us-west-2
+      region: ""  # Injected by ApplicationSet from deploy-platform.sh
   
   session:
     scope: per-sender

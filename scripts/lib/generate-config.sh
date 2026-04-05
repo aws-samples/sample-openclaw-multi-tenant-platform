@@ -53,7 +53,7 @@ generate_config() {
   cp "$TEMPLATE" "$TARGET"
 
   # Required values
-  local domain hosted_zone cert_arn cf_cert_arn cognito_pool cognito_client cognito_domain allowed_domains sso_role
+  local domain hosted_zone cert_arn cf_cert_arn cognito_pool cognito_client cognito_domain allowed_domains deployer_arn
 
   read -rp "  Domain name (e.g., platform.company.com): " domain
   read -rp "  Hosted Zone ID: " hosted_zone
@@ -63,7 +63,7 @@ generate_config() {
   read -rp "  Cognito App Client ID: " cognito_client
   read -rp "  Cognito domain prefix: " cognito_domain
   read -rp "  Allowed email domains (comma-separated): " allowed_domains
-  read -rp "  SSO Role ARN for kubectl access: " sso_role
+  read -rp "  Deployer IAM Principal ARN (SSO role, IAM role, or IAM user): " deployer_arn
 
   echo ""
   echo "Optional (press Enter for defaults):"
@@ -84,7 +84,7 @@ generate_config() {
   COGNITO_CLIENT="$cognito_client" \
   COGNITO_DOMAIN="$cognito_domain" \
   ALLOWED_DOMAINS="$allowed_domains" \
-  SSO_ROLE="$sso_role" \
+  DEPLOYER_ARN="$deployer_arn" \
   GITHUB_OWNER="$github_owner" \
   GITHUB_REPO="$github_repo" \
   OPENCLAW_IMAGE="$openclaw_image" \
@@ -100,7 +100,7 @@ generate_config() {
     c.cognitoClientId = process.env.COGNITO_CLIENT;
     c.cognitoDomain = process.env.COGNITO_DOMAIN;
     c.allowedEmailDomains = process.env.ALLOWED_DOMAINS;
-    c.ssoRoleArn = process.env.SSO_ROLE;
+    c.deployerPrincipalArn = process.env.DEPLOYER_ARN;
     c.githubOwner = process.env.GITHUB_OWNER;
     c.githubRepo = process.env.GITHUB_REPO;
     c.openclawImage = process.env.OPENCLAW_IMAGE;
