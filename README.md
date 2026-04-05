@@ -218,7 +218,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 ```bash
 # 1. Delete all tenants
 for tenant in $(kubectl get applicationset openclaw-tenants -n argocd -o jsonpath='{.spec.generators[0].list.elements[*].name}'); do
-  ./scripts/delete-tenant.sh "$tenant" --yes
+  ./scripts/delete-tenant.sh "$tenant" --force
 done
 
 # 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh, not CDK-managed)
@@ -226,9 +226,21 @@ done
 # 3. Destroy CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack
 
-# 4. Clean up orphan resources
+# 4. Clean up retained resources (not deleted by CDK — data protection)
 ./scripts/cleanup-test-resources.sh
 ```
+
+> **Retained resources**: EFS file systems and S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
+>
+> ```bash
+> # List retained EFS (check for tenant data before deleting)
+> aws efs describe-file-systems --query 'FileSystems[?contains(Name,`TenantEfs`)].FileSystemId' --output text
+>
+> # List retained S3 buckets
+> aws s3api list-buckets --query 'Buckets[?contains(Name,`openclaweks`)].Name' --output text
+> ```
+>
+> Delete manually after confirming no data is needed.
 
 ## Upgrading
 
