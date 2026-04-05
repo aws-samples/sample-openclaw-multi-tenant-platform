@@ -39,16 +39,40 @@ fi
 echo ""
 echo "==> Deleting tenant: ${TENANT}"
 
-# 1. ArgoCD Application (if exists)
-ARGO_APP="values-${TENANT}"
-echo "  → Deleting ArgoCD Application: ${ARGO_APP}"
-kubectl delete application "${ARGO_APP}" -n argocd --ignore-not-found 2>/dev/null || echo "    (ArgoCD app not found, skipping)"
+# 1. Remove element from ApplicationSet (must be first — otherwise ApplicationSet recreates everything)
+echo "  → Removing from ApplicationSet"
+APPSET=$(kubectl get applicationset openclaw-tenants -n argocd -o json 2>/dev/null)
+if [[ -z "${APPSET}" ]]; then
+  echo "    ⚠️ ApplicationSet not found — skipping element removal"
+else
+  UPDATED=$(echo "$APPSET" | TENANT="$TENANT" python3 -c "
+import json, sys, os
+try:
+    d = json.load(sys.stdin)
+    elements = d['spec']['generators'][0]['list']['elements']
+    before = len(elements)
+    d['spec']['generators'][0]['list']['elements'] = [e for e in elements if e.get('name') != os.environ['TENANT']]
+    after = len(d['spec']['generators'][0]['list']['elements'])
+    if before == after:
+        print(f'WARNING: tenant {os.environ[\"TENANT\"]} not in ApplicationSet', file=sys.stderr)
+    json.dump(d, sys.stdout)
+except Exception as e:
+    print(f'ERROR: {e}', file=sys.stderr)
+    sys.exit(1)
+")
+  if [[ -z "${UPDATED}" ]]; then
+    echo "    ❌ Failed to update ApplicationSet. Aborting to prevent resurrection."
+    exit 1
+  fi
+  echo "$UPDATED" | kubectl apply -f -
+  echo "    ✅ Element removed from ApplicationSet"
+fi
 
-# 2. Helm uninstall
-echo "  → Helm uninstalling ${RELEASE}"
-helm uninstall "${RELEASE}" --namespace "${NAMESPACE}" 2>/dev/null || echo "    (release not found, skipping)"
+# 2. ArgoCD Application (Delete=false means removing element doesn't auto-delete)
+echo "  → Deleting ArgoCD Application: ${TENANT}"
+kubectl delete application "${TENANT}" -n argocd --ignore-not-found 2>/dev/null || echo "    (ArgoCD app not found, skipping)"
 
-# 3. Delete namespace (PVCs deleted with it)
+# 3. Delete namespace (PVCs deleted with it → CSI deletes EFS access point)
 echo "  → Deleting namespace ${NAMESPACE} (includes PVCs)"
 kubectl delete namespace "${NAMESPACE}" --ignore-not-found --timeout=120s
 
@@ -98,6 +122,6 @@ echo "=== Tenant Deleted ==="
 echo "  Namespace:  ${NAMESPACE}"
 echo "  Release:    ${RELEASE}"
 echo "  Secret:     ${SECRET_ID}"
-echo "  ArgoCD:     ${ARGO_APP}"
+echo "  ArgoCD:     ${TENANT} (removed from ApplicationSet)"
 echo "  Values:     ${TENANT_VALUES}"
 echo "======================"
