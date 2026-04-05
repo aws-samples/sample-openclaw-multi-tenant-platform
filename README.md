@@ -219,7 +219,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 
 ```bash
 # 1. Delete all tenants
-for tenant in $(kubectl get tenants -o jsonpath='{.items[*].metadata.name}'); do
+for tenant in $(kubectl get applicationset openclaw-tenants -n argocd -o jsonpath='{.spec.generators[0].list.elements[*].name}'); do
   ./scripts/delete-tenant.sh "$tenant" --yes
 done
 
