@@ -810,20 +810,6 @@ export class EksClusterStack extends cdk.Stack {
       username: 'lambda-post-confirm',
     });
 
-    // ── IAM: EBS Snapshot (for PVC backup CronJob) ──────────────────────────
-    const snapshotRole = new iam.Role(this, 'EbsSnapshotRole', {
-      roleName: `EbsSnapshotRole-${cluster.clusterName}`,
-      assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
-    });
-    snapshotRole.assumeRolePolicy!.addStatements(new iam.PolicyStatement({
-      actions: ['sts:TagSession'],
-      principals: [new iam.ServicePrincipal('pods.eks.amazonaws.com')],
-    }));
-    snapshotRole.addToPrincipalPolicy(new iam.PolicyStatement({
-      actions: ['ec2:CreateSnapshot', 'ec2:DeleteSnapshot', 'ec2:DescribeSnapshots', 'ec2:DescribeVolumes', 'ec2:CreateTags'],
-      resources: ['*'],
-    }));
-
     // ── CloudFront + WAF ────────────────────────────────────────────────────
     const enableBotControl = this.node.tryGetContext('enableBotControl') === true;
 
@@ -1030,7 +1016,6 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ErrorPagesBucketName', { value: errorPagesBucket.bucketName });
     new cdk.CfnOutput(this, 'PreSignupFnArn', { value: preSignupFn.functionArn });
     new cdk.CfnOutput(this, 'PostConfirmFnArn', { value: postConfirmFn.functionArn });
-    new cdk.CfnOutput(this, 'EbsSnapshotRoleArn', { value: snapshotRole.roleArn });
     new cdk.CfnOutput(this, 'AuthUiBucketName', { value: authUiBucket.bucketName });
     new cdk.CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
     new cdk.CfnOutput(this, 'WafAclArn', { value: wafAcl.attrArn });

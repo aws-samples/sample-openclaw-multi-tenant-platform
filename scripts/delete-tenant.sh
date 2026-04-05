@@ -21,13 +21,11 @@ NAMESPACE="openclaw-${TENANT}"
 RELEASE="openclaw-${TENANT}"
 SECRET_ID="openclaw/${TENANT}/gateway-token"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-TENANT_VALUES="${REPO_DIR}/helm/tenants/values-${TENANT}.yaml"
 
 echo "==> About to delete tenant: ${TENANT}"
 echo "  Namespace:  ${NAMESPACE}"
 echo "  Release:    ${RELEASE}"
 echo "  Secret:     ${SECRET_ID}"
-echo "  Values:     ${TENANT_VALUES}"
 echo ""
 
 # Confirmation
@@ -104,8 +102,6 @@ aws secretsmanager delete-secret \
   --force-delete-without-recovery 2>/dev/null || echo "    (secret not found, skipping)"
 
 # 6. Tenant values file
-echo "  → Deleting values file: ${TENANT_VALUES}"
-rm -f "${TENANT_VALUES}"
 
 # 7. Verify
 echo ""
@@ -123,5 +119,4 @@ echo "  Namespace:  ${NAMESPACE}"
 echo "  Release:    ${RELEASE}"
 echo "  Secret:     ${SECRET_ID}"
 echo "  ArgoCD:     ${TENANT} (removed from ApplicationSet)"
-echo "  Values:     ${TENANT_VALUES}"
 echo "======================"
