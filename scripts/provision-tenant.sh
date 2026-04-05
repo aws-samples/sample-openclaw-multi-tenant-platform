@@ -25,7 +25,7 @@ USERNAME="${3:-$EMAIL}"
 NS="openclaw-${TENANT}"
 
 # --- Resolve cluster config from CDK outputs ---
-STACK_NAME="${STACK_NAME:-OpenClawEksClusterStack}"
+STACK_NAME="${STACK_NAME:-OpenClawEksStack}"
 REGION="${AWS_REGION:-us-west-2}"
 
 get_output() {
