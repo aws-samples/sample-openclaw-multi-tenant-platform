@@ -13,7 +13,7 @@
    -> Post-confirmation Lambda:
      a. Secrets Manager secret
      b. Pod Identity Association
-     c. ApplicationSet element -> Operator -> ArgoCD -> Helm -> pod ready (~2 min)
+     c. ApplicationSet element -> ArgoCD -> Helm -> pod ready (~2 min)
      d. SES welcome email
 
 4. User receives email: "Your URL is claw.your-domain.com/t/alice/"
