@@ -442,10 +442,10 @@ export class EksClusterStack extends cdk.Stack {
     nodePool.node.addDependency(nodeClass);
 
     // ── ArgoCD ────────────────────────────────────────────────────────────
-    // Managed via EKS Capability (not Helm chart). Created by:
-    //   aws eks create-capability --type ARGOCD --cluster-name <cluster>
-    // See scripts/setup-argocd.sh and docs/argocd.md for details.
-    // EKS Capability provides: fully managed ArgoCD, hosted UI, AWS Identity Center auth.
+    // Installed via Helm (scripts/setup-argocd.sh). For production, consider EKS Capability:
+    //   aws eks create-capability --type ARGOCD (requires AWS Identity Center)
+    // See scripts/setup-argocd.sh for details.
+    // EKS Capability provides: fully managed ArgoCD, automatic upgrades, Identity Center auth.
 
     // ── Shared Tenant IAM Role ──────────────────────────────────────────────
     const tenantRole = new iam.Role(this, 'TenantRole', {
