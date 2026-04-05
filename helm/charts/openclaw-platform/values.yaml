@@ -1,5 +1,5 @@
 # Override the Helm fullname (default: {release}-{chart}).
-# The Operator sets this to the tenant name so that resource names
+# The ApplicationSet sets this to the tenant name so that resource names
 # (Deployment, ConfigMap, Secret ref) match the Lambda naming convention.
 fullnameOverride: ""
 
