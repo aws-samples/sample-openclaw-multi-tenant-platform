@@ -34,7 +34,7 @@ get_output() {
 }
 
 CLUSTER_NAME="${CLUSTER_NAME:-$(get_output ClusterName)}"
-USER_POOL_ID="${USER_POOL_ID:-$(get_output UserPoolId)}"
+USER_POOL_ID="${USER_POOL_ID:-$(get_output CognitoPoolId)}"
 TENANT_ROLE_ARN="${TENANT_ROLE_ARN:-$(get_output TenantRoleArn)}"
 
 if [[ -z "$CLUSTER_NAME" || -z "$USER_POOL_ID" || -z "$TENANT_ROLE_ARN" ]]; then
