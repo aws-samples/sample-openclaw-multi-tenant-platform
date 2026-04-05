@@ -26,7 +26,6 @@ What happened instead?
 ## Environment
 
 - EKS cluster region: 
-- Operator image tag: 
 - OpenClaw version: 
 - Node architecture (arm64/amd64): 
 
