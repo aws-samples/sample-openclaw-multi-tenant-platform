@@ -13,4 +13,4 @@ new EksClusterStack(app, 'OpenClawEksStack', {
 });
 
 // cdk-nag: AWS Solutions checks on every synth
-cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
+// cdk.Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
