@@ -745,10 +745,35 @@ export class EksClusterStack extends cdk.Stack {
       ]),
     });
 
+    // ── Cognito: Ensure custom attributes exist in pool schema ────────────
+    // The pool is imported (not CDK-managed), so custom attributes must be
+    // added explicitly. ignoreErrorCodesMatching handles the already-exists case.
+    const cognitoCustomAttrs = new cr.AwsCustomResource(this, 'CognitoCustomAttrs', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'addCustomAttributes',
+        parameters: {
+          UserPoolId: cognitoPoolId,
+          CustomAttributes: [
+            { Name: 'gateway_token', AttributeDataType: 'String', Mutable: true },
+            { Name: 'tenant_name', AttributeDataType: 'String', Mutable: true },
+          ],
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-custom-attrs'),
+        ignoreErrorCodesMatching: 'InvalidParameterException',
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:AddCustomAttributes'],
+          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+        }),
+      ]),
+    });
+
     // ── Cognito: App Client ReadAttributes (include custom:gateway_token) ───
     // Without explicit ReadAttributes, custom attributes are NOT included in
     // ID token claims. This ensures auth-ui can read the gateway token.
-    new cr.AwsCustomResource(this, 'CognitoClientAttributes', {
+    const cognitoClientAttrs = new cr.AwsCustomResource(this, 'CognitoClientAttributes', {
       onCreate: {
         service: 'CognitoIdentityServiceProvider',
         action: 'updateUserPoolClient',
@@ -778,6 +803,7 @@ export class EksClusterStack extends cdk.Stack {
         }),
       ]),
     });
+    cognitoClientAttrs.node.addDependency(cognitoCustomAttrs);
 
     cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
       groups: ['system:masters'],

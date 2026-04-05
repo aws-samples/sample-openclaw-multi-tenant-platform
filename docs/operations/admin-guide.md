@@ -109,7 +109,7 @@ cd cdk && npx cdk deploy
 | Tenant provisioning | Lambda -> ApplicationSet element -> Operator -> ArgoCD | -- |
 | Welcome email | SES | -- |
 | Scale to zero / up | KEDA | -- |
-| PVC backup | CronJob (daily) | -- |
+| PVC backup | AWS Backup / on-demand scripts | -- |
 | Image update check | CronJob (6h) | Admin reviews |
 | Cost budget alert | Lambda (daily) | Admin decides |
 | Tenant deletion | -- | `delete-tenant.sh` |

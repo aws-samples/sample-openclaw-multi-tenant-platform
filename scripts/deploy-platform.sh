@@ -50,6 +50,18 @@ sed \
   -e "s|\"COGNITO_DOMAIN\"|\"${COGNITO_DOMAIN}\"|g" \
   helm/applicationset.yaml | kubectl apply -f -
 
+echo "==> Ensuring openclaw-system namespace (with Pod Security Standards)"
+kubectl apply -f - <<'NS'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: openclaw-system
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
+NS
+
 echo "==> Deploying Gateway API resources (patching domain + prefix list)"
 CF_PREFIX_LIST=$(aws ec2 describe-managed-prefix-lists \
   --filters Name=prefix-list-name,Values=com.amazonaws.global.cloudfront.origin-facing \
