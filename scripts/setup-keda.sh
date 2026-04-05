@@ -22,7 +22,10 @@ echo "  Step 2: Install KEDA"
 run helm upgrade --install keda kedacore/keda --namespace keda --create-namespace --wait --timeout 120s
 
 echo "  Step 3: Install HTTP Add-on"
-run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 120s
+run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 120s \
+  --set interceptor.replicas.min=1 \
+  --set interceptor.replicas.max=1 \
+  --set scaler.replicas=1
 
 echo "  Step 4: Verify"
 if ! $DRY_RUN; then
