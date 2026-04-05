@@ -13,10 +13,10 @@ The PostConfirmation Lambda may have failed partway through. The user exists in 
 **Diagnose:**
 ```bash
 # Check if ApplicationSet element exists
-kubectl get tenant -n openclaw-system | grep <tenant-id>
+kubectl get applicationset openclaw-tenants -n argocd -o json | python3 -c "import json,sys; [print(e['name']) for e in json.load(sys.stdin).get('spec',{}).get('generators',[{}])[0].get('list',{}).get('elements',[])]" | grep <tenant-id>
 
 # Check Lambda logs
-aws logs tail /aws/lambda/OpenClaw-PostConfirmation --since 1h --region us-west-2
+aws logs tail /aws/lambda/OpenClaw-PostConfirmation --since 1h
 ```
 
 **Fix:** Run the manual provisioning script:

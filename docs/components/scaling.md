@@ -79,16 +79,13 @@ EFS billed per actual usage ($0.30/GB standard, $0.025/GB IA after 30d). No fixe
 
 By default, tenant Pods scale to zero after 15 minutes of no HTTP traffic. This is ideal for interactive workspaces but breaks background tasks like OpenClaw cron jobs, which run inside the gateway process and don't generate external HTTP requests.
 
-Set `alwaysOn: true` in the ApplicationSet element spec to keep the Pod running 24/7:
+Set `alwaysOn: true` in the ApplicationSet element to keep the Pod running 24/7. Edit the element in the ApplicationSet:
 
-```yaml
-apiVersion: argoproj.io/v1alpha1
-kind: Tenant
-metadata:
-  name: my-tenant
-spec:
-  alwaysOn: true   # keeps minReplicas=1, Pod never scales to zero
-  # ...
+```bash
+# In the ApplicationSet element for the tenant, add:
+#   "alwaysOn": "true"
+# The Helm chart maps this to scaleToZero.minReplicas=1
+kubectl edit applicationset openclaw-tenants -n argocd
 ```
 
 | Mode | minReplicas | Cron jobs | Cost |
