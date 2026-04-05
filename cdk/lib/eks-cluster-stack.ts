@@ -30,7 +30,6 @@ export class EksClusterStack extends cdk.Stack {
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
     if (!this.node.tryGetContext('@ci-synth')) {
       const requiredContext: Record<string, string> = {
-        hostedZoneId: 'Route53 Hosted Zone ID',
         zoneName: 'Domain name (e.g., example.com)',
         certificateArn: 'ACM certificate ARN (deployment region)',
         cognitoPoolId: 'Cognito User Pool ID',
@@ -546,10 +545,6 @@ export class EksClusterStack extends cdk.Stack {
     const githubOwner = this.node.tryGetContext('githubOwner') || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'openclaw-platform';
 
-    const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
-      hostedZoneId: this.node.tryGetContext('hostedZoneId') || '',
-      zoneName: domainName,
-    });
 
     const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate',
       this.node.tryGetContext('certificateArn') || '',
