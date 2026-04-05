@@ -82,7 +82,7 @@ export class EksClusterStack extends cdk.Stack {
       amiType: eks.NodegroupAmiType.AL2023_ARM_64_STANDARD,
       minSize: 1,
       maxSize: 5,
-      desiredSize: 2,
+      desiredSize: 3,
       nodegroupName: 'system-graviton',
       labels: { role: 'system' },
     });
