@@ -58,6 +58,10 @@ spec:
               domain: "DOMAIN"
               gatewayName: openclaw-gateway
               gatewayNamespace: openclaw-system
+            config:
+              models:
+                bedrockDiscovery:
+                  region: "BEDROCK_REGION"
               cognito:
                 enabled: true
                 clientId: "COGNITO_CLIENT_ID"

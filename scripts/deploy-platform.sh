@@ -48,6 +48,7 @@ sed \
   -e "s|\"COGNITO_POOL_ARN\"|\"${COGNITO_POOL_ARN}\"|g" \
   -e "s|\"COGNITO_CLIENT_ID\"|\"${COGNITO_CLIENT_ID}\"|g" \
   -e "s|\"COGNITO_DOMAIN\"|\"${COGNITO_DOMAIN}\"|g" \
+  -e "s|\"BEDROCK_REGION\"|\"${REGION}\"|g" \
   helm/applicationset.yaml | kubectl apply -f -
 
 echo "==> Installing Gateway API CRDs (required by ALB Controller)"
