@@ -38,7 +38,7 @@ The tenant name (e.g., `alice`) is the single input; all other names are derived
 | Component | Creates |
 |-----------|---------|
 | PostConfirmation Lambda | SM Secret, Pod Identity Association, ApplicationSet element, K8s gateway-token Secret |
-| Operator (5 ensure_* functions) | Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO |
+| ArgoCD ApplicationSet + Helm | Namespace, PVC, ServiceAccount, Deployment, Service, ConfigMap, NetworkPolicy, HTTPRoute |
 | ArgoCD (syncs Helm chart) | Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration |
 | create-tenant.sh (manual) | ApplicationSet element only (Operator + ArgoCD handle the rest) |
 | provision-tenant.sh (recovery) | Pod Identity, SM Secret, Cognito attributes, ApplicationSet element, K8s gateway-token Secret |

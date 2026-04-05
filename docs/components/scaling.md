@@ -50,7 +50,7 @@ spec:
 ```
 
 **Constraints:**
-- PVC is `ReadWriteOnce` -- only one pod can mount it -> `maxReplicas` must be 1
+- PVC is `ReadWriteMany` (EFS) -- supports multi-AZ scheduling. `maxReplicas` is 1 because OpenClaw is single-instance by design
 - HPA and HTTPScaledObject are mutually exclusive
 
 ## Cold Start

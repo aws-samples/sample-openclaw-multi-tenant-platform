@@ -140,7 +140,7 @@ fi
 echo ""
 echo "Phases:"
 echo "  1/4: Infrastructure (CDK)       ~15 min"
-echo "  2/4: Operator (build + deploy)  ~3 min"
+echo "  2/4: Platform (ApplicationSet + Gateway)  ~1 min"
 echo "  3/4: Platform (KEDA + Cognito)  ~2 min"
 echo "  4/4: Auth UI                    ~1 min"
 echo ""
@@ -152,7 +152,7 @@ if [[ "$answer" == "n" || "$answer" == "N" ]]; then
 fi
 
 run_phase 1 "Infrastructure (CDK)"      phase1_run phase1_verify
-run_phase 2 "Operator (build + deploy)" phase2_run phase2_verify
+run_phase 2 "Platform (ApplicationSet + Gateway)" phase2_run phase2_verify
 run_phase 3 "Platform (KEDA + Cognito)" phase3_run phase3_verify
 run_phase 4 "Auth UI"                   phase4_run phase4_verify
 
