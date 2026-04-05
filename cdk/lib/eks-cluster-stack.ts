@@ -169,6 +169,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // gp3 StorageClass — kept for backward compatibility during EFS migration
     new eks.KubernetesManifest(this, 'Gp3StorageClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'storage.k8s.io/v1',
@@ -220,6 +221,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // efs-sc StorageClass — dynamic provisioning creates per-tenant access points
     const efsStorageClass = new eks.KubernetesManifest(this, 'EfsStorageClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'storage.k8s.io/v1',
@@ -252,6 +254,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── Pod Security Standards ─────────────────────────────────────────────
     new eks.KubernetesManifest(this, 'PodSecurityStandards', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'v1',
@@ -356,6 +359,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // Namespace (must exist before SA)
     const karpenterNs = new eks.KubernetesManifest(this, 'KarpenterNs', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'v1',
@@ -418,6 +422,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // EC2NodeClass — use internal-elb tag for private subnets, cluster SG tag for security groups
     const nodeClass = new eks.KubernetesManifest(this, 'KarpenterNodeClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'karpenter.k8s.aws/v1',
@@ -440,6 +445,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // NodePool
     const nodePool = new eks.KubernetesManifest(this, 'KarpenterNodePool', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       cluster,
       manifest: [{
         apiVersion: 'karpenter.sh/v1',
