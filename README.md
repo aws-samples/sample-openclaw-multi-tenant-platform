@@ -189,12 +189,10 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 | [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, WAF |
 | [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
-| [GitOps](docs/components/gitops.md) | ArgoCD manages tenant resources via Helm chart |
-| [ApplicationSet](docs/components/applicationset.md) | Multi-tenant ArgoCD generator, tenant lifecycle |
+| [GitOps](docs/components/gitops.md) | ArgoCD + ApplicationSet, tenant lifecycle |
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
 | [User Guide](docs/operations/user-guide.md) | Signup, login, daily use |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues and fixes |
-| [ADRs](docs/adr.md) | Architecture decision records |
 
 ## Project Structure
 
