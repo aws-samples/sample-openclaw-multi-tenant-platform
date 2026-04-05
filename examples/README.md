@@ -16,6 +16,8 @@ kubectl get applications -n argocd -l openclaw.io/tenant
 
 ## Remove a Tenant
 
-Remove a tenant element from the ApplicationSet. ArgoCD will prune the Application and all resources.
+```bash
+./scripts/delete-tenant.sh alice
+```
 
-> **Note:** PVC data is retained by default (`Delete=false`). To fully clean up, also delete the namespace: `kubectl delete namespace openclaw-alice`
+This removes the ApplicationSet element, ArgoCD Application, namespace (including PVC), Pod Identity association, and Secrets Manager secret.

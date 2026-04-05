@@ -12,12 +12,11 @@ Key implementation details.
 
 ## Testing
 
-- [ ] `cargo clippy -- -D warnings` passes
-- [ ] `cargo test --lib` passes
-- [ ] `python3 -m pytest cdk/lambda/pre-signup/test_index.py` passes
-- [ ] `python3 -m pytest cdk/lambda/post-confirmation/test_index.py` passes
-- [ ] `helm lint helm/charts/openclaw-platform/` passes
+- [ ] `cd cdk && npx tsc --noEmit` passes (if CDK changes)
 - [ ] `cd cdk && npx jest` passes (if CDK changes)
+- [ ] `helm lint helm/charts/openclaw-platform/` passes (if Helm changes)
+- [ ] `bash -n scripts/*.sh` passes (if script changes)
+- [ ] `python3 -m py_compile cdk/lambda/*/index.py` passes (if Lambda changes)
 
 ## Checklist
 
