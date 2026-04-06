@@ -195,6 +195,16 @@ export class EksClusterStack extends cdk.Stack {
     });
     fileSystem.connections.allowFrom(cluster, ec2.Port.tcp(2049), 'EKS nodes to EFS NFS');
 
+    // denyAnonymousAccess feature flag creates a policy missing ClientMount.
+    // EFS CSI driver needs ClientMount to mount access points.
+    fileSystem.addToResourcePolicy(new iam.PolicyStatement({
+      actions: ['elasticfilesystem:ClientMount'],
+      principals: [new iam.AnyPrincipal()],
+      conditions: {
+        Bool: { 'elasticfilesystem:AccessedViaMountTarget': 'true' },
+      },
+    }));
+
     // ── EFS CSI Driver (with Pod Identity IAM) ──────────────────────────────
     const efsCsiRole = new iam.Role(this, 'EfsCsiRole', {
       roleName: `EfsCsiDriverRole-${cluster.clusterName}`,

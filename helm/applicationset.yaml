@@ -58,15 +58,15 @@ spec:
               domain: "DOMAIN"
               gatewayName: openclaw-gateway
               gatewayNamespace: openclaw-system
-            config:
-              models:
-                bedrockDiscovery:
-                  region: "BEDROCK_REGION"
               cognito:
                 enabled: true
                 clientId: "COGNITO_CLIENT_ID"
                 domain: "COGNITO_DOMAIN"
                 userPoolArn: "COGNITO_POOL_ARN"
+            config:
+              models:
+                bedrockDiscovery:
+                  region: "BEDROCK_REGION"
       destination:
         name: in-cluster
         namespace: "openclaw-{{.name}}"
