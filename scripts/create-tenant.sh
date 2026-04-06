@@ -33,6 +33,14 @@ NAMESPACE="openclaw-${TENANT}"
 SECRET_NAME="openclaw/${TENANT}/gateway-token"
 TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 
+# Resolve TenantRoleArn from stack outputs
+TENANT_ROLE_ARN=$(get_output TenantRoleArn)
+if [[ -z "$TENANT_ROLE_ARN" ]]; then
+  log_error "Could not resolve TenantRoleArn from stack outputs."
+  log_error "Ensure CDK stack is deployed: aws cloudformation describe-stacks --stack-name ${STACK}"
+  exit 1
+fi
+
 # Read current ApplicationSet, append element, write back
 APPSET=$(kubectl get applicationset openclaw-tenants -n argocd -o json)
 
@@ -64,29 +72,60 @@ echo "$UPDATED" | kubectl apply -f - >/dev/null
 
 # Create Pod Identity Association
 echo "  → Creating Pod Identity Association"
-aws eks create-pod-identity-association \
+if ! aws eks create-pod-identity-association \
   --cluster-name "${CLUSTER}" --namespace "${NAMESPACE}" \
   --service-account "${TENANT}" \
-  --role-arn "$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "${REGION}" \
-    --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)" \
-  --region "${REGION}" 2>/dev/null || echo "    (already exists)"
+  --role-arn "${TENANT_ROLE_ARN}" \
+  --region "${REGION}" 2>/dev/null; then
+  # Check if it already exists (idempotent)
+  EXISTING=$(aws eks list-pod-identity-associations --cluster-name "${CLUSTER}" \
+    --namespace "${NAMESPACE}" --service-account "${TENANT}" \
+    --region "${REGION}" --query 'associations[0].associationId' --output text 2>/dev/null)
+  if [[ -z "$EXISTING" || "$EXISTING" = "None" ]]; then
+    log_error "Failed to create Pod Identity Association. Check IAM permissions."
+    exit 1
+  fi
+  echo "    (already exists)"
+fi
 
 # Create gateway token in Secrets Manager
 echo "  → Creating gateway token in Secrets Manager"
-aws secretsmanager create-secret \
+if ! aws secretsmanager create-secret \
   --name "${SECRET_NAME}" --secret-string "${TOKEN}" \
   --tags Key=tenant,Value="${TENANT}" Key=tenant-namespace,Value="${NAMESPACE}" \
-  --region "${REGION}" 2>/dev/null || \
-aws secretsmanager update-secret \
-  --secret-id "${SECRET_NAME}" --secret-string "${TOKEN}" \
-  --region "${REGION}" 2>/dev/null || echo "    (already exists)"
+  --region "${REGION}" 2>/dev/null; then
+  # Secret may already exist — try update
+  if ! aws secretsmanager update-secret \
+    --secret-id "${SECRET_NAME}" --secret-string "${TOKEN}" \
+    --region "${REGION}" 2>/dev/null; then
+    # May be in deleted state — try restore
+    if ! aws secretsmanager restore-secret --secret-id "${SECRET_NAME}" --region "${REGION}" 2>/dev/null; then
+      log_error "Failed to create/update Secrets Manager secret: ${SECRET_NAME}"
+      exit 1
+    fi
+    if ! aws secretsmanager update-secret --secret-id "${SECRET_NAME}" --secret-string "${TOKEN}" --region "${REGION}" 2>/dev/null; then
+      log_error "Secret restored but failed to update with new token: ${SECRET_NAME}"
+      exit 1
+    fi
+  fi
+  echo "    (updated existing)"
+fi
 
 # Wait for namespace to be created by ArgoCD
 echo "  → Waiting for namespace ${NAMESPACE}..."
+NS_READY=false
 for i in $(seq 1 30); do
-  kubectl get namespace "${NAMESPACE}" &>/dev/null && break
+  if kubectl get namespace "${NAMESPACE}" &>/dev/null; then
+    NS_READY=true
+    break
+  fi
   sleep 5
 done
+if [[ "$NS_READY" != "true" ]]; then
+  log_error "Namespace ${NAMESPACE} was not created within 150s."
+  log_error "Check ArgoCD: kubectl get application tenant-${TENANT} -n argocd -o yaml"
+  exit 1
+fi
 
 # Create K8s Secret with gateway token
 echo "  → Creating K8s gateway-token Secret"
@@ -96,5 +135,9 @@ kubectl create secret generic "${TENANT}-gateway-token" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 echo ""
-echo "Tenant added to ApplicationSet. ArgoCD will create the workspace:"
-echo "  kubectl get application tenant-${TENANT} -n argocd -w"
+echo "=== Tenant Created ==="
+echo "  Name:      ${TENANT}"
+echo "  Namespace: ${NAMESPACE}"
+echo "  Secret:    ${SECRET_NAME}"
+echo "  Monitor:   kubectl get application tenant-${TENANT} -n argocd -w"
+echo "======================"
