@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-REGION="${REGION:-$(aws configure get region 2>/dev/null || echo "${AWS_DEFAULT_REGION:-us-west-2}")}"
+REGION="${REGION:-${AWS_DEFAULT_REGION:-${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}}}"
 STACK="${STACK:-OpenClawEksStack}"
 
 # Cluster name — read from cdk.json if available
