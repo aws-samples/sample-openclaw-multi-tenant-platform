@@ -21,12 +21,12 @@ helm repo add argo https://argoproj.github.io/argo-helm 2>/dev/null || true
 helm repo update argo
 
 # Install or upgrade (idempotent)
+# TLS terminated at ALB/CloudFront — ArgoCD server runs behind cluster-internal ClusterIP
 helm upgrade --install "${RELEASE}" argo/argo-cd \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --wait \
   --timeout 300s \
-  # TLS terminated at ALB/CloudFront — ArgoCD server runs behind cluster-internal ClusterIP
   --set 'configs.params."server\.insecure"=true' \
   --set server.service.type=ClusterIP
 
