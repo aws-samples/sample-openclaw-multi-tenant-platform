@@ -131,7 +131,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 #### 6. Create First Tenant
 
 ```bash
-./scripts/create-tenant.sh alice --email alice@example.com --display-name "Alice"
+./scripts/create-tenant.sh alice --email alice@example.com
 ```
 
 #### 7. Finalize
