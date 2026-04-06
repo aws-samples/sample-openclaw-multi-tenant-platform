@@ -55,8 +55,85 @@ sed \
   helm/applicationset.yaml | kubectl apply -f -
 
 echo "==> Installing Gateway API CRDs (required by ALB Controller)"
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+# ALB Controller v3.x requires ListenerSet CRD which is only in experimental channel.
+# Use server-side apply to handle large CRD annotations that exceed client-side limits.
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/experimental-install.yaml
 kubectl wait --for=condition=Established crd/gatewayclasses.gateway.networking.k8s.io --timeout=30s || echo "  (CRDs already established)"
+
+# ALB Controller v3.x expects ListenerSet in the GA API group (gateway.networking.k8s.io/v1)
+# but Gateway API only ships it in the experimental group (gateway.networking.x-k8s.io).
+# Create a stub CRD to satisfy the controller's startup check.
+echo "==> Creating ListenerSet stub CRD (required by ALB Controller v3.x)"
+kubectl apply -f - <<'LISTENERSET'
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: listenersets.gateway.networking.k8s.io
+  annotations:
+    api-approved.kubernetes.io: "https://github.com/kubernetes-sigs/gateway-api/pull/3883"
+  labels:
+    app.kubernetes.io/managed-by: deploy-platform
+spec:
+  group: gateway.networking.k8s.io
+  names:
+    kind: ListenerSet
+    listKind: ListenerSetList
+    plural: listenersets
+    singular: listenerset
+  scope: Namespaced
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+LISTENERSET
+
+# Grant ALB Controller RBAC to watch ListenerSet resources
+echo "==> Granting ALB Controller RBAC for ListenerSet"
+kubectl apply -f - <<'RBAC'
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: alb-controller-listenerset
+  labels:
+    app.kubernetes.io/managed-by: deploy-platform
+rules:
+- apiGroups: ["gateway.networking.k8s.io"]
+  resources: ["listenersets"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: alb-controller-listenerset
+  labels:
+    app.kubernetes.io/managed-by: deploy-platform
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: alb-controller-listenerset
+subjects:
+- kind: ServiceAccount
+  name: aws-load-balancer-controller
+  namespace: kube-system
+RBAC
+
+# ALB Controller checks for Gateway API CRDs at startup. If CRDs were installed
+# after the controller started (e.g., CDK deploys controller before this script
+# installs CRDs), the controller disables Gateway API support. Restart it so it
+# picks up the newly installed CRDs.
+echo "==> Restarting ALB Controller to detect Gateway API CRDs"
+kubectl rollout restart deployment -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+kubectl rollout status deployment -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --timeout=120s
 
 echo "==> Ensuring openclaw-system namespace (with Pod Security Standards)"
 kubectl apply -f - <<'NS'
