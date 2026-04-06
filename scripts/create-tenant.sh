@@ -29,6 +29,10 @@ done
 echo "Creating tenant: ${TENANT}"
 echo "  Email: ${EMAIL}"
 
+NAMESPACE="openclaw-${TENANT}"
+SECRET_NAME="openclaw/${TENANT}/gateway-token"
+TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+
 # Read current ApplicationSet, append element, write back
 APPSET=$(kubectl get applicationset openclaw-tenants -n argocd -o json)
 
@@ -57,6 +61,39 @@ except (KeyError, IndexError, TypeError) as e:
 ")
 
 echo "$UPDATED" | kubectl apply -f - >/dev/null
+
+# Create Pod Identity Association
+echo "  → Creating Pod Identity Association"
+aws eks create-pod-identity-association \
+  --cluster-name "${CLUSTER}" --namespace "${NAMESPACE}" \
+  --service-account "${TENANT}" \
+  --role-arn "$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "${REGION}" \
+    --query 'Stacks[0].Outputs[?OutputKey==`TenantRoleArn`].OutputValue' --output text)" \
+  --region "${REGION}" 2>/dev/null || echo "    (already exists)"
+
+# Create gateway token in Secrets Manager
+echo "  → Creating gateway token in Secrets Manager"
+aws secretsmanager create-secret \
+  --name "${SECRET_NAME}" --secret-string "${TOKEN}" \
+  --tags Key=tenant,Value="${TENANT}" Key=tenant-namespace,Value="${NAMESPACE}" \
+  --region "${REGION}" 2>/dev/null || \
+aws secretsmanager update-secret \
+  --secret-id "${SECRET_NAME}" --secret-string "${TOKEN}" \
+  --region "${REGION}" 2>/dev/null || echo "    (already exists)"
+
+# Wait for namespace to be created by ArgoCD
+echo "  → Waiting for namespace ${NAMESPACE}..."
+for i in $(seq 1 30); do
+  kubectl get namespace "${NAMESPACE}" &>/dev/null && break
+  sleep 5
+done
+
+# Create K8s Secret with gateway token
+echo "  → Creating K8s gateway-token Secret"
+kubectl create secret generic "${TENANT}-gateway-token" \
+  --namespace "${NAMESPACE}" \
+  --from-literal=OPENCLAW_GATEWAY_TOKEN="${TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 echo ""
 echo "Tenant added to ApplicationSet. ArgoCD will create the workspace:"
