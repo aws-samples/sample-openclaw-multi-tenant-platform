@@ -239,7 +239,7 @@ export class EksClusterStack extends cdk.Stack {
           // GID 1000 for all APs — matches OpenClaw container user (node:1000:1000).
           // Intentionally same start/end: all tenants share UID/GID, isolation is via AP chroot.
           gidRangeStart: '1000',
-          gidRangeEnd: '1000',
+          gidRangeEnd: '1001',
         },
         reclaimPolicy: 'Delete',
         volumeBindingMode: 'Immediate',
