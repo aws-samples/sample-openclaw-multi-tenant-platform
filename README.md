@@ -75,6 +75,7 @@ cd sample-openclaw-multi-tenant-platform
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
+- Docker (running — required for CDK asset bundling)
 - kubectl + Helm 3, Node.js 22+
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Cognito User Pool + App Client (**no client secret** -- public client for SPA)
@@ -91,6 +92,8 @@ cp cdk/cdk.json.example cdk/cdk.json
 ```bash
 cd cdk && npm install
 cdk bootstrap  # Only needed once per account/region
+n# Ensure your AWS CLI default region matches your target deployment region:
+# aws configure get region   # should show your target region
 npx cdk deploy
 ```
 
