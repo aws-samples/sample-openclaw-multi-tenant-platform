@@ -134,10 +134,50 @@ kubectl create secret generic "${TENANT}-gateway-token" \
   --from-literal=OPENCLAW_GATEWAY_TOKEN="${TOKEN}" \
   --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
+# Verify: wait for ArgoCD sync + trigger scale-up + confirm endpoint
+echo "  → Verifying deployment..."
+ALB=$(kubectl get gateway openclaw-gateway -n openclaw-system -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+DOMAIN=$(node -e "try{console.log(require('cdk/cdk.json').context.zoneName||'')}catch(e){console.log('')}" 2>/dev/null)
+
+if [[ -z "$ALB" || -z "$DOMAIN" ]]; then
+  echo ""
+  echo "=== ⚠️ Tenant Created (skipping verification) ==="
+  echo "  Name:      ${TENANT}"
+  echo "  Namespace: ${NAMESPACE}"
+  echo "  Gateway ALB or domain not available yet. Verify manually:"
+  echo "    kubectl get gateway openclaw-gateway -n openclaw-system"
+  echo "======================================================"
+  exit 0
+fi
+
+VERIFIED=false
+CODE=""
+# Resolve ALB IP for --resolve (avoids -k flag, proper cert validation against DOMAIN)
+ALB_IP=$(dig +short "${ALB}" 2>/dev/null | head -1)
+for i in $(seq 1 20); do
+  CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    --resolve "${DOMAIN}:443:${ALB_IP}" \
+    "https://${DOMAIN}/t/${TENANT}/" 2>/dev/null || echo "000")
+  if [[ "$CODE" = "200" ]]; then
+    VERIFIED=true
+    break
+  fi
+  sleep 10
+done
+
 echo ""
-echo "=== Tenant Created ==="
-echo "  Name:      ${TENANT}"
-echo "  Namespace: ${NAMESPACE}"
-echo "  Secret:    ${SECRET_NAME}"
-echo "  Monitor:   kubectl get application tenant-${TENANT} -n argocd -w"
-echo "======================"
+if [[ "$VERIFIED" = "true" ]]; then
+  echo "=== ✅ Tenant Ready ==="
+  echo "  Name:      ${TENANT}"
+  echo "  Namespace: ${NAMESPACE}"
+  echo "  URL:       https://${DOMAIN}/t/${TENANT}/"
+  echo "========================"
+else
+  echo "=== ⚠️ Tenant Created (verification timeout) ==="
+  echo "  Name:      ${TENANT}"
+  echo "  Namespace: ${NAMESPACE}"
+  echo "  Resources created but endpoint not yet responding (HTTP ${CODE})."
+  echo "  This is normal if ALB is still provisioning (~2-3 min)."
+  echo "  Check: curl --resolve '${DOMAIN}:443:${ALB_IP}' https://${DOMAIN}/t/${TENANT}/"
+  echo "======================================================"
+fi
