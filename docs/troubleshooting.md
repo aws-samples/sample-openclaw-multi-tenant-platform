@@ -6,6 +6,38 @@ Common issues encountered when deploying and operating the OpenClaw Platform.
 
 ## Deployment Issues
 
+### Gateway stuck in Pending / Programmed: Unknown
+
+**Symptom**: After running `deploy-platform.sh`, the Gateway never becomes `Programmed: True`. ALB is not created.
+
+```bash
+kubectl get gateway -n openclaw-system
+# NAME               CLASS          ADDRESS   PROGRAMMED   AGE
+# openclaw-gateway   openclaw-alb             Unknown      10m
+```
+
+**Possible causes**:
+
+1. **Missing ListenerSet CRD**: ALB Controller v3.x requires a `ListenerSet` CRD in the GA API group (`gateway.networking.k8s.io/v1`). The `deploy-platform.sh` script creates this automatically. If you see `"Disabling ALBGatewayAPI: missing standard Gateway API CRDs"` in ALB Controller logs, the CRD installation failed.
+
+2. **ALB Controller not restarted**: The controller checks for Gateway API CRDs only at startup. If CRDs were installed after the controller started, it won't detect them. `deploy-platform.sh` restarts the controller automatically, but if the restart failed:
+
+```bash
+# Check ALB Controller logs
+kubectl logs -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --tail=20 | grep -i gateway
+
+# If you see "Disabling ALBGatewayAPI", restart the controller:
+kubectl rollout restart deployment -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
+kubectl rollout status deployment -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller --timeout=120s
+```
+
+3. **RBAC missing for ListenerSet**: The controller needs permission to watch ListenerSet resources. Check for `"forbidden: cannot list resource listenersets"` in logs:
+
+```bash
+kubectl get clusterrolebinding alb-controller-listenerset
+# If missing, re-run deploy-platform.sh
+```
+
 ### User signed up but no workspace appears
 
 The PostConfirmation Lambda may have failed partway through. The user exists in Cognito but has no tenant resources.
