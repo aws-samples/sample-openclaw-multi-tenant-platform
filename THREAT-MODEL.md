@@ -13,11 +13,11 @@ Traffic path: Internet → Amazon CloudFront (single distribution) → Internet-
 ## Trust Boundaries
 
 TB1: Internet ←→ Amazon CloudFront    (TLS termination, edge caching)
-TB2: CloudFront ←→ ALB               (CF prefix list SG, AWS WAF origin header verification)
+TB2: Amazon CloudFront ←→ ALB               (CF prefix list SG, AWS WAF origin header verification)
 TB3: ALB ←→ Amazon EKS Pod           (Gateway API HTTPRoute, KEDA interceptor)
 TB4: Pod ←→ AWS APIs                 (Pod Identity → STS → Amazon Bedrock/Secrets Manager/Amazon S3)
 TB5: Tenant namespace ←→ Tenant namespace  (NetworkPolicy, ABAC, namespace isolation)
-TB6: Amazon Cognito ←→ Auth UI ←→ Gateway   (Cognito tokens → gateway token → workspace)
+TB6: Amazon Cognito ←→ Auth UI ←→ Gateway   (Amazon Cognito tokens → gateway token → workspace)
 TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+selfHeal)
 
 ## STRIDE Analysis
@@ -26,7 +26,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 
 | # | Threat | Boundary | Mitigation |
 |---|--------|----------|------------|
-| S1 | Attacker impersonates CloudFront to reach ALB | TB2 | ALB SG restricted to CloudFront prefix list (pl-82a045eb). AWS WAF is configured to validate X-Verify-Origin custom header |
+| S1 | Attacker impersonates Amazon CloudFront to reach ALB | TB2 | ALB SG restricted to Amazon CloudFront prefix list (pl-82a045eb). AWS WAF is configured to validate X-Verify-Origin custom header |
 | S2 | Attacker guesses gateway token to access workspace | TB6 | Token is secrets.token_urlsafe(32) = 256-bit entropy. Stored in Secrets Manager, fetched on-demand via exec SecretRef |
 | S3 | Bot mass signup | TB6 | Pre-signup Lambda: email domain allowlist + 5 signups/domain/hour rate limit. Optional AWS WAF Bot Control |
 | S4 | Cross-tenant identity spoofing | TB5 | Pod Identity per tenant → STS session with kubernetes-namespace tag → ABAC on Secrets Manager |
@@ -82,7 +82,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 | No MFA | Lower auth assurance | docs/security.md Production Hardening #4 |
 | No SAST/DAST in CI | Relies on Probe + Holmes + cdk-nag | docs/security.md "What's NOT Covered" |
 | No image signing | Supply chain risk | docs/security.md "What's NOT Covered" |
-| No GuardDuty EKS Runtime | No runtime threat detection | docs/security.md Production Hardening #8 |
+| No GuardDuty Amazon EKS Runtime | No runtime threat detection | docs/security.md Production Hardening #8 |
 | AWS WAF sampled logging only | Limited forensics | docs/security.md Production Hardening #7 |
 | Amazon EFS uses AWS managed key | No CMK | docs/security.md Production Hardening #9 |
 

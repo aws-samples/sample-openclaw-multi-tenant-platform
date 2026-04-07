@@ -10,7 +10,7 @@ All IAM resources defined in `cdk/lib/eks-cluster-stack.ts`.
 
 ### How Pod Identity + ABAC Works
 
-1. EKS Pod Identity Agent runs on every node
+1. Amazon EKS Pod Identity Agent runs on every node
 2. When a pod needs AWS credentials, the agent calls STS `AssumeRole` with session tag: `kubernetes-namespace = <pod's namespace>`
 3. IAM policies use this tag in `Condition` blocks to scope access
 
@@ -18,7 +18,7 @@ Result: one IAM role for all tenants, isolation enforced at the policy level via
 
 ### Pod Identity Association
 
-Created by PostConfirmation Lambda during tenant provisioning. Maps namespace `openclaw-{tenant}` + SA `{tenant}` to `OpenClawTenantRole`.
+Created by PostConfirmation AWS Lambda during tenant provisioning. Maps namespace `openclaw-{tenant}` + SA `{tenant}` to `OpenClawTenantRole`.
 
 ## Tenant Role Permissions
 
@@ -49,9 +49,9 @@ The fetch-secret script uses `TENANT_NAMESPACE` env var (Kubernetes downward API
 
 | Role | Type | Purpose |
 |------|------|---------|
-| `EKSArgoCDCapabilityRole` | EKS Capability | ArgoCD EKS Capability (trust: `capabilities.eks.amazonaws.com`) |
+| `EKSArgoCDCapabilityRole` | Amazon EKS Capability | ArgoCD Amazon EKS Capability (trust: `capabilities.eks.amazonaws.com`) |
 | `EbsCsiDriverRole` | Pod Identity | EBS CSI driver (`AmazonEBSCSIDriverPolicy`) |
-| `EfsCsiDriverRole` | Pod Identity | EFS CSI driver (`AmazonEFSCSIDriverPolicy`) |
+| `EfsCsiDriverRole` | Pod Identity | Amazon EFS CSI driver (`AmazonEFSCSIDriverPolicy`) |
 | `CwObservabilityRole` | Pod Identity | CloudWatch agent + X-Ray |
 | LB Controller SA | IRSA | AWS Load Balancer Controller |
 | Karpenter SA | IRSA | Karpenter controller |

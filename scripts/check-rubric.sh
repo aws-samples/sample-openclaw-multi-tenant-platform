@@ -30,6 +30,8 @@ else
   pass "AWS WAF naming"
 fi
 
+
+
 # 2. No placeholder content
 echo ""
 echo "--- Placeholder content ---"

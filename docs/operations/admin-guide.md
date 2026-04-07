@@ -14,14 +14,14 @@
 9. Verify       -> scripts/health-check.sh
 ```
 
-> **Note**: ArgoCD installed via Helm (`scripts/setup-argocd.sh`). For production, consider EKS Capability.
+> **Note**: ArgoCD installed via Helm (`scripts/setup-argocd.sh`). For production, consider Amazon EKS Capability.
 
 ## User Signup (Automated)
 
 1. Receive SNS email: "New signup: user@company.com"
-2. Post-confirmation Lambda runs automatically:
+2. Post-confirmation AWS Lambda runs automatically:
    a. Creates Secrets Manager secret (gateway token)
-   b. Creates EKS Pod Identity Association
+   b. Creates Amazon EKS Pod Identity Association
    c. Creates ApplicationSet element -> ApplicationSet generates Applications (NS, PVC, SA, ArgoCD App, KEDA HSO)
    d. ArgoCD syncs Helm chart -> tenant resources created
    e. Sends SES welcome email
@@ -39,7 +39,7 @@
 
 ## Tenant Management
 
-### Create Tenant (Manual -- bypasses Cognito)
+### Create Tenant (Manual -- bypasses Amazon Cognito)
 
 `create-tenant.sh` creates a ApplicationSet element directly. ArgoCD then syncs the Helm chart (creates namespace, Deployment, Service, etc.):
 
@@ -47,19 +47,19 @@
 ./scripts/create-tenant.sh alice --email alice@example.com
 ```
 
-This is useful for testing without going through the Cognito signup flow.
+This is useful for testing without going through the Amazon Cognito signup flow.
 
-> Note: This only creates the ApplicationSet element. It does NOT create Secrets Manager secrets, Pod Identity Associations, or Cognito user attributes. For a full recovery (when PostConfirmation Lambda fails), use `provision-tenant.sh` instead.
+> Note: This only creates the ApplicationSet element. It does NOT create Secrets Manager secrets, Pod Identity Associations, or Amazon Cognito user attributes. For a full recovery (when PostConfirmation AWS Lambda fails), use `provision-tenant.sh` instead.
 
 ### Recover Failed Signup
 
-If a user signed up via Cognito but their workspace didn't appear (PostConfirmation Lambda failed), use `provision-tenant.sh`:
+If a user signed up via Amazon Cognito but their workspace didn't appear (PostConfirmation AWS Lambda failed), use `provision-tenant.sh`:
 
 ```bash
 ./scripts/provision-tenant.sh <tenant-id> <email> [cognito-username]
 ```
 
-This mirrors the full Lambda provisioning flow: Pod Identity, Secrets Manager, Cognito attributes, ApplicationSet element, and K8s gateway-token Secret. See the script header for prerequisites.
+This mirrors the full AWS Lambda provisioning flow: Pod Identity, Secrets Manager, Amazon Cognito attributes, ApplicationSet element, and K8s gateway-token Secret. See the script header for prerequisites.
 
 ### Delete Tenant
 
@@ -83,7 +83,7 @@ Update `image.tag` in `helm/charts/openclaw-platform/values.yaml`, commit, and p
 
 For per-tenant overrides, set `spec.image.tag` on the ApplicationSet element.
 
-### CDK Stack Update
+### AWS CDK Stack Update
 
 ```bash
 cd cdk && npx cdk deploy
@@ -96,19 +96,19 @@ cd cdk && npx cdk deploy
 | Pod restart | CloudWatch: restart count > 0 | Check pod logs |
 | Amazon Bedrock latency | P95 > 10 seconds | Check model availability |
 | Cold start slow | Pod startup > 60 seconds | Check node capacity |
-| Budget 80% | Cost-enforcer Lambda | Notify tenant |
-| Budget 100% | Cost-enforcer Lambda | Decide: increase or restrict |
+| Budget 80% | Cost-enforcer AWS Lambda | Notify tenant |
+| Budget 100% | Cost-enforcer AWS Lambda | Decide: increase or restrict |
 
 ## Automation Summary
 
 | Action | Automated | Manual |
 |--------|-----------|--------|
-| User signup | Cognito + Lambda | -- |
-| Tenant provisioning | Lambda -> ApplicationSet element -> ArgoCD -> Helm | -- |
+| User signup | Amazon Cognito + AWS Lambda | -- |
+| Tenant provisioning | AWS Lambda -> ApplicationSet element -> ArgoCD -> Helm | -- |
 | Welcome email | SES | -- |
 | Scale to zero / up | KEDA | -- |
 | PVC backup | AWS Backup / on-demand scripts | -- |
 | Image update check | CronJob (6h) | Admin reviews |
-| Cost budget alert | Lambda (daily) | Admin decides |
+| Cost budget alert | AWS Lambda (daily) | Admin decides |
 | Tenant deletion | -- | `delete-tenant.sh` |
 | Platform deploy | -- | `cdk deploy` + scripts |

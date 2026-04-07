@@ -24,5 +24,6 @@
     "@aws-cdk/lambda-layer-kubectl-v35": "2.2.0",
     "aws-cdk-lib": "2.245.0",
     "constructs": "10.6.0"
-  }
+  },
+  "license": "MIT-0"
 }

@@ -10,7 +10,7 @@ Thank you for your interest in contributing to OpenClaw Platform!
 - kubectl
 - Helm 3
 - Python 3.12+
-- Docker (for CDK asset bundling)
+- Docker (for AWS CDK asset bundling)
 
 ## Quick Setup
 
@@ -37,7 +37,7 @@ The Platform uses ArgoCD ApplicationSet for multi-tenant management. No Operator
 ```
 cdk/                    # AWS CDK infrastructure (TypeScript)
   lib/eks-cluster-stack.ts   # Main stack (~700 lines)
-  lambda/                    # Cognito trigger functions + cost enforcement (Python)
+  lambda/                    # Amazon Cognito trigger functions + cost enforcement (Python)
   cdk.json.example           # Configuration template
 helm/                   # Helm chart (source of truth, synced by ArgoCD)
   charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
@@ -56,12 +56,12 @@ See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
 ### 2. Validate locally
 
 ```bash
-# CDK
+# AWS CDK
 cd cdk && npx tsc --noEmit && npx jest
 
 # Platform
 
-# Lambda
+# AWS Lambda
 python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
 python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
 python3 -m pytest cdk/lambda/cost-enforcer/test_index.py -v
@@ -86,7 +86,7 @@ grep -rn 'AKIA[A-Z0-9]\{16\}' \
 ### 4. Test
 
 ```bash
-# CDK matches stack
+# AWS CDK matches stack
 cd cdk && npx cdk diff  # Should show "no differences"
 
 # Signup flow

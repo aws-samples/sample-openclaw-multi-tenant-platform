@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazon-eks&logoColor=white" alt="EKS">
-  <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
+  <img src="https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazon-eks&logoColor=white" alt="Amazon EKS">
+  <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="AWS CDK">
   <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Amazon Bedrock">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
   <img src="https://img.shields.io/badge/License-MIT--0-green" alt="MIT-0">
@@ -21,8 +21,8 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **Zero API keys** -- LLM access via Amazon Bedrock + Pod Identity
 - **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s
 - **3-layer origin protection** -- internet-facing ALB with CF-only SG + AWS WAF + HTTPS
-- **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
-- **Self-service signup** -- Cognito + Lambda auto-provisions tenants
+- **Custom auth UI** -- branded login/signup on your domain (no Amazon Cognito Hosted UI)
+- **Self-service signup** -- Amazon Cognito + AWS Lambda auto-provisions tenants
 - **ArgoCD ApplicationSet managed** -- ApplicationSet generates per-tenant ArgoCD Applications; each syncs Helm chart with tenant-specific values ([details](docs/architecture.md))
 - **Cost control** -- per-tenant monthly budget with per-model pricing alerts
 - **Graviton ARM64** -- 20% cheaper compute with t4g instances
@@ -34,15 +34,15 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain
 ```
 Internet
   |
-  +- claw.your-domain.com --> CloudFront (single distribution)
+  +- claw.your-domain.com --> Amazon CloudFront (single distribution)
   |                            /        -> S3 (auth UI)           [CDK-managed]
   |                            /t/*     -> Internet-facing ALB    [post-deploy.sh]
-  |                                        (CF-only SG + AWS WAF) -> EKS Pod
-  +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
+  |                                        (CF-only SG + AWS WAF) -> Amazon EKS Pod
+  +- Outbound only: Amazon EKS Pod --> NAT Gateway (HA) --> Internet
 ```
 
 ```
-EKS Cluster
+Amazon EKS Cluster
 |  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
 |  Add-ons: ALB Controller, EBS CSI, EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
@@ -74,10 +74,10 @@ cd sample-openclaw-multi-tenant-platform
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
-- Docker (running — required for CDK asset bundling)
+- Docker (running — required for AWS CDK asset bundling)
 - kubectl + Helm 3, Node.js 22+
 - Route53 hosted zone + ACM certificates (deployment region + us-east-1)
-- Cognito User Pool + App Client (**no client secret** -- public client for SPA)
+- Amazon Cognito User Pool + App Client (**no client secret** -- public client for SPA)
 
 #### 1. Configure
 
@@ -96,7 +96,7 @@ n# Ensure your AWS CLI default region matches your target deployment region:
 npx cdk deploy
 ```
 
-Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
+Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, S3, Amazon CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
 
 #### 3. Setup ArgoCD
 
@@ -105,7 +105,7 @@ aws eks update-kubeconfig --region <region> --name <cluster-name>
 bash scripts/setup-argocd.sh
 ```
 
-Installs ArgoCD via Helm. For production, consider EKS ArgoCD Capability (managed).
+Installs ArgoCD via Helm. For production, consider Amazon EKS ArgoCD Capability (managed).
 
 #### 4. Deploy Platform
 
@@ -125,7 +125,7 @@ bash scripts/deploy-platform.sh
 ./scripts/setup-keda.sh                    # Scale-to-zero
 ```
 
-Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all managed by CDK -- no manual setup needed.
+Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all managed by AWS CDK -- no manual setup needed.
 
 #### 6. Create First Tenant
 
@@ -136,10 +136,10 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 #### 7. Finalize
 
 ```bash
-./scripts/post-deploy.sh          # Add ALB origin to CloudFront + Route53 + AWS WAF
+./scripts/post-deploy.sh          # Add ALB origin to Amazon CloudFront + Route53 + AWS WAF
 ```
 
-> **Note**: Auth UI is deployed automatically by CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
+> **Note**: Auth UI is deployed automatically by AWS CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
 
 ## Tenant Management
 
@@ -157,26 +157,26 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 
 | Layer | Control |
 |-------|--------|
-| Edge | CloudFront + AWS WAF (AWS Common Rules + rate limit) |
+| Edge | Amazon CloudFront + AWS WAF (AWS Common Rules + rate limit) |
 | Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
-| Auth | Cognito signup + local token auth + 3-layer origin protection |
+| Auth | Amazon Cognito signup + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
-| Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
-| Audit | CloudTrail + S3 + Athena + EKS control plane logging |
+| Data | PVC persists across scale-to-zero (Amazon EFS, multi-AZ) |
+| Audit | CloudTrail + S3 + Athena + Amazon EKS control plane logging |
 
 ## Cost
 
 | Resource | 3 tenants | 100 tenants |
 |----------|-----------|-------------|
-| EKS control plane | ~$73 | ~$73 |
+| Amazon EKS control plane | ~$73 | ~$73 |
 | EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
-| EFS (per actual usage) | ~$0.15 | ~$75 |
-| ALB + NAT (x2) + CloudFront + AWS WAF | ~$60 | ~$65 |
-| CloudWatch + Lambda + S3 | ~$15 | ~$20 |
+| Amazon EFS (per actual usage) | ~$0.15 | ~$75 |
+| ALB + NAT (x2) + Amazon CloudFront + AWS WAF | ~$60 | ~$65 |
+| CloudWatch + AWS Lambda + S3 | ~$15 | ~$20 |
 | Amazon Bedrock | varies | varies |
 | **Total (infra)** | **~$198/mo** | **~$286-388/mo** |
 
@@ -188,9 +188,9 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 |-----|-------------|
 | [Architecture](docs/architecture.md) | ApplicationSet + ArgoCD flow, tenant lifecycle |
 | [Security](docs/security.md) | 10-layer security model |
-| [EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
-| [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, AWS WAF |
-| [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
+| [Amazon EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
+| [Networking](docs/components/networking.md) | VPC, Amazon CloudFront, ALB, AWS WAF |
+| [Auth](docs/components/auth.md) | Amazon Cognito, custom UI, AWS Lambda triggers |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
 | [GitOps](docs/components/gitops.md) | ArgoCD + ApplicationSet, tenant lifecycle |
 | [Admin Guide](docs/operations/admin-guide.md) | Deploy, manage, monitor |
@@ -200,7 +200,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 ## Project Structure
 
 ```
-+-- auth-ui/                    # Custom login/signup (S3 + CloudFront)
++-- auth-ui/                    # Custom login/signup (Amazon S3 + Amazon CloudFront)
 +-- cdk/                        # AWS CDK infrastructure (TypeScript)
 |   +-- lib/eks-cluster-stack.ts
 |   +-- lambda/                 # Pre-signup, Post-confirmation, Cost-enforcer
@@ -223,7 +223,7 @@ for tenant in $(kubectl get applicationset openclaw-tenants -n argocd -o jsonpat
   ./scripts/delete-tenant.sh "$tenant" --force
 done
 
-# 2. CloudFront ALB origin and Route53 are cleaned up by cdk destroy
+# 2. Amazon CloudFront ALB origin and Route53 are cleaned up by cdk destroy
 
 # 3. Destroy CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack
@@ -232,10 +232,10 @@ cd cdk && npx cdk destroy OpenClawEksStack
 ./scripts/cleanup-test-resources.sh
 ```
 
-> **Retained resources**: EFS file systems and S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
+> **Retained resources**: Amazon EFS file systems and S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
 >
 > ```bash
-> # List retained EFS (check for tenant data before deleting)
+> # List retained Amazon EFS (check for tenant data before deleting)
 > aws efs describe-file-systems --query 'FileSystems[?contains(Name,`TenantEfs`)].FileSystemId' --output text
 >
 > # List retained S3 buckets

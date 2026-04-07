@@ -37,15 +37,15 @@ The tenant name (e.g., `alice`) is the single input; all other names are derived
 
 | Component | Creates |
 |-----------|---------|
-| PostConfirmation Lambda | SM Secret, Pod Identity Association, ApplicationSet element, K8s gateway-token Secret |
+| PostConfirmation AWS Lambda | SM Secret, Pod Identity Association, ApplicationSet element, K8s gateway-token Secret |
 | ArgoCD ApplicationSet + Helm | Namespace, PVC, ServiceAccount, Deployment, Service, ConfigMap, NetworkPolicy, HTTPRoute |
 | ArgoCD (syncs Helm chart) | Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration |
 | create-tenant.sh (manual) | ApplicationSet element only (ArgoCD handles the rest) |
-| provision-tenant.sh (recovery) | Pod Identity, SM Secret, Cognito attributes, ApplicationSet element, K8s gateway-token Secret |
+| provision-tenant.sh (recovery) | Pod Identity, SM Secret, Amazon Cognito attributes, ApplicationSet element, K8s gateway-token Secret |
 
 ## Validation
 
 Tenant name is validated in three places (defense in depth):
 1. ApplicationSet list generator (helm/applicationset.yaml)
-2. Lambda PostConfirmation (cdk/lambda/post-confirmation/index.py)
-3. PostConfirmation Lambda (`cdk/lambda/post-confirmation/index.py`)
+2. AWS Lambda PostConfirmation (cdk/lambda/post-confirmation/index.py)
+3. PostConfirmation AWS Lambda (`cdk/lambda/post-confirmation/index.py`)

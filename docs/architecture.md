@@ -64,7 +64,7 @@ The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync en
 
 **Cleanup:** On ApplicationSet element deletion, ArgoCD deletes the Application and its managed resources, then the namespace is cleaned up. Kubernetes cascades all resources inside the namespace.
 
-## EKS Cluster
+## Amazon EKS Cluster
 
 ```
 EKS Cluster (v1.35)
@@ -92,10 +92,10 @@ EKS Cluster (v1.35)
 
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
-| Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, AWS WAF |
+| Infrastructure | AWS CDK (TypeScript) | VPC, Amazon EKS, IAM, AWS Lambda, S3, Amazon CloudFront, AWS WAF |
 | ApplicationSet | ArgoCD generator | Generates per-tenant Applications from list elements |
 | Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
-| Auth | Cognito + custom UI | Signup, login, email domain gate |
+| Auth | Amazon Cognito + custom UI | Signup, login, email domain gate |
 | Scaling | KEDA HTTP Add-on | Scale-to-zero (15min idle) |
 | LLM | Amazon Bedrock | Model access via Pod Identity (zero API keys) |
 | Secrets | exec SecretRef | aws-sm provider, fetched on-demand, never persisted |
@@ -119,16 +119,16 @@ ArgoCD tracks sync status for each tenant Application:
 
 | Layer | Control |
 |-------|--------|
-| Edge | CloudFront + AWS WAF (AWS Common Rules + rate limit) |
+| Edge | Amazon CloudFront + AWS WAF (AWS Common Rules + rate limit) |
 | Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
-| Auth | Cognito + local token auth + 3-layer origin protection |
+| Auth | Amazon Cognito + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand via aws-sm provider |
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
-| Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
-| Audit | CloudTrail + S3 + Athena + EKS control plane logging |
+| Data | PVC persists across scale-to-zero (Amazon EFS, multi-AZ) |
+| Audit | CloudTrail + S3 + Athena + Amazon EKS control plane logging |
 
 ## Data Flow
 

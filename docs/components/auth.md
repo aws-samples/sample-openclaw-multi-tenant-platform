@@ -2,7 +2,7 @@
 
 ## Overview
 
-Cognito User Pool for identity, custom auth UI (no Hosted UI). Gateway runs in token auth mode with exec SecretRef -> Secrets Manager. Signup auto-provisions tenant infrastructure via Lambda triggers and the ApplicationSet.
+Amazon Cognito User Pool for identity, custom auth UI (no Hosted UI). Gateway runs in token auth mode with exec SecretRef -> Secrets Manager. Signup auto-provisions tenant infrastructure via AWS Lambda triggers and the ApplicationSet.
 
 ## Architecture
 
@@ -18,7 +18,7 @@ User -> Custom Auth UI (auth-ui/index.html)
          |
          +- Sign In -> Cognito InitiateAuth (USER_PASSWORD_AUTH)
                         -> Redirect to https://claw.{domain}/t/{tenant}/
-                        -> CloudFront -> Internet-facing ALB (CF prefix list SG)
+                        -> Amazon CloudFront -> Internet-facing ALB (CF prefix list SG)
                         -> Gateway API HTTPRoute -> OpenClaw gateway (token auth)
 ```
 
@@ -26,13 +26,13 @@ User -> Custom Auth UI (auth-ui/index.html)
 
 **Location:** `auth-ui/index.html`
 
-Single-page app that talks directly to Cognito API via raw `fetch()`. No SDK dependency.
+Single-page app that talks directly to Amazon Cognito API via raw `fetch()`. No SDK dependency.
 
-Why not Cognito Hosted UI: ugly URLs, limited customization.
+Why not Amazon Cognito Hosted UI: ugly URLs, limited customization.
 
 Features: sign in/up tabs, forgot password, password strength indicator.
 
-## Pre-Signup Lambda
+## Pre-Signup AWS Lambda
 
 **Location:** `cdk/lambda/pre-signup/index.py`
 
@@ -41,19 +41,19 @@ Features: sign in/up tabs, forgot password, password strength indicator.
 - `autoConfirmUser = true`, `autoVerifyEmail = true`
 - SNS notify admin
 
-## Post-Confirmation Lambda
+## Post-Confirmation AWS Lambda
 
 **Location:** `cdk/lambda/post-confirmation/index.py`
 
 1. Create Secrets Manager secret: `openclaw/{tenant}/gateway-token` (tagged for ABAC)
-2. Create EKS Pod Identity Association (namespace `openclaw-{tenant}`, SA `{tenant}`)
+2. Create Amazon EKS Pod Identity Association (namespace `openclaw-{tenant}`, SA `{tenant}`)
 3. Create ApplicationSet element -> ApplicationSet generates Applications (NS, PVC, SA, ArgoCD App, KEDA HSO)
 
 ## Gateway Auth Mode
 
-The gateway runs in `token` auth mode. Authentication is handled by the gateway itself using a token fetched on-demand from Secrets Manager via exec SecretRef. No ALB Cognito auth.
+The gateway runs in `token` auth mode. Authentication is handled by the gateway itself using a token fetched on-demand from Secrets Manager via exec SecretRef. No ALB Amazon Cognito auth.
 
-Security is provided by the internet-facing ALB with CloudFront prefix list SG restriction (`pl-82a045eb`) -- only CloudFront IPs can reach the ALB.
+Security is provided by the internet-facing ALB with Amazon CloudFront prefix list SG restriction (`pl-82a045eb`) -- only Amazon CloudFront IPs can reach the ALB.
 
 From `values.yaml`:
 
@@ -108,7 +108,7 @@ user.name+tag@example.com -> usernamtag (max 20 chars, [a-z0-9-] only)
 ## Security
 
 - Public client -- no client secret (safe for browser SPA)
-- Email domain restriction -- pre-signup Lambda rejects non-allowed domains
-- Bot protection -- AWS WAF Bot Control (opt-in via CDK context)
+- Email domain restriction -- pre-signup AWS Lambda rejects non-allowed domains
+- Bot protection -- AWS WAF Bot Control (opt-in via AWS CDK context)
 - Gateway token -- `secrets.token_urlsafe(32)`, stored in SM with ABAC tags
 - Password policy -- min 12 chars, uppercase + lowercase + numbers

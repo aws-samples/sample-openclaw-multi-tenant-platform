@@ -41,7 +41,7 @@ Cognito SignUp → PostConfirmation Lambda → ApplicationSet element
 | TargetGroupConfiguration | ArgoCD → Helm | `targetgroupconfig.yaml` |
 | HTTPScaledObject (KEDA) | ArgoCD → Helm | `httpscaledobject.yaml` |
 | ReferenceGrant | ArgoCD → Helm | `referencegrant.yaml` |
-| PVC (EFS) | ArgoCD → Helm | `pvc.yaml` |
+| PVC (Amazon EFS) | ArgoCD → Helm | `pvc.yaml` |
 | ServiceAccount | ArgoCD → Helm | `serviceaccount.yaml` |
 
 ## ArgoCD Application (per tenant)
@@ -84,7 +84,7 @@ Key points:
 
 ## ArgoCD Setup
 
-ArgoCD is installed via Helm (`scripts/setup-argocd.sh`). For production, consider migrating to [EKS ArgoCD Capability](https://docs.aws.amazon.com/eks/latest/userguide/argocd.html) (managed ArgoCD with Identity Center SSO).
+ArgoCD is installed via Helm (`scripts/setup-argocd.sh`). For production, consider migrating to [Amazon EKS ArgoCD Capability](https://docs.aws.amazon.com/eks/latest/userguide/argocd.html) (managed ArgoCD with Identity Center SSO).
 
 ## References
 
