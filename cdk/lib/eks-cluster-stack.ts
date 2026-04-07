@@ -818,6 +818,7 @@ export class EksClusterStack extends cdk.Stack {
         parameters: {
           UserPoolId: cognitoPoolId,
           ClientId: cognitoClientId,
+          ExplicitAuthFlows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
           ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
           WriteAttributes: ['email'],
         },
@@ -829,6 +830,7 @@ export class EksClusterStack extends cdk.Stack {
         parameters: {
           UserPoolId: cognitoPoolId,
           ClientId: cognitoClientId,
+          ExplicitAuthFlows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
           ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
           WriteAttributes: ['email'],
         },
