@@ -17,20 +17,20 @@ Layered network architecture: CloudFront -> internet-facing ALB (CF prefix list 
 
 ```
 User -> CloudFront #1 (root domain) -> S3 (auth UI)
-User -> CloudFront #2 (wildcard)    -> Internet-facing ALB (CF prefix list SG) -> Pod
+User -> CloudFront (/t/*)           -> Internet-facing ALB (CF prefix list SG) -> Pod
 ```
 
 ### CloudFront #1: Auth UI (CDK-managed)
 
 Serves the static auth UI from S3 with OAI. SPA routing: 404/403 -> `/index.html`. Certificate must be in `us-east-1`.
 
-### CloudFront #2: Tenant Traffic (script-managed)
+### Tenant Traffic (script-managed via post-deploy.sh)
 
 Created by `scripts/post-deploy.sh` after the first tenant is provisioned (ALB ARN is dynamic).
 
 | Setting | Value |
 |---------|-------|
-| Alias | `*.example.com` (wildcard) |
+| Path pattern | `/t/*` path pattern |
 | Origin | Internet-facing ALB |
 | Protocol | HTTPS only |
 
@@ -69,7 +69,7 @@ Key design decisions:
 | Rate Limit | 2 | Block | 2000 requests per 5-min window per IP |
 
 - **Scope: REGIONAL** -- attached to the ALB
-- WAF <-> ALB association done by `scripts/setup-waf.sh` (dynamic ALB ARN)
+- WAF <-> ALB association done by `scripts/post-deploy.sh` (dynamic ALB ARN)
 
 ## Route53
 
@@ -78,7 +78,7 @@ Managed by `scripts/post-deploy.sh`:
 | Record | Type | Target |
 |--------|------|--------|
 | `example.com` | A (alias) | CloudFront #1 (auth UI) |
-| `*.example.com` | A (alias) | CloudFront #2 (tenant traffic) |
+| `example.com` | A (alias) | CloudFront (auth UI + tenant traffic) |
 
 ## NetworkPolicy (Per-Tenant)
 
