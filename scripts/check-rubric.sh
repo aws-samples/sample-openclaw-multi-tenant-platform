@@ -13,7 +13,7 @@ echo "==> Rubric compliance checks"
 echo ""
 echo "--- AWS service names ---"
 # Bare "Bedrock" (not "Amazon Bedrock") in docs
-BARE_BEDROCK=$(grep -rn '\bBedrock\b' README.md docs/ AGENTS.md --include="*.md" 2>/dev/null | grep -v "Amazon Bedrock\|bedrock-\|Bedrock-LLM\|/bedrock\|amazon-bedrock" || true)
+BARE_BEDROCK=$(grep -rn '\bBedrock\b' README.md docs/ AGENTS.md THREAT-MODEL.md --include="*.md" 2>/dev/null | grep -v "Amazon Bedrock\|bedrock-\|Bedrock-LLM\|/bedrock\|amazon-bedrock" || true)
 if [ -n "$BARE_BEDROCK" ]; then
   fail "Bare 'Bedrock' found (use 'Amazon Bedrock'):"
   echo "$BARE_BEDROCK" | head -5
@@ -22,7 +22,7 @@ else
 fi
 
 # Bare "WAF" (not "AWS WAF") in docs
-BARE_WAF=$(grep -rn '\bWAF\b' README.md docs/ AGENTS.md --include="*.md" 2>/dev/null | grep -v "AWS WAF\|WafAcl\|wafv2\|WAF->" || true)
+BARE_WAF=$(grep -rn '\bWAF\b' README.md docs/ AGENTS.md THREAT-MODEL.md --include="*.md" 2>/dev/null | grep -v "AWS WAF\|WafAcl\|wafv2\|WAF->" || true)
 if [ -n "$BARE_WAF" ]; then
   fail "Bare 'WAF' found (use 'AWS WAF'):"
   echo "$BARE_WAF" | head -5

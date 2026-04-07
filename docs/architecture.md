@@ -4,6 +4,8 @@
 
 ![Architecture Diagram](architecture-diagram.svg)
 
+<!-- For tools that cannot render SVG, export to PNG: rsvg-convert architecture-diagram.svg > architecture-diagram.png -->
+
 ## Overview
 
 ```
