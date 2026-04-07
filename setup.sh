@@ -161,7 +161,7 @@ echo "════════════════════════�
 echo ""
 echo "Next steps:"
 echo "  1. Create your first tenant:"
-echo "     ./scripts/create-tenant.sh <name> --display-name \"Name\" --emoji \"🤖\""
+echo "     ./scripts/create-tenant.sh <name> --email <email>"
 echo "  2. After the first tenant pod is running, finalize networking:"
 echo "     ./scripts/post-deploy.sh    # CloudFront #2 + Route53 + WAF→ALB"
 echo ""
