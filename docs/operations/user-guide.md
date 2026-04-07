@@ -22,7 +22,7 @@
    -> CloudFront -> Internet-facing ALB (CF prefix list SG)
    -> Gateway API HTTPRoute -> OpenClaw gateway (token auth)
 
-6. Chat with AI assistant (Bedrock, zero API keys)
+6. Chat with AI assistant (Amazon Bedrock, zero API keys)
 
 7. Idle 15 min -> KEDA scales pod to 0 (data preserved on PVC)
 
@@ -82,4 +82,4 @@
 
 - AWS Cognito Hosted UI (all auth via custom UI + Cognito SDK)
 - ALB, EKS, pods, namespaces (abstracted away)
-- API keys (Bedrock via Pod Identity)
+- API keys (Amazon Bedrock via Pod Identity)

@@ -8,16 +8,16 @@
 
 ```
 +-----------------------------------------------------------------------+
-|  1. Edge         CloudFront + WAF (Common Rules + rate limit)          |
-|  2. Signup       WAF Bot Control (opt-in) + email domain restriction     |
+|  1. Edge         CloudFront + AWS WAF (Common Rules + rate limit)          |
+|  2. Signup       AWS WAF Bot Control (opt-in) + email domain restriction     |
 |  3. Network      Internet-facing ALB (CF prefix list SG) + NetworkPolicy|
 |  4. Auth         Cognito signup + gateway token auth + CF prefix list   |
 |  5. Tenant       Namespace isolation + ABAC + ResourceQuota            |
 |  6. Secrets      exec SecretRef -- on-demand fetch, never persisted    |
-|  7. LLM          Bedrock via Pod Identity -- zero API keys             |
+|  7. LLM          Amazon Bedrock via Pod Identity -- zero API keys             |
 |  8. Cost         Per-tenant budget enforcement + daily Lambda scan     |
 |  9. Data         PVC persistence (EFS, multi-AZ) + AWS Backup  |
-| 10. Audit        CloudTrail -> S3 -> Athena (Bedrock-specific trail)   |
+| 10. Audit        CloudTrail -> S3 -> Athena (Amazon Bedrock-specific trail)   |
 +-----------------------------------------------------------------------+
 ```
 
@@ -28,13 +28,13 @@
 Filters malicious traffic before it reaches the application.
 
 - CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
-- WAF WebACL (REGIONAL scope) attached to ALB:
+- AWS WAF WebACL (REGIONAL scope) attached to ALB:
   - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 (SQLi, XSS, path traversal)
   - `RateLimit` -- 2000 requests per 5 minutes per IP
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
 
-**Script**: `scripts/post-deploy.sh` -- associates WAF WebACL with the dynamic ALB ARN
+**Script**: `scripts/post-deploy.sh` -- associates AWS WAF WebACL with the dynamic ALB ARN
 
 ---
 
@@ -58,7 +58,7 @@ Ensures tenant pods are isolated from each other and only reachable via the cont
 - Pods run exclusively in private subnets
 - ALB is **internet-facing** with CloudFront prefix list SG restriction (`pl-82a045eb`):
   - Only CloudFront IPs can reach the ALB (L3/L4)
-  - WAF validates `X-Verify-Origin` custom header (L7)
+  - AWS WAF validates `X-Verify-Origin` custom header (L7)
   - HTTPS-only origin protocol
 - Traffic path: Internet -> CloudFront -> ALB (internet-facing, CF-only SG) -> Pod
 - 2 NAT Gateways (HA) for outbound internet
@@ -201,7 +201,7 @@ LLM access without API keys, with model-level control.
 
 Prevents runaway LLM costs with per-tenant budgets.
 
-- Daily Lambda (`CostEnforcerFn`) queries CloudWatch Logs Insights for per-namespace Bedrock token usage
+- Daily Lambda (`CostEnforcerFn`) queries CloudWatch Logs Insights for per-namespace Amazon Bedrock token usage
 - Budget read from Secrets Manager tag `budget-usd` (default: $100/month)
 - Alerts at 80% and 100% budget via SNS
 
@@ -226,9 +226,9 @@ Ensures tenant data survives pod restarts, scale-to-zero, and failures.
 
 ## Layer 10: Audit Trail
 
-Records all Bedrock API calls for compliance and forensics.
+Records all Amazon Bedrock API calls for compliance and forensics.
 
-- Dedicated CloudTrail trail (`openclaw-bedrock-audit`) -- Bedrock events only
+- Dedicated CloudTrail trail (`openclaw-bedrock-audit`) -- Amazon Bedrock events only
 - Logs stored in S3: `openclaw-audit-logs-{account}-{region}`
 - Athena database + table for SQL queries
 - CloudWatch Container Insights for pod-level metrics
@@ -242,10 +242,10 @@ Records all Bedrock API calls for compliance and forensics.
 
 | Attack Vector | Mitigation |
 |---------------|------------|
-| DDoS | CloudFront edge caching + WAF rate limiting (2000 req/5min/IP) |
-| SQLi / XSS | WAF AWSManagedRulesCommonRuleSet |
-| Bot signups | WAF Bot Control (opt-in) + email domain allowlist + rate limiting |
-| Unauthenticated access | CF prefix list SG + WAF header + gateway token auth |
+| DDoS | CloudFront edge caching + AWS WAF rate limiting (2000 req/5min/IP) |
+| SQLi / XSS | AWS WAF AWSManagedRulesCommonRuleSet |
+| Bot signups | AWS WAF Bot Control (opt-in) + email domain allowlist + rate limiting |
+| Unauthenticated access | CF prefix list SG + AWS WAF header + gateway token auth |
 | Cross-tenant data access | Namespace isolation + NetworkPolicy + ABAC on Secrets Manager |
 | Cross-tenant network | NetworkPolicy blocks 10.0.0.0/8 on egress port 443 |
 | API key leakage | Zero API keys -- all access via Pod Identity + STS |
@@ -261,7 +261,7 @@ Records all Bedrock API calls for compliance and forensics.
 ```
 Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
    |              |           |                                           |
-   |         TLS termination  WAF: origin header verify               NetworkPolicy
+   |         TLS termination  AWS WAF: origin header verify               NetworkPolicy
    |         Edge caching     + Common Rules + Rate Limit              ABAC
    |                          SG: CF prefix list only                  exec deny
    |                                                                   fs: workspaceOnly
@@ -284,7 +284,7 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 | SAST/DAST | No static/dynamic security testing in CI |
 | Image signing | No Sigstore/Cosign verification |
 | Secrets rotation | SM secrets not auto-rotated |
-| WAF logging | Sampled requests only, no full logging |
+| AWS WAF logging | Sampled requests only, no full logging |
 | GuardDuty | No runtime threat detection for EKS |
 | KMS encryption | EFS encrypted at rest (AWS managed key) |
 
@@ -302,8 +302,8 @@ For production deployments, consider the following enhancements:
 5. **JWT-based auth**: if OpenClaw adds JWT validation support, replace static gateway token with Cognito ID token for time-limited, rotatable auth
 
 ### Infrastructure
-6. **WAF Bot Control**: enable via `cdk deploy -c enableBotControl=true` (additional WAF charges apply)
-7. **WAF logging**: enable full request logging to S3 for forensics
+6. **AWS WAF Bot Control**: enable via `cdk deploy -c enableBotControl=true` (additional AWS WAF charges apply)
+7. **AWS WAF logging**: enable full request logging to S3 for forensics
 8. **GuardDuty EKS Runtime Monitoring**: detect container-level threats
 9. **KMS CMK**: use customer-managed keys for EBS encryption and Secrets Manager
 10. **Secrets rotation**: enable Secrets Manager automatic rotation with a Lambda rotator
@@ -312,18 +312,22 @@ For production deployments, consider the following enhancements:
 
 ## Compliance Considerations
 
-### SOC 2 Readiness
+### SOC 2 Technical Controls
+
+> **Note**: These tables map technical controls only. They do not constitute compliance certification. Customers must conduct their own compliance assessment with qualified auditors.
 
 | Control Area | Current State | Gap |
 |-------------|---------------|-----|
 | Access Control | Cognito + ABAC + Pod Identity | Add MFA for admin accounts |
 | Encryption in Transit | TLS everywhere | None |
 | Encryption at Rest | EBS default encryption | Consider CMK |
-| Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs | Enable WAF logging |
+| Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs | Enable AWS WAF logging |
 | Change Management | ArgoCD + CI/CD + cdk-nag + npm audit | None |
 | Incident Response | SNS alerts + Athena queries | Document runbooks |
 
-### HIPAA Readiness
+### HIPAA Technical Controls
+
+> **Note**: These tables map technical controls only. They do not constitute compliance certification. Customers must conduct their own compliance assessment with qualified auditors.
 
 | Requirement | Current State | Gap |
 |-------------|---------------|-----|
@@ -334,3 +338,21 @@ For production deployments, consider the following enhancements:
 | Minimum necessary access | ABAC + namespace isolation | None |
 
 > **Note**: HIPAA compliance requires a BAA with AWS and verification that all services used are HIPAA-eligible. This platform provides technical controls but does not constitute HIPAA compliance on its own.
+
+## Shared Responsibility
+
+This platform operates under the [AWS Shared Responsibility Model](https://aws.amazon.com/compliance/shared-responsibility-model/):
+
+| Responsibility | AWS | Platform (this repo) | Customer |
+|---|---|---|---|
+| Physical infrastructure | ✅ | | |
+| EKS control plane | ✅ | | |
+| Node OS patching | ✅ (managed nodegroup) | | |
+| Network isolation (VPC, SG) | | ✅ | |
+| Tenant namespace isolation | | ✅ | |
+| IAM policies (Pod Identity) | | ✅ | Review |
+| Application code security | | | ✅ |
+| Data classification | | | ✅ |
+| Compliance certification | | | ✅ |
+| Incident response | | | ✅ |
+

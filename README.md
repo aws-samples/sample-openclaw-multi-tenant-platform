@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/AWS-EKS-FF9900?logo=amazon-eks&logoColor=white" alt="EKS">
   <img src="https://img.shields.io/badge/AWS-CDK-FF9900?logo=amazon-aws&logoColor=white" alt="CDK">
-  <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Bedrock">
+  <img src="https://img.shields.io/badge/Bedrock-LLM-8B5CF6?logo=amazon-aws&logoColor=white" alt="Amazon Bedrock">
   <img src="https://img.shields.io/badge/KEDA-Scale--to--Zero-326CE5?logo=kubernetes&logoColor=white" alt="KEDA">
   <img src="https://img.shields.io/badge/License-MIT--0-green" alt="MIT-0">
   <img src="https://img.shields.io/badge/Status-Experimental-yellow" alt="Experimental">
@@ -20,7 +20,7 @@ Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
 - **One tenant per user** -- isolated namespace, PVC, network policy, IAM role
 - **Zero API keys** -- LLM access via Amazon Bedrock + Pod Identity
 - **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s
-- **3-layer origin protection** -- internet-facing ALB with CF-only SG + WAF + HTTPS
+- **3-layer origin protection** -- internet-facing ALB with CF-only SG + AWS WAF + HTTPS
 - **Custom auth UI** -- branded login/signup on your domain (no Cognito Hosted UI)
 - **Self-service signup** -- Cognito + Lambda auto-provisions tenants
 - **ArgoCD ApplicationSet managed** -- ApplicationSet generates per-tenant ArgoCD Applications; each syncs Helm chart with tenant-specific values ([details](docs/architecture.md))
@@ -37,7 +37,7 @@ Internet
   +- claw.your-domain.com --> CloudFront (single distribution)
   |                            /        -> S3 (auth UI)           [CDK-managed]
   |                            /t/*     -> Internet-facing ALB    [post-deploy.sh]
-  |                                        (CF-only SG + WAF) -> EKS Pod
+  |                                        (CF-only SG + AWS WAF) -> EKS Pod
   +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
 ```
 
@@ -96,7 +96,7 @@ n# Ensure your AWS CLI default region matches your target deployment region:
 npx cdk deploy
 ```
 
-Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, WAF, CloudWatch, SNS (~15-20 min).
+Creates: EKS cluster, VPC, IAM roles, EFS, Lambda, S3, CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
 
 #### 3. Setup ArgoCD
 
@@ -136,7 +136,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 #### 7. Finalize
 
 ```bash
-./scripts/post-deploy.sh          # Add ALB origin to CloudFront + Route53 + WAF
+./scripts/post-deploy.sh          # Add ALB origin to CloudFront + Route53 + AWS WAF
 ```
 
 > **Note**: Auth UI is deployed automatically by CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
@@ -157,13 +157,13 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 
 | Layer | Control |
 |-------|--------|
-| Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
-| Signup | WAF Bot Control (opt-in) + email domain restriction + rate limiting |
-| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + WAF + HTTPS |
+| Edge | CloudFront + AWS WAF (AWS Common Rules + rate limit) |
+| Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
+| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Cognito signup + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
-| LLM | Bedrock via Pod Identity -- zero API keys |
+| LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
 | Audit | CloudTrail + S3 + Athena + EKS control plane logging |
@@ -175,9 +175,9 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 | EKS control plane | ~$73 | ~$73 |
 | EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
 | EFS (per actual usage) | ~$0.15 | ~$75 |
-| ALB + NAT (x2) + CloudFront + WAF | ~$60 | ~$65 |
+| ALB + NAT (x2) + CloudFront + AWS WAF | ~$60 | ~$65 |
 | CloudWatch + Lambda + S3 | ~$15 | ~$20 |
-| Bedrock | varies | varies |
+| Amazon Bedrock | varies | varies |
 | **Total (infra)** | **~$198/mo** | **~$286-388/mo** |
 
 > KEDA scale-to-zero active. EC2 scales with concurrent usage, not total tenants.
@@ -189,7 +189,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 | [Architecture](docs/architecture.md) | ApplicationSet + ArgoCD flow, tenant lifecycle |
 | [Security](docs/security.md) | 10-layer security model |
 | [EKS Cluster](docs/components/eks-cluster.md) | Cluster, nodegroups, Karpenter, add-ons |
-| [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, WAF |
+| [Networking](docs/components/networking.md) | VPC, CloudFront, ALB, AWS WAF |
 | [Auth](docs/components/auth.md) | Cognito, custom UI, Lambda triggers |
 | [Scaling](docs/components/scaling.md) | KEDA scale-to-zero, cold start |
 | [GitOps](docs/components/gitops.md) | ArgoCD + ApplicationSet, tenant lifecycle |

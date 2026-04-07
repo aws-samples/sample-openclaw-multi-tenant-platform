@@ -1,6 +1,6 @@
 # Networking
 
-Layered network architecture: CloudFront -> internet-facing ALB (CF prefix list SG) -> EKS pods, with WAF protection and per-tenant NetworkPolicy isolation.
+Layered network architecture: CloudFront -> internet-facing ALB (CF prefix list SG) -> EKS pods, with AWS WAF protection and per-tenant NetworkPolicy isolation.
 
 ## VPC
 
@@ -58,10 +58,10 @@ Key design decisions:
 | Layer | Mechanism |
 |-------|-----------|
 | L3/L4 | ALB Security Group allows only CloudFront managed prefix list |
-| L7 | WAF validates `X-Verify-Origin` custom header from CloudFront |
+| L7 | AWS WAF validates `X-Verify-Origin` custom header from CloudFront |
 | Transport | HTTPS-only origin protocol |
 
-## WAF
+## AWS WAF
 
 | Rule | Priority | Action | Description |
 |------|----------|--------|-------------|
@@ -69,7 +69,7 @@ Key design decisions:
 | Rate Limit | 2 | Block | 2000 requests per 5-min window per IP |
 
 - **Scope: REGIONAL** -- attached to the ALB
-- WAF <-> ALB association done by `scripts/post-deploy.sh` (dynamic ALB ARN)
+- AWS WAF <-> ALB association done by `scripts/post-deploy.sh` (dynamic ALB ARN)
 
 ## Route53
 
@@ -108,7 +108,7 @@ spec:
     # EC2 IMDS
     - to: [{ ipBlock: { cidr: 169.254.169.254/32 } }]
       ports: [{ protocol: TCP, port: 80 }]
-    # HTTPS outbound (Bedrock, Secrets Manager, etc.)
+    # HTTPS outbound (Amazon Bedrock, Secrets Manager, etc.)
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0

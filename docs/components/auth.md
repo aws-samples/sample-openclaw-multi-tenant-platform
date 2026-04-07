@@ -37,7 +37,7 @@ Features: sign in/up tabs, forgot password, password strength indicator.
 **Location:** `cdk/lambda/pre-signup/index.py`
 
 - Email domain restriction (`ALLOWED_DOMAINS`)
-- WAF Bot Control (opt-in, server-side)
+- AWS WAF Bot Control (opt-in, server-side)
 - `autoConfirmUser = true`, `autoVerifyEmail = true`
 - SNS notify admin
 
@@ -109,6 +109,6 @@ user.name+tag@example.com -> usernamtag (max 20 chars, [a-z0-9-] only)
 
 - Public client -- no client secret (safe for browser SPA)
 - Email domain restriction -- pre-signup Lambda rejects non-allowed domains
-- Bot protection -- WAF Bot Control (opt-in via CDK context)
+- Bot protection -- AWS WAF Bot Control (opt-in via CDK context)
 - Gateway token -- `secrets.token_urlsafe(32)`, stored in SM with ABAC tags
 - Password policy -- min 12 chars, uppercase + lowercase + numbers

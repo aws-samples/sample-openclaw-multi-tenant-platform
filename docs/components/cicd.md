@@ -49,7 +49,7 @@ Reads CDK stack outputs, injects config into `auth-ui/*.html`, syncs to S3.
 # Audit logging is managed by CDK -- no manual script needed
 ```
 
-Sets up CloudTrail + S3 + Athena for Bedrock API audit.
+Sets up CloudTrail + S3 + Athena for Amazon Bedrock API audit.
 
 ## Files
 

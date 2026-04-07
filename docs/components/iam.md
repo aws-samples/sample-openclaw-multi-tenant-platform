@@ -22,11 +22,11 @@ Created by PostConfirmation Lambda during tenant provisioning. Maps namespace `o
 
 ## Tenant Role Permissions
 
-### Bedrock (Model Invocation)
+### Amazon Bedrock (Model Invocation)
 
 `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream` on all foundation models and inference profiles. Wildcard region for cross-region inference.
 
-### Bedrock (Discovery)
+### Amazon Bedrock (Discovery)
 
 `bedrock:ListFoundationModels`, `bedrock:ListInferenceProfiles`, `bedrock:GetInferenceProfile` on `*`.
 
