@@ -1,139 +1,59 @@
-# Contributing
+# Contributing Guidelines
 
-Thank you for your interest in contributing to OpenClaw Platform!
+Thank you for your interest in contributing to our project. Whether it's a bug report, new feature, correction, or additional
+documentation, we greatly value feedback and contributions from our community.
 
-## Prerequisites
+Please read through this document before submitting any issues or pull requests to ensure we have all the necessary
+information to effectively respond to your bug report or contribution.
 
-- AWS account with admin access
-- AWS CLI v2 configured
-- Node.js 22+ and npm
-- kubectl
-- Helm 3
-- Python 3.12+
-- Docker (for AWS CDK asset bundling)
 
-## Quick Setup
+## Reporting Bugs/Feature Requests
 
-```bash
-git clone https://github.com/snese/sample-openclaw-multi-tenant-platform.git
-cd sample-openclaw-multi-tenant-platform
+We welcome you to use the GitHub issue tracker to report bugs or suggest features.
 
-# AWS CDK dependencies
-cd cdk && npm install && cd ..
+When filing an issue, please check existing open, or recently closed, issues to make sure somebody else hasn't already
+reported the issue. Please try to include as much information as you can. Details like these are incredibly useful:
 
-# Copy and fill in your values
-cp cdk/cdk.json.example cdk/cdk.json
-# Edit cdk/cdk.json with your AWS account details
-```
+* A reproducible test case or series of steps
+* The version of our code being used
+* Any modifications you've made relevant to the bug
+* Anything unusual about your environment or deployment
 
-## Platform Build
 
-The Platform uses ArgoCD ApplicationSet for multi-tenant management. No Operator build needed.
+## Contributing via Pull Requests
+Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
 
-```
+1. You are working against the latest source on the *main* branch.
+2. You check existing open, and recently merged, pull requests to make sure someone else hasn't addressed the problem already.
+3. You open an issue to discuss any significant work - we would hate for your time to be wasted.
 
-## Project Structure
+To send us a pull request, please:
 
-```
-cdk/                    # AWS CDK infrastructure (TypeScript)
-  lib/eks-cluster-stack.ts   # Main stack (~700 lines)
-  lambda/                    # Amazon Cognito trigger functions + cost enforcement (Python)
-  cdk.json.example           # Configuration template
-helm/                   # Helm chart (source of truth, synced by ArgoCD)
-  charts/openclaw-platform/  # Tenant K8s resources (Deployment, Service, ConfigMap, etc.)
-  tenants/values-template.yaml  # Per-tenant values template
-auth-ui/                # Auth UI pages (index.html, admin.html, terms, privacy, manifest.json)
-scripts/                # Operational scripts (Bash)
-docs/                   # Architecture and operations docs
-```
+1. Fork the repository.
+2. Modify the source; please focus on the specific change you are contributing. If you also reformat all the code, it will be hard for us to focus on your change.
+3. Ensure local tests pass.
+4. Commit to your fork using clear commit messages.
+5. Send us a pull request, answering any default questions in the pull request interface.
+6. Pay attention to any automated CI failures reported in the pull request, and stay involved in the conversation.
 
-## Development Workflow
+GitHub provides additional document on [forking a repository](https://help.github.com/articles/fork-a-repo/) and
+[creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
 
-### 1. Make your changes
 
-See [AGENTS.md](AGENTS.md) for file relationships and how each component works.
+## Finding contributions to work on
+Looking at the existing issues is a great way to find something to contribute on. As our projects, by default, use the default GitHub issue labels (enhancement/bug/duplicate/help wanted/invalid/question/wontfix), looking at any 'help wanted' issues is a great place to start.
 
-### 2. Validate locally
 
-```bash
-# AWS CDK
-cd cdk && npx tsc --noEmit && npx jest
+## Code of Conduct
+This project has adopted the [Amazon Open Source Code of Conduct](https://aws.github.io/code-of-conduct).
+For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of-conduct-faq) or contact
+opensource-codeofconduct@amazon.com with any additional questions or comments.
 
-# Platform
 
-# AWS Lambda
-python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
-python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
-python3 -m pytest cdk/lambda/cost-enforcer/test_index.py -v
+## Security issue notifications
+If you discover a potential security issue in this project we ask that you notify AWS/Amazon Security via our [vulnerability reporting page](http://aws.amazon.com/security/vulnerability-reporting/). Please do **not** create a public github issue.
 
-# Helm
-helm lint helm/charts/openclaw-platform/
 
-# Sensitive data scan
-grep -rn 'AKIA[A-Z0-9]\{16\}' \
-  --include="*.ts" --include="*.py" --include="*.md" --include="*.sh" --include="*.html" \
-  | grep -v node_modules | grep -v cdk.out | grep -v cdk.json
-# Must return 0 results
-```
+## Licensing
 
-### 3. Deploy to your environment
-
-```bash
-./setup.sh
-# Or step-by-step: see README.md Getting Started
-```
-
-### 4. Test
-
-```bash
-# AWS CDK matches stack
-cd cdk && npx cdk diff  # Should show "no differences"
-
-# Signup flow
-# Open https://<your-domain> -> Sign Up -> Workspace loads at claw.<domain>/t/<tenant>/
-```
-
-## Configuration
-
-All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk.json.example` for the full list.
-
-## Coding Standards
-
-- **Language**: All code, comments, documentation, issue titles, PR titles, and issue/PR bodies in English
-- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup AWS Lambda")
-- **PR titles**: English, conventional commit prefix: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
-- **AWS CDK**: TypeScript, follow existing patterns in `eks-cluster-stack.ts`
-- **AWS Lambda**: Python 3.12, boto3, handle errors with `ClientError`
-- **Scripts**: Bash, `set -euo pipefail`, use `get_output()` for CloudFormation outputs
-- **Commits**: Imperative mood, prefixed: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
-
-## CI Checks
-
-The GitHub Actions CI pipeline (`.github/workflows/ci.yml`) runs:
-
-3. **Platform**: CDK compile + synth with cdk-nag, Helm lint, Python syntax, Shell syntax, ShellCheck
-4. **Security**: hardcoded secrets scan, CJK character scan, commit message sensitive data scan, `npm audit`, Semgrep, Trivy
-5. **Main-only**: Docker smoke test (build image + verify binary starts)
-
-### Supply Chain Hardening
-
-All GitHub Actions are **pinned to commit SHA** (not version tags). npm dependencies installed with `--ignore-scripts` in CI security jobs.
-
-All PR checks must pass before merge.
-
-## Architecture Decisions
-
-Key design decisions documented in:
-
-- `docs/architecture.md` -- System overview, ApplicationSet + ArgoCD flow
-- `docs/security.md` -- Security model (10 layers)
-- `docs/components/` -- Per-component deep dives
-
-## Getting Help
-
-- Open an issue for bugs or feature requests
-- Check `docs/operations/admin-guide.md` for operational procedures
-
-## License
-
-MIT-0 -- see [LICENSE](LICENSE).
+See the [LICENSE](LICENSE) file for our project's licensing. We will ask you to confirm the licensing of your contribution.
