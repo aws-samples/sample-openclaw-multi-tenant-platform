@@ -1,108 +1,222 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Post-deploy script: sets up resources that depend on Kubernetes-managed ALB
-# Run after: cdk deploy + setup-keda.sh + first tenant creation
+# Post-deploy script: adds ALB origin to the CDK-managed CloudFront distribution
+# Run after: cdk deploy + deploy-platform.sh + setup-keda.sh + first tenant creation
+#
+# The CDK CloudFront serves auth UI from S3 (default behavior).
+# This script adds the ALB as a second origin with /t/* behavior for tenant traffic:
+#   CloudFront (claw.domain)
+#     /        -> S3 (auth UI)        [CDK-managed]
+#     /t/*     -> ALB (tenant pods)   [added by this script]
+#     /error/* -> S3 (error pages)    [added by this script]
 
-REGION="${1:-us-west-2}"
-STACK="OpenClawEksStack"
-
-get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+source "$(dirname "$0")/lib/common.sh"
 
 DOMAIN=$(get_output DomainName)
 WAF_ARN=$(get_output WafAclArn)
-CF_CERT=$(get_output CloudFrontCertificateArn 2>/dev/null || echo "")
+ERROR_BUCKET=$(get_output ErrorPagesBucketName)
 
 echo "==> Post-deploy setup"
 echo "  Domain: $DOMAIN"
 
-# 1. Find internal ALB (created by Kubernetes LB Controller)
+# 1. Find internet-facing ALB (created by ALB Controller when Gateway is reconciled)
 ALB_ARN=$(aws elbv2 describe-load-balancers --region "$REGION" \
-  --query "LoadBalancers[?Scheme=='internal' && contains(LoadBalancerName,'openclaw')].LoadBalancerArn" --output text)
+  --query "LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')].LoadBalancerArn" --output text)
 ALB_DNS=$(aws elbv2 describe-load-balancers --region "$REGION" \
-  --query "LoadBalancers[?Scheme=='internal' && contains(LoadBalancerName,'openclaw')].DNSName" --output text)
+  --query "LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')].DNSName" --output text)
 
-if [ -z "$ALB_ARN" ]; then
-  echo "Error: Internal ALB not found. Create at least one tenant first."
+if [ -z "$ALB_ARN" ] || [ "$ALB_ARN" = "None" ]; then
+  echo "Error: Internet-facing ALB not found. Ensure deploy-platform.sh ran and at least one tenant exists."
   exit 1
 fi
-echo "  ALB: $ALB_DNS (internal)"
+echo "  ALB: $ALB_DNS"
 
 # 2. Attach WAF to ALB
-echo "  → Attaching WAF to ALB"
+echo "  -> Attaching WAF to ALB"
 aws wafv2 associate-web-acl --web-acl-arn "$WAF_ARN" --resource-arn "$ALB_ARN" --region "$REGION" 2>/dev/null || true
-echo "  ✅ WAF attached"
+echo "  WAF attached"
 
-# 3. Create or find VPC Origin
-VPC_ORIGIN_ID=$(aws cloudfront list-vpc-origins --query "VpcOriginList.Items[?VpcOriginEndpointConfig.Arn=='${ALB_ARN}'].Id" --output text 2>/dev/null)
-if [ -z "$VPC_ORIGIN_ID" ]; then
-  echo "  → Creating VPC Origin"
-  VPC_ORIGIN_ID=$(aws cloudfront create-vpc-origin \
-    --vpc-origin-endpoint-config "{\"Name\":\"openclaw-alb\",\"Arn\":\"${ALB_ARN}\",\"HTTPPort\":80,\"HTTPSPort\":443,\"OriginProtocolPolicy\":\"https-only\"}" \
-    --query 'VpcOrigin.Id' --output text)
-  echo "  Waiting for VPC Origin to deploy..."
-  while [ "$(aws cloudfront get-vpc-origin --id "$VPC_ORIGIN_ID" --query 'VpcOrigin.Status' --output text)" != "Deployed" ]; do
-    sleep 15
-  done
+# 3. Upload error pages to S3
+echo "  -> Uploading error pages to s3://${ERROR_BUCKET}"
+STATIC_DIR="$(dirname "$0")/../helm/charts/openclaw-platform/static"
+if [ -f "${STATIC_DIR}/503.html" ]; then
+  aws s3 cp "${STATIC_DIR}/503.html" "s3://${ERROR_BUCKET}/503.html" --content-type "text/html; charset=utf-8" --region "$REGION"
 fi
-echo "  ✅ VPC Origin: $VPC_ORIGIN_ID"
 
-# 4. Upload error pages to S3 + create OAC for tenant CloudFront
-ERROR_BUCKET=$(get_output ErrorPagesBucketName)
-echo "  → Uploading error pages to s3://${ERROR_BUCKET}"
-aws s3 cp "$(dirname "$0")/../helm/charts/openclaw-platform/static/503.html" "s3://${ERROR_BUCKET}/503.html" --content-type "text/html; charset=utf-8" --region "$REGION"
-
-# Create OAC for error pages S3 origin
+# 4. Create or find OAC for error pages S3 origin
 OAC_NAME="openclaw-error-pages"
-OAC_ID=$(aws cloudfront list-origin-access-controls --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id" --output text 2>/dev/null)
+OAC_ID=$(aws cloudfront list-origin-access-controls \
+  --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id" --output text 2>/dev/null)
 if [ -z "$OAC_ID" ]; then
-  OAC_ID=$(aws cloudfront create-origin-access-control --origin-access-control-config "{\"Name\":\"${OAC_NAME}\",\"SigningProtocol\":\"sigv4\",\"SigningBehavior\":\"always\",\"OriginAccessControlOriginType\":\"s3\"}" --query 'OriginAccessControl.Id' --output text)
+  echo "  -> Creating OAC for error pages"
+  OAC_ID=$(aws cloudfront create-origin-access-control \
+    --origin-access-control-config "{\"Name\":\"${OAC_NAME}\",\"SigningProtocol\":\"sigv4\",\"SigningBehavior\":\"always\",\"OriginAccessControlOriginType\":\"s3\"}" \
+    --query 'OriginAccessControl.Id' --output text)
 fi
-echo "  ✅ Error pages ready (OAC: $OAC_ID)"
+echo "  OAC: $OAC_ID"
 
-# 5. Create or find tenant CloudFront distribution (*.domain → VPC Origin → ALB)
-TENANT_CF_ID=$(aws cloudfront list-distributions \
-  --query "DistributionList.Items[?contains(to_string(Aliases.Items),'*.${DOMAIN}')].Id" --output text 2>/dev/null)
+# 5. Find CDK-managed CloudFront distribution (serves auth UI on DOMAIN)
+CF_ID=$(aws cloudfront list-distributions \
+  --query "DistributionList.Items[?Aliases.Items[0]=='${DOMAIN}'].Id" --output text 2>/dev/null | head -1)
 
-if [ -z "$TENANT_CF_ID" ]; then
-  echo "  → Creating tenant CloudFront distribution"
+if [ -z "$CF_ID" ]; then
+  log_error "CloudFront distribution for ${DOMAIN} not found. Run 'cdk deploy' first."
+  exit 1
+fi
+echo "  CloudFront: $CF_ID"
 
-  # Need us-east-1 cert ARN
-  if [ -z "$CF_CERT" ]; then
-    CF_CERT=$(aws acm list-certificates --region us-east-1 \
-      --query "CertificateSummaryList[?DomainName=='${DOMAIN}'].CertificateArn" --output text)
+# Check if ALB origin already exists
+EXISTING_ORIGINS=$(aws cloudfront get-distribution-config --id "$CF_ID" \
+  --query "DistributionConfig.Origins.Items[*].Id" --output text)
+if echo "$EXISTING_ORIGINS" | grep -q "alb"; then
+  echo "  ALB origin already configured. Updating..."
+fi
+
+# 6. Add ALB origin + /t/* behavior to the existing CloudFront distribution
+echo "  -> Adding ALB origin and /t/* behavior to CloudFront"
+
+# Retry loop for ETag-based optimistic concurrency
+MAX_RETRIES=3
+for attempt in $(seq 1 $MAX_RETRIES); do
+  aws cloudfront get-distribution-config --id "$CF_ID" > /tmp/cf-config-full.json
+  ETAG=$(python3 -c "import json; print(json.load(open('/tmp/cf-config-full.json'))['ETag'])")
+
+  python3 -c "
+import json
+import sys
+
+try:
+    with open('/tmp/cf-config-full.json') as f:
+        full = json.load(f)
+    config = full['DistributionConfig']
+
+    alb_dns = '${ALB_DNS}'
+    error_bucket = '${ERROR_BUCKET}'
+    region = '${REGION}'
+    oac_id = '${OAC_ID}'
+
+    # Add ALB origin if not present
+    origins = config['Origins']['Items']
+    alb_origin_ids = [o['Id'] for o in origins if o['Id'] == 'alb']
+    if not alb_origin_ids:
+        origins.append({
+            'Id': 'alb',
+            'DomainName': alb_dns,
+            'OriginPath': '',
+            'CustomOriginConfig': {
+                'HTTPPort': 80,
+                'HTTPSPort': 443,
+                'OriginProtocolPolicy': 'https-only',
+                'OriginKeepaliveTimeout': 5,
+                'OriginReadTimeout': 60,
+                'OriginSslProtocols': {'Quantity': 1, 'Items': ['TLSv1.2']}
+            },
+            'CustomHeaders': {'Quantity': 0, 'Items': []},
+            'OriginShield': {'Enabled': False},
+            'ConnectionAttempts': 3,
+            'ConnectionTimeout': 10,
+        })
+    else:
+        for o in origins:
+            if o['Id'] == 'alb':
+                o['DomainName'] = alb_dns
+
+    # Add error-pages origin with OAC (not empty OAI)
+    error_origin_ids = [o['Id'] for o in origins if o['Id'] == 'error-pages']
+    if not error_origin_ids:
+        origins.append({
+            'Id': 'error-pages',
+            'DomainName': f'{error_bucket}.s3.{region}.amazonaws.com',
+            'OriginPath': '',
+            'S3OriginConfig': {'OriginAccessIdentity': ''},
+            'OriginAccessControlId': oac_id,
+            'CustomHeaders': {'Quantity': 0, 'Items': []},
+            'OriginShield': {'Enabled': False},
+            'ConnectionAttempts': 3,
+            'ConnectionTimeout': 10,
+        })
+
+    config['Origins']['Quantity'] = len(origins)
+
+    # Add /t/* and /error/* behaviors if not present
+    behaviors = config.get('CacheBehaviors', {}).get('Items', [])
+
+    def make_behavior(path, origin_id, methods_all=False):
+        b = {
+            'PathPattern': path,
+            'TargetOriginId': origin_id,
+            'ViewerProtocolPolicy': 'redirect-to-https',
+            'Compress': True,
+            'SmoothStreaming': False,
+            'FieldLevelEncryptionId': '',
+            'LambdaFunctionAssociations': {'Quantity': 0, 'Items': []},
+            'FunctionAssociations': {'Quantity': 0, 'Items': []},
+        }
+        if methods_all:
+            b['AllowedMethods'] = {
+                'Quantity': 7,
+                'Items': ['GET','HEAD','OPTIONS','PUT','POST','PATCH','DELETE'],
+                'CachedMethods': {'Quantity': 2, 'Items': ['GET','HEAD']}
+            }
+            b['CachePolicyId'] = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
+            b['OriginRequestPolicyId'] = '216adef6-5c7f-47e4-b989-5492eafa07d3'
+        else:
+            b['AllowedMethods'] = {
+                'Quantity': 2,
+                'Items': ['GET','HEAD'],
+                'CachedMethods': {'Quantity': 2, 'Items': ['GET','HEAD']}
+            }
+            b['CachePolicyId'] = '658327ea-f89d-4fab-a63d-7e88639e58f6'
+        return b
+
+    if not any(b['PathPattern'] == '/t/*' for b in behaviors):
+        behaviors.append(make_behavior('/t/*', 'alb', methods_all=True))
+    if not any(b['PathPattern'] == '/error/*' for b in behaviors):
+        behaviors.append(make_behavior('/error/*', 'error-pages', methods_all=False))
+
+    config['CacheBehaviors'] = {'Quantity': len(behaviors), 'Items': behaviors}
+
+    # Merge custom error responses (preserve existing, upsert 502/503)
+    existing_errors = config.get('CustomErrorResponses', {}).get('Items', [])
+    error_codes_to_set = {502, 503}
+    merged = [e for e in existing_errors if e['ErrorCode'] not in error_codes_to_set]
+    merged.extend([
+        {'ErrorCode': 502, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
+        {'ErrorCode': 503, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
+    ])
+    config['CustomErrorResponses'] = {'Quantity': len(merged), 'Items': merged}
+
+    config['HttpVersion'] = 'http2and3'
+
+    with open('/tmp/cf-config-update.json', 'w') as f:
+        json.dump(config, f)
+
+except Exception as e:
+    print(f'Error modifying CloudFront config: {e}', file=sys.stderr)
+    sys.exit(1)
+"
+
+  if aws cloudfront update-distribution --id "$CF_ID" \
+    --if-match "$ETAG" \
+    --distribution-config file:///tmp/cf-config-update.json \
+    --query 'Distribution.{Status:Status,DomainName:DomainName}' --output json 2>/tmp/cf-update-error.log; then
+    break
   fi
 
-  cat > /tmp/tenant-cf.json << CFEOF
-{
-  "CallerReference": "openclaw-tenants-$(date +%s)",
-  "Aliases": {"Quantity": 1, "Items": ["*.${DOMAIN}"]},
-  "DefaultRootObject": "",
-  "Origins": {"Quantity": 2, "Items": [
-    {"Id": "alb", "DomainName": "${ALB_DNS}", "VpcOriginConfig": {"VpcOriginId": "${VPC_ORIGIN_ID}", "OriginKeepaliveTimeout": 5, "OriginReadTimeout": 60}, "CustomHeaders": {"Quantity": 0}, "OriginShield": {"Enabled": false}, "ConnectionAttempts": 3, "ConnectionTimeout": 10},
-    {"Id": "error-pages", "DomainName": "${ERROR_BUCKET}.s3.${REGION}.amazonaws.com", "S3OriginConfig": {"OriginAccessIdentity": ""}, "CustomHeaders": {"Quantity": 0}, "OriginShield": {"Enabled": false}, "ConnectionAttempts": 3, "ConnectionTimeout": 10, "OriginAccessControlId": "${OAC_ID}"}
-  ]},
-  "DefaultCacheBehavior": {"TargetOriginId": "alb", "ViewerProtocolPolicy": "redirect-to-https", "AllowedMethods": {"Quantity": 7, "Items": ["GET","HEAD","OPTIONS","PUT","POST","PATCH","DELETE"], "CachedMethods": {"Quantity": 2, "Items": ["GET","HEAD"]}}, "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad", "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3", "Compress": true},
-  "CacheBehaviors": {"Quantity": 1, "Items": [{"PathPattern": "/error/*", "TargetOriginId": "error-pages", "ViewerProtocolPolicy": "redirect-to-https", "AllowedMethods": {"Quantity": 2, "Items": ["GET","HEAD"], "CachedMethods": {"Quantity": 2, "Items": ["GET","HEAD"]}}, "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6", "Compress": true}]},
-  "CustomErrorResponses": {"Quantity": 2, "Items": [
-    {"ErrorCode": 502, "ResponsePagePath": "/error/503.html", "ResponseCode": "503", "ErrorCachingMinTTL": 5},
-    {"ErrorCode": 503, "ResponsePagePath": "/error/503.html", "ResponseCode": "503", "ErrorCachingMinTTL": 5}
-  ]},
-  "Comment": "OpenClaw tenants (*.${DOMAIN} → internal ALB)",
-  "Enabled": true,
-  "ViewerCertificate": {"ACMCertificateArn": "${CF_CERT}", "SSLSupportMethod": "sni-only", "MinimumProtocolVersion": "TLSv1.2_2021"},
-  "HttpVersion": "http2and3",
-  "PriceClass": "PriceClass_100"
-}
-CFEOF
-  TENANT_CF_ID=$(aws cloudfront create-distribution --distribution-config file:///tmp/tenant-cf.json --query 'Distribution.Id' --output text)
-  TENANT_CF_DOMAIN=$(aws cloudfront get-distribution --id "$TENANT_CF_ID" --query 'Distribution.DomainName' --output text)
-else
-  TENANT_CF_DOMAIN=$(aws cloudfront get-distribution --id "$TENANT_CF_ID" --query 'Distribution.DomainName' --output text)
-fi
-echo "  ✅ Tenant CloudFront: $TENANT_CF_ID ($TENANT_CF_DOMAIN)"
+  if [ "$attempt" -eq "$MAX_RETRIES" ]; then
+    log_error "CloudFront update failed after $MAX_RETRIES attempts"
+    cat /tmp/cf-update-error.log >&2
+    exit 1
+  fi
+  echo "  Retrying CloudFront update (attempt $((attempt+1))/$MAX_RETRIES)..."
+  sleep 2
+done
+rm -f /tmp/cf-config-full.json /tmp/cf-config-update.json /tmp/cf-update-error.log
 
-# Set bucket policy for CloudFront OAC access to error pages
+echo "  CloudFront updated (deploying ~3-5 min)"
+
+# 7. Set bucket policy for error pages (OAC requires explicit bucket policy)
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 aws s3api put-bucket-policy --bucket "$ERROR_BUCKET" --policy "{
   \"Version\": \"2012-10-17\",
@@ -111,26 +225,30 @@ aws s3api put-bucket-policy --bucket "$ERROR_BUCKET" --policy "{
     \"Principal\": {\"Service\": \"cloudfront.amazonaws.com\"},
     \"Action\": \"s3:GetObject\",
     \"Resource\": \"arn:aws:s3:::${ERROR_BUCKET}/*\",
-    \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${TENANT_CF_ID}\"}}
+    \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${CF_ID}\"}}
   }]
 }" --region "$REGION"
 
-# 6. Update Route53 wildcard → tenant CloudFront
+# 8. Ensure Route53 points to this CloudFront
+CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)
 ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
-echo "  → Updating Route53 *.${DOMAIN} → $TENANT_CF_DOMAIN"
+echo "  -> Updating Route53 ${DOMAIN} -> $CF_DOMAIN"
 aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
   \"Changes\": [{\"Action\": \"UPSERT\", \"ResourceRecordSet\": {
-    \"Name\": \"*.${DOMAIN}\", \"Type\": \"A\",
-    \"AliasTarget\": {\"HostedZoneId\": \"Z2FDTNDATAQYW2\", \"DNSName\": \"${TENANT_CF_DOMAIN}\", \"EvaluateTargetHealth\": false}
+    \"Name\": \"${DOMAIN}\", \"Type\": \"A\",
+    \"AliasTarget\": {\"HostedZoneId\": \"Z2FDTNDATAQYW2\", \"DNSName\": \"${CF_DOMAIN}\", \"EvaluateTargetHealth\": false}
   }}]
 }" > /dev/null
-echo "  ✅ Route53 updated"
+echo "  Route53 updated"
 
 echo ""
 echo "=== Post-deploy complete ==="
-echo "  Auth UI:  https://${DOMAIN}"
-echo "  Tenants:  https://<name>.${DOMAIN}"
-echo "  ALB:      internal (${ALB_DNS})"
-echo "  WAF:      attached"
-echo "  VPC Origin: ${VPC_ORIGIN_ID}"
+echo "  Auth UI:    https://${DOMAIN}"
+echo "  Tenants:    https://${DOMAIN}/t/<tenant>/"
+echo "  CloudFront: ${CF_ID} (${CF_DOMAIN})"
+echo "  ALB:        ${ALB_DNS} (CF-only SG)"
+echo "  WAF:        attached to ALB"
+echo ""
+echo "  CloudFront deployment takes ~3-5 min. Check status:"
+echo "    aws cloudfront get-distribution --id ${CF_ID} --query 'Distribution.Status'"
 echo "============================"
