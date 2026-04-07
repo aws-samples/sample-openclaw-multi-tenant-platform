@@ -9,7 +9,7 @@ Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated Ope
 ## Architecture at a Glance
 
 ```
-User -> CloudFront -> Internet-facing ALB (CF-only SG + WAF) -> EKS Pod (per-tenant)
+User -> CloudFront -> Internet-facing ALB (CF-only SG + AWS WAF) -> EKS Pod (per-tenant)
                                                                 |
                                                            Amazon Bedrock
 ```
