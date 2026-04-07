@@ -7,9 +7,9 @@
 ```
 Internet
   |
-  +- your-domain.com --> CloudFront #1 --> S3 (custom auth UI)
-  |
-  +- claw.your-domain.com --> CloudFront #2 --> Internet-facing ALB --> EKS Pod
+  +- claw.your-domain.com --> CloudFront (single distribution)
+  |                            /        -> S3 (auth UI)           [CDK-managed]
+  |                            /t/*     -> Internet-facing ALB    [post-deploy.sh]
   |                                               (CF-only SG + WAF)
   |
   +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
@@ -130,7 +130,7 @@ ArgoCD tracks sync status for each tenant Application:
 
 ```
 User Request:
-  Browser -> CloudFront #2 -> ALB (CF-only SG) -> HTTPRoute -> Pod
+  Browser -> CloudFront (/t/*) -> ALB (CF-only SG) -> HTTPRoute -> Pod
   Pod -> Bedrock (via Pod Identity, cross-region inference profiles)
 
 Tenant Provisioning:

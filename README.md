@@ -34,11 +34,10 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain
 ```
 Internet
   |
-  +- your-domain.com --> CloudFront #1 --> S3 (custom auth UI)
-  |
-  +- claw.your-domain.com --> CloudFront #2 --> Internet-facing ALB --> EKS Pod
-  |                                               (CF-only SG + WAF)
-  |
+  +- claw.your-domain.com --> CloudFront (single distribution)
+  |                            /        -> S3 (auth UI)           [CDK-managed]
+  |                            /t/*     -> Internet-facing ALB    [post-deploy.sh]
+  |                                        (CF-only SG + WAF) -> EKS Pod
   +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
 ```
 
@@ -137,7 +136,7 @@ Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all m
 #### 7. Finalize
 
 ```bash
-./scripts/post-deploy.sh          # CloudFront #2 + Route53 + WAF->ALB
+./scripts/post-deploy.sh          # Add ALB origin to CloudFront + Route53 + WAF
 ```
 
 > **Note**: Auth UI is deployed automatically by CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
@@ -224,7 +223,7 @@ for tenant in $(kubectl get applicationset openclaw-tenants -n argocd -o jsonpat
   ./scripts/delete-tenant.sh "$tenant" --force
 done
 
-# 2. Delete CloudFront #2 + Route53 records (created by post-deploy.sh, not CDK-managed)
+# 2. CloudFront ALB origin and Route53 are cleaned up by cdk destroy
 
 # 3. Destroy CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack

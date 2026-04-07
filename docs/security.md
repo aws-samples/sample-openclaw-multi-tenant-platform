@@ -34,7 +34,7 @@ Filters malicious traffic before it reaches the application.
 
 **CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
 
-**Script**: `scripts/setup-waf.sh` -- associates WAF WebACL with the dynamic ALB ARN
+**Script**: `scripts/post-deploy.sh` -- associates WAF WebACL with the dynamic ALB ARN
 
 ---
 
