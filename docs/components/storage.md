@@ -7,7 +7,7 @@ Each tenant gets an EFS-backed PVC that persists across pod restarts, scale-to-z
 ## Storage Architecture
 
 ```
-EFS FileSystem (encrypted, elastic throughput)
+Amazon EFS FileSystem (encrypted, elastic throughput)
   ├─ /tenants/openclaw-alice/    ← Access Point (auto-created by CSI driver)
   ├─ /tenants/openclaw-bob/      ← Access Point
   └─ /tenants/openclaw-demo/     ← Access Point
@@ -24,9 +24,9 @@ Each AP enforces:
 ```yaml
 persistence:
   enabled: true
-  storageClass: "efs-sc"    # EFS dynamic provisioning
-  accessMode: ReadWriteMany  # EFS supports multi-AZ
-  size: 10Gi                 # EFS auto-scales; this is a K8s formality
+  storageClass: "efs-sc"    # Amazon EFS dynamic provisioning
+  accessMode: ReadWriteMany  # Amazon EFS supports multi-AZ
+  size: 10Gi                 # Amazon EFS auto-scales; this is a K8s formality
 ```
 
 **StorageClass** (`efs-sc`, created by AWS CDK):
@@ -74,10 +74,10 @@ Typical tenant: ~500MB actual usage → ~$0.15/mo (vs $0.80/mo with EBS 10Gi).
 Amazon EFS supports AWS Backup natively. For on-demand backup/restore:
 
 ```bash
-# Backup tenant data to S3
+# Backup tenant data to Amazon S3
 ./scripts/backup-tenant.sh <tenant-name> <s3-bucket>
 
-# Restore from S3
+# Restore from Amazon S3
 ./scripts/restore-tenant.sh <tenant-name> s3://<bucket>/backups/<tenant>/<file>.tar.gz
 ```
 

@@ -28,7 +28,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 |---|--------|----------|------------|
 | S1 | Attacker impersonates Amazon CloudFront to reach ALB | TB2 | ALB SG restricted to Amazon CloudFront prefix list (pl-82a045eb). AWS WAF is configured to validate X-Verify-Origin custom header |
 | S2 | Attacker guesses gateway token to access workspace | TB6 | Token is secrets.token_urlsafe(32) = 256-bit entropy. Stored in Secrets Manager, fetched on-demand via exec SecretRef |
-| S3 | Bot mass signup | TB6 | Pre-signup Lambda: email domain allowlist + 5 signups/domain/hour rate limit. Optional AWS WAF Bot Control |
+| S-3 | Bot mass signup | TB6 | Pre-signup AWS Lambda: email domain allowlist + 5 signups/domain/hour rate limit. Optional AWS WAF Bot Control |
 | S4 | Cross-tenant identity spoofing | TB5 | Pod Identity per tenant → STS session with kubernetes-namespace tag → ABAC on Secrets Manager |
 
 ### Tampering
@@ -44,7 +44,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 | # | Threat | Boundary | Mitigation |
 |---|--------|----------|------------|
 | R1 | Deny LLM API usage | TB4 | Dedicated CloudTrail trail (openclaw-bedrock-audit) is designed to log all Amazon Bedrock InvokeModel calls per namespace |
-| R2 | Deny tenant provisioning actions | TB7 | ArgoCD audit log + CloudTrail for Amazon Cognito/Lambda/Secrets Manager operations |
+| R2 | Deny tenant provisioning actions | TB7 | ArgoCD audit log + CloudTrail for Amazon Amazon Cognito/AWS Lambda/Secrets Manager operations |
 
 ### Information Disclosure
 
@@ -61,7 +61,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 |---|--------|----------|------------|
 | D1 | DDoS on ALB | TB1-TB2 | Amazon CloudFront edge caching + AWS WAF rate limit (2000 req/5min/IP) |
 | D2 | Tenant resource exhaustion | TB5 | ResourceQuota per namespace: 4 CPU, 8Gi memory, 10 pods |
-| D3 | LLM cost runaway | TB4 | Daily CostEnforcer Lambda: per-tenant budget ($100/mo default), SNS alerts at 80%/100% |
+| D3 | LLM cost runaway | TB4 | Daily CostEnforcer AWS Lambda: per-tenant budget ($100/mo default), SNS alerts at 80%/100% |
 | D4 | KEDA scale storm | TB3 | KEDA HTTP Add-on with configurable scaling window. PDB minAvailable: 1 |
 
 ### Elevation of Privilege
@@ -98,7 +98,7 @@ Reference: https://aws.amazon.com/compliance/shared-responsibility-model/
 
 ## Components Removed Since Previous Review
 
-The Rust-based Tenant Operator (operator/) has been completely removed. Tenant lifecycle is now managed by ArgoCD ApplicationSet (server-side apply) + PostConfirmation Lambda. This eliminates:
+The Rust-based Tenant Operator (operator/) has been completely removed. Tenant lifecycle is now managed by ArgoCD ApplicationSet (server-side apply) + PostConfirmation AWS Lambda. This eliminates:
 - Custom CRD and webhook attack surface
 - Rust binary supply chain (Cargo dependencies)
 - Operator RBAC with cluster-wide permissions

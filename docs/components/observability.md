@@ -2,7 +2,7 @@
 
 ## CloudWatch Container Insights
 
-Deployed as Amazon EKS addon (`amazon-cloudwatch-observability`) via CDK. Uses Pod Identity with `CloudWatchAgentServerPolicy` + `AWSXrayWriteOnlyAccess`.
+Deployed as Amazon EKS addon (`amazon-cloudwatch-observability`) via AWS CDK. Uses Pod Identity with `CloudWatchAgentServerPolicy` + `AWSXrayWriteOnlyAccess`.
 
 Collects pod stdout to CloudWatch Logs -- foundation for usage tracking and custom metrics.
 
@@ -63,4 +63,4 @@ OpenClaw Pod (stdout) -> Container Insights -> CloudWatch Logs
 - CloudWatch Logs Insights: first 5 GB scanned free, then $0.005/GB
 - Metric Filters: free
 - Dashboard: $3/month
-- Cost Enforcer Lambda: negligible
+- Cost Enforcer AWS Lambda: negligible

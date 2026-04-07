@@ -8,15 +8,15 @@
 
 ```
 +-----------------------------------------------------------------------+
-|  1. Edge         CloudFront + AWS WAF (Common Rules + rate limit)          |
+|  1. Edge         Amazon CloudFront + AWS WAF (Common Rules + rate limit)          |
 |  2. Signup       AWS WAF Bot Control (opt-in) + email domain restriction     |
 |  3. Network      Internet-facing ALB (CF prefix list SG) + NetworkPolicy|
-|  4. Auth         Cognito signup + gateway token auth + CF prefix list   |
+|  4. Auth         Amazon Cognito signup + gateway token auth + CF prefix list   |
 |  5. Tenant       Namespace isolation + ABAC + ResourceQuota            |
 |  6. Secrets      exec SecretRef -- on-demand fetch, never persisted    |
 |  7. LLM          Amazon Bedrock via Pod Identity -- zero API keys             |
-|  8. Cost         Per-tenant budget enforcement + daily Lambda scan     |
-|  9. Data         PVC persistence (EFS, multi-AZ) + AWS Backup  |
+|  8. Cost         Per-tenant budget enforcement + daily AWS Lambda scan     |
+|  9. Data         PVC persistence (Amazon EFS, multi-AZ) + AWS Backup  |
 | 10. Audit        CloudTrail -> S3 -> Athena (Amazon Bedrock-specific trail)   |
 +-----------------------------------------------------------------------+
 ```
@@ -91,13 +91,13 @@ Controls access before reaching a pod.
 ### Auth Flow
 
 ```
-auth-ui (static S3 + CloudFront)
+auth-ui (static Amazon S3 + Amazon CloudFront)
   │
-  ├─ Sign Up: Cognito SignUp API → email verification → ConfirmSignUp
-  │   └─ PostConfirmation Lambda: provisions tenant (SM secret, Pod Identity,
+  ├─ Sign Up: Amazon Cognito SignUp API → email verification → ConfirmSignUp
+  │   └─ PostConfirmation AWS Lambda: provisions tenant (SM secret, Pod Identity,
   │      ApplicationSet element, K8s Secret)
   │
-  ├─ Sign In: Cognito InitiateAuth → ID token (contains custom:gateway_token)
+  ├─ Sign In: Amazon Cognito InitiateAuth → ID token (contains custom:gateway_token)
   │
   └─ Redirect: /t/{tenant}/#token={gateway_token}
        └─ OpenClaw gateway validates token → grants workspace access
@@ -229,12 +229,12 @@ Designed to ensure tenant data survives pod restarts, scale-to-zero, and failure
 Records all Amazon Bedrock API calls for compliance and forensics.
 
 - Dedicated CloudTrail trail (`openclaw-bedrock-audit`) -- Amazon Bedrock events only
-- Logs stored in S3: `openclaw-audit-logs-{account}-{region}`
+- Logs stored in Amazon S3: `openclaw-audit-logs-{account}-{region}`
 - Athena database + table for SQL queries
 - CloudWatch Container Insights for pod-level metrics
 - Amazon EKS control plane logging: all 5 types
 
-**Managed by**: AWS CDK (CloudTrail + S3 in `eks-cluster-stack.ts`)
+**Managed by**: AWS CDK (CloudTrail + Amazon S3 in `eks-cluster-stack.ts`)
 
 ---
 
@@ -303,7 +303,7 @@ For production deployments, consider the following enhancements:
 
 ### Infrastructure
 6. **AWS WAF Bot Control**: enable via `cdk deploy -c enableBotControl=true` (additional AWS WAF charges apply)
-7. **AWS WAF logging**: enable full request logging to S3 for forensics
+7. **AWS WAF logging**: enable full request logging to Amazon S3 for forensics
 8. **GuardDuty Amazon EKS Runtime Monitoring**: detect container-level threats
 9. **KMS CMK**: use customer-managed keys for EBS encryption and Secrets Manager
 10. **Secrets rotation**: enable Secrets Manager automatic rotation with a AWS Lambda rotator

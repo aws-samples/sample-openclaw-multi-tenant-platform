@@ -44,12 +44,12 @@ Internet
 ```
 Amazon EKS Cluster
 |  Managed Node Group (Graviton ARM64) + Karpenter (arm64 spot)
-|  Add-ons: ALB Controller, EBS CSI, EFS CSI, Pod Identity, CloudWatch Insights
+|  Add-ons: ALB Controller, EBS CSI, Amazon EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
 |   ApplicationSet-managed (ArgoCD):
-|     Namespace                      PVC (EFS)
+|     Namespace                      PVC (Amazon EFS)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (keda ns)      Deployment + Service + ConfigMap
 |                                    HTTPRoute + TGC + NetworkPolicy + PDB + KEDA HSO
@@ -96,7 +96,7 @@ n# Ensure your AWS CLI default region matches your target deployment region:
 npx cdk deploy
 ```
 
-Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, S3, Amazon CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
+Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
 
 #### 3. Setup ArgoCD
 
@@ -148,8 +148,8 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 ./scripts/delete-tenant.sh <name>              # Delete (with confirmation)
 ./scripts/verify-tenant.sh <name>              # Health check
 ./scripts/check-all-tenants.sh                 # Check all tenants
-./scripts/backup-tenant.sh <name> <bucket>     # Backup to S3
-./scripts/restore-tenant.sh <name> <s3-path>   # Restore from S3
+./scripts/backup-tenant.sh <name> <bucket>     # Backup to Amazon S3
+./scripts/restore-tenant.sh <name> <s3-path>   # Restore from Amazon S3
 ./scripts/admin-list-tenants.sh                # List tenants + cost
 ```
 
@@ -166,7 +166,7 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero (Amazon EFS, multi-AZ) |
-| Audit | CloudTrail + S3 + Athena + Amazon EKS control plane logging |
+| Audit | CloudTrail + Amazon S3 + Athena + Amazon EKS control plane logging |
 
 ## Cost
 
@@ -176,7 +176,7 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 | EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
 | Amazon EFS (per actual usage) | ~$0.15 | ~$75 |
 | ALB + NAT (x2) + Amazon CloudFront + AWS WAF | ~$60 | ~$65 |
-| CloudWatch + AWS Lambda + S3 | ~$15 | ~$20 |
+| CloudWatch + AWS Lambda + Amazon S3 | ~$15 | ~$20 |
 | Amazon Bedrock | varies | varies |
 | **Total (infra)** | **~$198/mo** | **~$286-388/mo** |
 
@@ -225,20 +225,20 @@ done
 
 # 2. Amazon CloudFront ALB origin and Route53 are cleaned up by cdk destroy
 
-# 3. Destroy CDK stack
+# 3. Destroy AWS CDK stack
 cd cdk && npx cdk destroy OpenClawEksStack
 
-# 4. Clean up retained resources (not deleted by CDK — data protection)
+# 4. Clean up retained resources (not deleted by AWS CDK — data protection)
 ./scripts/cleanup-test-resources.sh
 ```
 
-> **Retained resources**: Amazon EFS file systems and S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
+> **Retained resources**: Amazon EFS file systems and Amazon S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
 >
 > ```bash
 > # List retained Amazon EFS (check for tenant data before deleting)
 > aws efs describe-file-systems --query 'FileSystems[?contains(Name,`TenantEfs`)].FileSystemId' --output text
 >
-> # List retained S3 buckets
+> # List retained Amazon S3 buckets
 > aws s3api list-buckets --query 'Buckets[?contains(Name,`openclaweks`)].Name' --output text
 > ```
 >
@@ -249,13 +249,13 @@ cd cdk && npx cdk destroy OpenClawEksStack
 After pulling new changes (`git pull`), update the deployed components:
 
 ```bash
-# 1. Infrastructure + Lambda code + Auth UI (CDK deploys all three)
+# 1. Infrastructure + AWS Lambda code + Auth UI (AWS CDK deploys all three)
 cd cdk && npx cdk deploy OpenClawEksStack
 
 # 2. Re-apply platform manifests
 bash scripts/deploy-platform.sh
 
-# 3. Auth UI (if you use deploy-auth-ui.sh instead of CDK BucketDeployment)
+# 3. Auth UI (if you use deploy-auth-ui.sh instead of AWS CDK BucketDeployment)
 bash scripts/deploy-auth-ui.sh
 ```
 

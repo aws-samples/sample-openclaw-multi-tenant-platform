@@ -13,7 +13,7 @@ Layer 3: Helm chart               → Workload: Deployment, Service, ConfigMap, 
 Tenant provisioning flow:
 
 ```
-Cognito SignUp → PostConfirmation Lambda → ApplicationSet element
+Amazon Cognito SignUp → PostConfirmation AWS Lambda → ApplicationSet element
   → ApplicationSet generates per-tenant Application
   → ArgoCD syncs Helm chart → all tenant K8s resources created
 ```

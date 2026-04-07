@@ -47,7 +47,7 @@ The PostConfirmation AWS Lambda may have failed partway through. The user exists
 # Check if ApplicationSet element exists
 kubectl get applicationset openclaw-tenants -n argocd -o json | python3 -c "import json,sys; [print(e['name']) for e in json.load(sys.stdin).get('spec',{}).get('generators',[{}])[0].get('list',{}).get('elements',[])]" | grep <tenant-id>
 
-# Check Lambda logs
+# Check AWS Lambda logs
 aws logs tail /aws/lambda/OpenClaw-PostConfirmation --since 1h
 ```
 
@@ -152,7 +152,7 @@ aws secretsmanager get-secret-value --secret-id openclaw/<tenant>/gateway-token 
 # K8s Secret
 kubectl get secret <tenant>-gateway-token -n openclaw-<tenant> -o jsonpath='{.data.OPENCLAW_GATEWAY_TOKEN}' | base64 -d
 
-# Cognito (admin only)
+# Amazon Cognito (admin only)
 aws cognito-idp admin-get-user --user-pool-id <pool-id> --username <email> \
   --query 'UserAttributes[?Name==`custom:gateway_token`].Value' --output text
 ```
@@ -208,7 +208,7 @@ aws cloudformation delete-stack --stack-name OpenClawEksStack \
 **Fix**: Clean up orphan resources before redeploying:
 
 ```bash
-# Check for orphan EKS cluster
+# Check for orphan Amazon EKS cluster
 aws eks describe-cluster --name openclaw-cluster --query 'cluster.status' 2>/dev/null
 
 # Check for orphan IAM roles
@@ -221,4 +221,4 @@ aws eks delete-cluster --name openclaw-cluster
 
 ### Retained resources after `cdk destroy`
 
-Amazon EFS file systems and S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
+Amazon EFS file systems and Amazon S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
