@@ -34,19 +34,19 @@
 ### Landing Page
 
 - URL: `https://your-domain.com`
-- CloudFront #1 -> S3 bucket
+- Amazon CloudFront #1 -> S3 bucket
 - Custom auth UI with tabbed Sign In / Sign Up
 
 ### Sign Up
 
 - Email must match allowed domain
 - Password: min 12 chars, uppercase, lowercase, numbers
-- AWS WAF Bot Control (optional, enable via CDK context)
-- Cognito SDK `SignUp` API call (no Hosted UI redirect)
+- AWS WAF Bot Control (optional, enable via AWS CDK context)
+- Amazon Cognito SDK `SignUp` API call (no Hosted UI redirect)
 
 ### Workspace Provisioning
 
-- Post-confirmation Lambda creates ApplicationSet element
+- Post-confirmation AWS Lambda creates ApplicationSet element
 - ApplicationSet + ArgoCD provisions Namespace, PVC, ServiceAccount, Deployment, KEDA HSO
 - ArgoCD syncs Helm chart -> Deployment, Service, ConfigMap, NetworkPolicy, etc.
 - User receives welcome email with workspace URL
@@ -54,7 +54,7 @@
 ### First Login
 
 - User opens their tenant URL (`claw.{domain}/t/{tenant}/`)
-- CloudFront -> internet-facing ALB (CF prefix list SG) -> Gateway API HTTPRoute
+- Amazon CloudFront -> internet-facing ALB (CF prefix list SG) -> Gateway API HTTPRoute
 - OpenClaw gateway handles auth locally (token mode via exec SecretRef -> Secrets Manager)
 
 ### Daily Usage
@@ -66,7 +66,7 @@
 ### Scale to Zero
 
 - After 15 minutes of no HTTP requests, KEDA scales pod to 0
-- PVC (EFS) is NOT deleted -- all data preserved
+- PVC (Amazon EFS) is NOT deleted -- all data preserved
 - No cost for idle tenants
 
 ### Cold Start
@@ -80,6 +80,6 @@
 
 ## What the User Never Sees
 
-- AWS Cognito Hosted UI (all auth via custom UI + Cognito SDK)
-- ALB, EKS, pods, namespaces (abstracted away)
+- AWS Cognito Hosted UI (all auth via custom UI + Amazon Cognito SDK)
+- ALB, Amazon EKS, pods, namespaces (abstracted away)
 - API keys (Amazon Bedrock via Pod Identity)

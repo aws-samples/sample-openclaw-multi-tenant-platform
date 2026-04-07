@@ -40,7 +40,7 @@ kubectl get clusterrolebinding alb-controller-listenerset
 
 ### User signed up but no workspace appears
 
-The PostConfirmation Lambda may have failed partway through. The user exists in Cognito but has no tenant resources.
+The PostConfirmation AWS Lambda may have failed partway through. The user exists in Amazon Cognito but has no tenant resources.
 
 **Diagnose:**
 ```bash
@@ -58,11 +58,11 @@ aws logs tail /aws/lambda/OpenClaw-PostConfirmation --since 1h
 
 See `scripts/provision-tenant.sh` for details and prerequisites.
 
-### CDK deploy fails with "Resource already exists"
+### AWS CDK deploy fails with "Resource already exists"
 
 **Symptom**: `cdk deploy` fails on second run.
 
-**Cause**: Some resources (Route53 records, CloudFront distributions) are created by `post-deploy.sh`, not CDK. CDK doesn't know about them.
+**Cause**: Some resources (Route53 records, Amazon CloudFront distributions) are created by `post-deploy.sh`, not CDK. AWS CDK doesn't know about them.
 
 **Fix**: Delete the conflicting resource manually, then re-run `cdk deploy`.
 
@@ -129,8 +129,8 @@ kubectl get application tenant-<name> -n argocd -o jsonpath='{.spec.ignoreDiffer
 
 **Possible causes**:
 1. **KEDA scale-from-zero broken** — see "Pods stuck at 0 replicas" above
-2. **Lambda namespace race condition** — PostConfirmation Lambda creates K8s Secret before ApplicationSet manages namespace. Lambda retries with backoff (up to 5 attempts).
-3. **Cognito triggers missing** — CDK Custom Resource should set PreSignUp + PostConfirmation triggers. Verify:
+2. **AWS Lambda namespace race condition** — PostConfirmation AWS Lambda creates K8s Secret before ApplicationSet manages namespace. AWS Lambda retries with backoff (up to 5 attempts).
+3. **Amazon Cognito triggers missing** — AWS CDK Custom Resource should set PreSignUp + PostConfirmation triggers. Verify:
 ```bash
 aws cognito-idp describe-user-pool --user-pool-id <pool-id> \
   --query 'UserPool.LambdaConfig' --output json
@@ -142,7 +142,7 @@ aws cognito-idp describe-user-pool --user-pool-id <pool-id> \
 
 **Symptom**: Workspace loads but shows authentication error.
 
-**Cause**: Gateway token mismatch between Secrets Manager, K8s Secret, and Cognito user attribute.
+**Cause**: Gateway token mismatch between Secrets Manager, K8s Secret, and Amazon Cognito user attribute.
 
 **Fix**: Check all three sources match:
 ```bash
@@ -192,7 +192,7 @@ aws ssm send-command --instance-ids <instance-id> \
 
 ### `cdk destroy` takes a long time (30+ minutes)
 
-**Cause**: CDK's KubectlHandler Lambda tries to `kubectl delete` K8s resources, but may lose network connectivity if VPC/NAT is deleted first. Each Custom Resource can hang up to 1 hour.
+**Cause**: AWS CDK's KubectlHandler AWS Lambda tries to `kubectl delete` K8s resources, but may lose network connectivity if VPC/NAT is deleted first. Each Custom Resource can hang up to 1 hour.
 
 **Fix**: This is mitigated by `removalPolicy: RETAIN` on KubernetesManifest resources (PR #311). If you still see hangs on older deployments, use `--retain-resources` to skip stuck resources:
 
@@ -203,7 +203,7 @@ aws cloudformation delete-stack --stack-name OpenClawEksStack \
 
 ### `cdk deploy` fails with "already exists" after failed destroy
 
-**Cause**: Previous `cdk destroy` used `--retain-resources` to skip stuck resources. IAM roles or EKS cluster remain in the account.
+**Cause**: Previous `cdk destroy` used `--retain-resources` to skip stuck resources. IAM roles or Amazon EKS cluster remain in the account.
 
 **Fix**: Clean up orphan resources before redeploying:
 
@@ -221,4 +221,4 @@ aws eks delete-cluster --name openclaw-cluster
 
 ### Retained resources after `cdk destroy`
 
-EFS file systems and S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
+Amazon EFS file systems and S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.

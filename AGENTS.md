@@ -29,7 +29,7 @@ Key components:
 - `cdk/` -- AWS CDK infrastructure (TypeScript)
 - `helm/` -- Helm chart (source of truth for tenant K8s resources, synced by ArgoCD)
 - `auth-ui/` -- Auth UI pages (vanilla JS, no framework) -- index.html, admin.html, terms, privacy
-- `cdk/lambda/` -- Cognito trigger functions + cost enforcement (Python)
+- `cdk/lambda/` -- Amazon Cognito trigger functions + cost enforcement (Python)
 - `scripts/` -- Operational scripts (Bash)
 - `docs/` -- Architecture and operations documentation
 
@@ -37,11 +37,11 @@ Key components:
 
 These MUST be true at all times. Violating any = broken deployment.
 
-1. **`cdk diff` = no differences** -- CDK code must match deployed stack
-2. **Zero sensitive data in repo** -- No account IDs, Cognito IDs, domains, ARNs. All via `cdk.json` context (gitignored)
+1. **`cdk diff` = no differences** -- AWS CDK code must match deployed stack
+2. **Zero sensitive data in repo** -- No account IDs, Amazon Cognito IDs, domains, ARNs. All via `cdk.json` context (gitignored)
 3. **Zero CJK characters** -- All code, comments, docs, issue titles, PR titles, and issue/PR bodies in English
 4. **Helm chart is source of truth** -- `helm/charts/openclaw-platform/` is the source of truth for tenant K8s resources, synced by ArgoCD with auto-prune and selfHeal
-5. **Cognito triggers survive `update-user-pool`** -- Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
+5. **Amazon Cognito triggers survive `update-user-pool`** -- Always include `--lambda-config` in every `update-user-pool` call (omitting it wipes triggers)
 6. **ApplicationSet + ArgoCD** -- ApplicationSet generates per-tenant ArgoCD Applications. ArgoCD + Helm creates all tenant resources (Namespace, PVC, SA, Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TGC, KEDA HSO, ReferenceGrant)
 
 ## File Relationships
@@ -74,7 +74,7 @@ auth-ui/admin.html  <- Admin dashboard, same sed injection pattern
 
 ## How to Make Changes
 
-### CDK (Infrastructure)
+### AWS CDK (Infrastructure)
 ```bash
 cd cdk
 # Edit lib/eks-cluster-stack.ts
@@ -103,7 +103,7 @@ bash scripts/deploy-auth-ui.sh
 # Invalidate CloudFront cache after deploy
 ```
 
-### Lambda Functions
+### AWS Lambda Functions
 ```bash
 # Edit cdk/lambda/*/index.py
 python3 -m py_compile cdk/lambda/pre-signup/index.py

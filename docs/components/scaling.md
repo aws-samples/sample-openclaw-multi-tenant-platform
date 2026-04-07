@@ -50,7 +50,7 @@ spec:
 ```
 
 **Constraints:**
-- PVC is `ReadWriteMany` (EFS) -- supports multi-AZ scheduling. `maxReplicas` is 1 because OpenClaw is single-instance by design
+- PVC is `ReadWriteMany` (Amazon EFS) -- supports multi-AZ scheduling. `maxReplicas` is 1 because OpenClaw is single-instance by design
 - HPA and HTTPScaledObject are mutually exclusive
 
 ## Cold Start
@@ -73,7 +73,7 @@ During cold start, the KEDA interceptor holds the request. Custom 503 page with 
 | 3 tenants, 70% idle | 3 pods always -> ~$48/mo | ~0.9 pods avg -> ~$15/mo | ~69% |
 | 100 tenants, 20% concurrency | 100 pods | ~20 pods peak | ~80% |
 
-EFS billed per actual usage ($0.30/GB standard, $0.025/GB IA after 30d). No fixed allocation cost.
+Amazon EFS billed per actual usage ($0.30/GB standard, $0.025/GB IA after 30d). No fixed allocation cost.
 
 ## Always-On Mode
 

@@ -27,12 +27,12 @@
 
 Filters malicious traffic before it reaches the application.
 
-- CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
+- Amazon CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
 - AWS WAF WebACL (REGIONAL scope) attached to ALB:
   - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 (SQLi, XSS, path traversal)
   - `RateLimit` -- 2000 requests per 5 minutes per IP
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
 
 **Script**: `scripts/post-deploy.sh` -- associates AWS WAF WebACL with the dynamic ALB ARN
 
@@ -42,25 +42,25 @@ Filters malicious traffic before it reaches the application.
 
 Prevents unauthorized account creation and bot signups.
 
-- Pre-signup Lambda validates email domain against allowlist (`ALLOWED_DOMAINS`)
+- Pre-signup AWS Lambda validates email domain against allowlist (`ALLOWED_DOMAINS`)
 - Rate limiting: max 5 signups per email domain per hour
-- AWS WAF Bot Control (if `enableBotControl` CDK context is true)
+- AWS WAF Bot Control (if `enableBotControl` AWS CDK context is true)
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `PreSignupFn`
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `PreSignupFn`
 
 ---
 
 ## Layer 3: Network Isolation
 
-Ensures tenant pods are isolated from each other and only reachable via the controlled traffic path.
+Designed to ensure tenant pods are isolated from each other and only reachable via the controlled traffic path.
 
 - VPC with public/private subnet separation (2 AZs, /24 subnets)
 - Pods run exclusively in private subnets
-- ALB is **internet-facing** with CloudFront prefix list SG restriction (`pl-82a045eb`):
-  - Only CloudFront IPs can reach the ALB (L3/L4)
+- ALB is **internet-facing** with Amazon CloudFront prefix list SG restriction (`pl-82a045eb`):
+  - Only Amazon CloudFront IPs can reach the ALB (L3/L4)
   - AWS WAF validates `X-Verify-Origin` custom header (L7)
   - HTTPS-only origin protocol
-- Traffic path: Internet -> CloudFront -> ALB (internet-facing, CF-only SG) -> Pod
+- Traffic path: Internet -> Amazon CloudFront -> ALB (internet-facing, CF-only SG) -> Pod
 - 2 NAT Gateways (HA) for outbound internet
 - VPC Flow Logs enabled (all traffic -> CloudWatch Logs)
 - NetworkPolicy per tenant namespace (Helm chart template `networkpolicy.yaml`):
@@ -78,7 +78,7 @@ Ensures tenant pods are isolated from each other and only reachable via the cont
 
 The `10.0.0.0/8` exception in HTTPS egress blocks cross-tenant pod traffic over port 443 while allowing external AWS service endpoints.
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `Vpc`, `VpcFlowLog`
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `Vpc`, `VpcFlowLog`
 
 **Helm chart template**: `helm/charts/openclaw-platform/templates/networkpolicy.yaml`
 
@@ -105,31 +105,31 @@ auth-ui (static S3 + CloudFront)
 
 ### Components
 
-- **Cognito User Pool**: manages user identity (email + password), email verification, custom attributes (`custom:gateway_token`, `custom:tenant_name`)
-- **auth-ui**: custom sign-in/sign-up page (not Cognito Hosted UI). Calls Cognito API directly from browser via `AWSCognitoIdentityProviderService` JSON-RPC
+- **Amazon Cognito User Pool**: manages user identity (email + password), email verification, custom attributes (`custom:gateway_token`, `custom:tenant_name`)
+- **auth-ui**: custom sign-in/sign-up page (not Amazon Cognito Hosted UI). Calls Amazon Cognito API directly from browser via `AWSCognitoIdentityProviderService` JSON-RPC
 - **Gateway token**: static per-tenant secret stored in Secrets Manager (`openclaw/{tenant}/gateway-token`). Fetched by OpenClaw gateway via `exec` SecretRef on startup
 - **OpenClaw gateway**: runs in `token` auth mode. Validates the token passed via URL fragment (`#token=xxx`) or session cookie
 - **`dangerouslyDisableDeviceAuth: true`**: disables OpenClaw's device pairing flow (normally requires terminal confirmation on first connect). Required for web-only access where no terminal is available
 
-### What Cognito does NOT do
+### What Amazon Cognito does NOT do
 
-- **No ALB-level Cognito auth**: HTTPRoute forwards directly to backend (or KEDA interceptor). ALB does not perform `authenticate-cognito` action on new tenant routes
-- **No session persistence**: auth-ui does not store Cognito tokens in localStorage or cookies. Closing the browser tab requires re-authentication
-- **No logout**: auth-ui has no sign-out button and does not call Cognito `GlobalSignOut`
+- **No ALB-level Amazon Cognito auth**: HTTPRoute forwards directly to backend (or KEDA interceptor). ALB does not perform `authenticate-cognito` action on new tenant routes
+- **No session persistence**: auth-ui does not store Amazon Cognito tokens in localStorage or cookies. Closing the browser tab requires re-authentication
+- **No logout**: auth-ui has no sign-out button and does not call Amazon Cognito `GlobalSignOut`
 
-### Why no ALB Cognito auth
+### Why no ALB Amazon Cognito auth
 
-ALB Cognito auth uses a 302 redirect flow to Cognito Hosted UI. This is incompatible with the current auth-ui architecture:
-1. auth-ui already authenticates via Cognito API (user would login twice)
+ALB Amazon Cognito auth uses a 302 redirect flow to Amazon Cognito Hosted UI. This is incompatible with the current auth-ui architecture:
+1. auth-ui already authenticates via Amazon Cognito API (user would login twice)
 2. ALB 302 redirect strips URL fragments — the `#token=xxx` gateway token would be lost
-3. Adding ALB auth requires switching from auth-ui to Cognito Hosted UI, losing custom UX
+3. Adding ALB auth requires switching from auth-ui to Amazon Cognito Hosted UI, losing custom UX
 
 ### Security properties
 
 | Property | Status | Notes |
 |----------|--------|-------|
-| User identity verification | ✅ | Cognito email verification |
-| Email domain restriction | ✅ | Pre-signup Lambda allowlist |
+| User identity verification | ✅ | Amazon Cognito email verification |
+| Email domain restriction | ✅ | Pre-signup AWS Lambda allowlist |
 | Signup rate limiting | ✅ | 5 per domain per hour |
 | Workspace access control | ✅ | Gateway token (static) |
 | Token expiry | ❌ | Gateway token never expires |
@@ -137,7 +137,7 @@ ALB Cognito auth uses a 302 redirect flow to Cognito Hosted UI. This is incompat
 | Session management | ❌ | No persistent session, no logout |
 | Cross-tenant URL guessing | Low risk | Token is `secrets.token_urlsafe(32)` = 256-bit entropy |
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `UserPool` (imported)
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `UserPool` (imported)
 
 **Helm chart templates**: `configmap.yaml` (gateway auth config), `httproute.yaml` (HTTPRoute)
 
@@ -154,7 +154,7 @@ Prevents one tenant from accessing another tenant's resources.
 - Separate ServiceAccount per tenant -> Pod Identity Association -> shared `OpenClawTenantRole` with ABAC tags
 - PodDisruptionBudget: `minAvailable: 1`
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
 
 **ApplicationSet**: creates Namespace (managedNamespaceMetadata). PVC and SA are managed by Helm/ArgoCD.
 
@@ -170,10 +170,10 @@ On-demand secret access without persisting credentials on disk.
 - Each secret tagged with `tenant-namespace: openclaw-{tenant}`
 - `exec SecretRef` pattern: OpenClaw invokes `fetch-secret.mjs` on demand
 - `fetch-secret.mjs` uses Pod Identity -> STS AssumeRole -> GetSecretValue
-- ABAC policy ensures tenant can only read its own secrets
+- ABAC policy is designed to ensure tenant can only read its own secrets
 - Credentials are temporary (STS) -- no static keys anywhere
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `SecretsManagerABAC` policy statement
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `SecretsManagerABAC` policy statement
 
 **Helm chart template**: `configmap.yaml` (embeds `fetch-secret.mjs`, deployed via init-setup container)
 
@@ -191,7 +191,7 @@ LLM access without API keys, with model-level control.
   - `elevated: disabled` -- no privilege escalation
   - `fs: workspaceOnly` -- filesystem restricted to workspace directory
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `BedrockInvoke`, `BedrockDiscovery`
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `BedrockInvoke`, `BedrockDiscovery`
 
 **Helm chart template**: `configmap.yaml` (tools config)
 
@@ -201,20 +201,20 @@ LLM access without API keys, with model-level control.
 
 Prevents runaway LLM costs with per-tenant budgets.
 
-- Daily Lambda (`CostEnforcerFn`) queries CloudWatch Logs Insights for per-namespace Amazon Bedrock token usage
+- Daily AWS Lambda (`CostEnforcerFn`) queries CloudWatch Logs Insights for per-namespace Amazon Bedrock token usage
 - Budget read from Secrets Manager tag `budget-usd` (default: $100/month)
 - Alerts at 80% and 100% budget via SNS
 
-**CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `CostEnforcerFn`, `CostEnforcerSchedule`
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `CostEnforcerFn`, `CostEnforcerSchedule`
 
 ---
 
 ## Layer 9: Data Protection
 
-Ensures tenant data survives pod restarts, scale-to-zero, and failures.
+Designed to ensure tenant data survives pod restarts, scale-to-zero, and failures.
 
-- PVC (EFS) per tenant -- persists across pod restarts, scale-to-zero, and AZ failures
-- AWS Backup for EFS (replaces EBS snapshots)
+- PVC (Amazon EFS) per tenant -- persists across pod restarts, scale-to-zero, and AZ failures
+- AWS Backup for Amazon EFS (replaces EBS snapshots)
 - Container runs as non-root (UID 1000) with `fsGroup: 1000`
 - `runAsNonRoot: true`, `readOnlyRootFilesystem: true`
 
@@ -232,9 +232,9 @@ Records all Amazon Bedrock API calls for compliance and forensics.
 - Logs stored in S3: `openclaw-audit-logs-{account}-{region}`
 - Athena database + table for SQL queries
 - CloudWatch Container Insights for pod-level metrics
-- EKS control plane logging: all 5 types
+- Amazon EKS control plane logging: all 5 types
 
-**Managed by**: CDK (CloudTrail + S3 in `eks-cluster-stack.ts`)
+**Managed by**: AWS CDK (CloudTrail + S3 in `eks-cluster-stack.ts`)
 
 ---
 
@@ -242,7 +242,7 @@ Records all Amazon Bedrock API calls for compliance and forensics.
 
 | Attack Vector | Mitigation |
 |---------------|------------|
-| DDoS | CloudFront edge caching + AWS WAF rate limiting (2000 req/5min/IP) |
+| DDoS | Amazon CloudFront edge caching + AWS WAF rate limiting (2000 req/5min/IP) |
 | SQLi / XSS | AWS WAF AWSManagedRulesCommonRuleSet |
 | Bot signups | AWS WAF Bot Control (opt-in) + email domain allowlist + rate limiting |
 | Unauthenticated access | CF prefix list SG + AWS WAF header + gateway token auth |
@@ -251,8 +251,8 @@ Records all Amazon Bedrock API calls for compliance and forensics.
 | API key leakage | Zero API keys -- all access via Pod Identity + STS |
 | Secret persistence on disk | exec SecretRef -- fetched on demand, never written |
 | Prompt injection -> system access | `exec: deny`, `elevated: disabled`, `fs: workspaceOnly` |
-| Runaway LLM costs | Daily cost enforcer Lambda + per-tenant budget + SNS alerts |
-| Data loss | PVC persistence (EFS, multi-AZ) + AWS Backup |
+| Runaway LLM costs | Daily cost enforcer AWS Lambda + per-tenant budget + SNS alerts |
+| Data loss | PVC persistence (Amazon EFS, multi-AZ) + AWS Backup |
 | Privilege escalation | Non-root container, `runAsNonRoot: true`, `readOnlyRootFilesystem: true` |
 | Karpenter subnet confusion | EC2NodeClass requires both `internal-elb` AND cluster-owned tags |
 
@@ -276,17 +276,17 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 
 | Gap | Notes |
 |-----|-------|
-| ALB-level Cognito auth | Incompatible with auth-ui flow (see Layer 4). Gateway token is the auth boundary |
+| ALB-level Amazon Cognito auth | Incompatible with auth-ui flow (see Layer 4). Gateway token is the auth boundary |
 | Gateway token rotation | Token set once at signup, never rotated. Leaked token = permanent access |
 | Session persistence | auth-ui doesn't store tokens. Each page load requires re-authentication |
 | Logout | No sign-out button. Closing tab is the only "logout" |
-| MFA | Cognito supports MFA but not enabled |
+| MFA | Amazon Cognito supports MFA but not enabled |
 | SAST/DAST | No static/dynamic security testing in CI |
 | Image signing | No Sigstore/Cosign verification |
 | Secrets rotation | SM secrets not auto-rotated |
 | AWS WAF logging | Sampled requests only, no full logging |
-| GuardDuty | No runtime threat detection for EKS |
-| KMS encryption | EFS encrypted at rest (AWS managed key) |
+| GuardDuty | No runtime threat detection for Amazon EKS |
+| KMS encryption | Amazon EFS encrypted at rest (AWS managed key) |
 
 ---
 
@@ -295,18 +295,18 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 For production deployments, consider the following enhancements:
 
 ### Authentication
-1. **Gateway token rotation**: rotate token on each sign-in (update Secrets Manager + K8s Secret + Cognito attribute in PostConfirmation or a dedicated sign-in Lambda)
-2. **Session persistence**: store Cognito refresh token in secure httpOnly cookie, implement silent token refresh
-3. **Logout**: add sign-out button that calls Cognito `GlobalSignOut` and clears gateway session
-4. **MFA**: enable Cognito MFA (TOTP or SMS) for admin accounts at minimum
-5. **JWT-based auth**: if OpenClaw adds JWT validation support, replace static gateway token with Cognito ID token for time-limited, rotatable auth
+1. **Gateway token rotation**: rotate token on each sign-in (update Secrets Manager + K8s Secret + Amazon Cognito attribute in PostConfirmation or a dedicated sign-in AWS Lambda)
+2. **Session persistence**: store Amazon Cognito refresh token in secure httpOnly cookie, implement silent token refresh
+3. **Logout**: add sign-out button that calls Amazon Cognito `GlobalSignOut` and clears gateway session
+4. **MFA**: enable Amazon Cognito MFA (TOTP or SMS) for admin accounts at minimum
+5. **JWT-based auth**: if OpenClaw adds JWT validation support, replace static gateway token with Amazon Cognito ID token for time-limited, rotatable auth
 
 ### Infrastructure
 6. **AWS WAF Bot Control**: enable via `cdk deploy -c enableBotControl=true` (additional AWS WAF charges apply)
 7. **AWS WAF logging**: enable full request logging to S3 for forensics
-8. **GuardDuty EKS Runtime Monitoring**: detect container-level threats
+8. **GuardDuty Amazon EKS Runtime Monitoring**: detect container-level threats
 9. **KMS CMK**: use customer-managed keys for EBS encryption and Secrets Manager
-10. **Secrets rotation**: enable Secrets Manager automatic rotation with a Lambda rotator
+10. **Secrets rotation**: enable Secrets Manager automatic rotation with a AWS Lambda rotator
 
 ---
 
@@ -318,7 +318,7 @@ For production deployments, consider the following enhancements:
 
 | Control Area | Current State | Gap |
 |-------------|---------------|-----|
-| Access Control | Cognito + ABAC + Pod Identity | Add MFA for admin accounts |
+| Access Control | Amazon Cognito + ABAC + Pod Identity | Add MFA for admin accounts |
 | Encryption in Transit | TLS everywhere | None |
 | Encryption at Rest | EBS default encryption | Consider CMK |
 | Logging & Monitoring | CloudTrail + CloudWatch + VPC Flow Logs | Enable AWS WAF logging |
@@ -346,7 +346,7 @@ This platform operates under the [AWS Shared Responsibility Model](https://aws.a
 | Responsibility | AWS | Platform (this repo) | Customer |
 |---|---|---|---|
 | Physical infrastructure | ✅ | | |
-| EKS control plane | ✅ | | |
+| Amazon EKS control plane | ✅ | | |
 | Node OS patching | ✅ (managed nodegroup) | | |
 | Network isolation (VPC, SG) | | ✅ | |
 | Tenant namespace isolation | | ✅ | |

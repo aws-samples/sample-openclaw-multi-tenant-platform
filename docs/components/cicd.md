@@ -7,21 +7,21 @@ Defined in `.github/workflows/ci.yml`. Runs on push/PR to `main`.
 | Step | What It Does |
 |---|---|
 | TypeScript compile check | `npx tsc --noEmit` in `cdk/` |
-| CDK synth | `npx cdk synth --no-staging` -- validates CloudFormation templates |
+| AWS CDK synth | `npx cdk synth --no-staging` -- validates CloudFormation templates |
 | Helm lint | `helm lint helm/charts/openclaw-platform/` with test values |
 | Shell script syntax | `bash -n` on every `scripts/*.sh` |
-| Sensitive data scan | Greps for known account IDs, domains, Cognito pool IDs |
+| Sensitive data scan | Greps for known account IDs, domains, Amazon Cognito pool IDs |
 | CJK characters check | Fails if any CJK characters found (English-only repo) |
 
 ## Tenant Provisioning
 
 Tenant provisioning uses ArgoCD:
 
-1. Post-Confirmation Lambda creates a ApplicationSet element
+1. Post-Confirmation AWS Lambda creates a ApplicationSet element
 2. ApplicationSet generates Applications: creates Namespace, PVC, ServiceAccount, ArgoCD Application, KEDA HSO
 3. ArgoCD syncs the Helm chart: creates Deployment, Service, ConfigMap, NetworkPolicy, ResourceQuota, PDB, HTTPRoute, TargetGroupConfiguration
 
-For manual provisioning without Cognito, `create-tenant.sh` creates a ApplicationSet element directly (ArgoCD handles the rest).
+For manual provisioning without Amazon Cognito, `create-tenant.sh` creates a ApplicationSet element directly (ArgoCD handles the rest).
 
 ## Image Upgrade
 
@@ -41,7 +41,7 @@ For per-tenant image overrides, set `spec.image.tag` on the ApplicationSet eleme
 ./scripts/deploy-auth-ui.sh us-west-2
 ```
 
-Reads CDK stack outputs, injects config into `auth-ui/*.html`, syncs to S3.
+Reads AWS CDK stack outputs, injects config into `auth-ui/*.html`, syncs to S3.
 
 ## Audit Logging
 
@@ -57,4 +57,4 @@ Sets up CloudTrail + S3 + Athena for Amazon Bedrock API audit.
 |---|---|
 | `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
 | `helm/charts/openclaw-platform/values.yaml` | Image tag and chart defaults |
-| `scripts/deploy-auth-ui.sh` | S3 + CloudFront auth UI deployment |
+| `scripts/deploy-auth-ui.sh` | S3 + Amazon CloudFront auth UI deployment |
