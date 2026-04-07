@@ -30,7 +30,7 @@
 ## Daily Operations
 
 | Task | How | Frequency |
-|------|-----|-----------|
+|------|-----|----------|
 | Health check | `./scripts/health-check.sh` | On demand |
 | View usage | CloudWatch Dashboard: OpenClaw-Usage | On demand |
 | Cost report | `./scripts/usage-report.sh --month YYYY-MM` | Monthly |
@@ -44,10 +44,7 @@
 `create-tenant.sh` creates a ApplicationSet element directly. ArgoCD then syncs the Helm chart (creates namespace, Deployment, Service, etc.):
 
 ```bash
-./scripts/create-tenant.sh alice \
-  --email alice@example.com \
-  --display-name "Alice" \
-  --budget 100
+./scripts/create-tenant.sh alice --email alice@example.com
 ```
 
 This is useful for testing without going through the Cognito signup flow.
