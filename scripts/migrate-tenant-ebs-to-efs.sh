@@ -47,6 +47,7 @@ echo "  ✅ Old PVC Bound (storageClass: $(kubectl get pvc "${OLD_PVC}" -n "${NA
 
 # ── Step 3: Create temporary EFS PVC ─────────────────────────────────────
 echo "==> Creating temporary EFS PVC: ${NEW_PVC}"
+# nosemgrep: bash.lang.correctness.useless-cat
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -73,6 +74,7 @@ kubectl delete job "${JOB_NAME}" -n "${NAMESPACE}" --ignore-not-found --wait 2>/
 
 # ── Step 5: Run migration job ────────────────────────────────────────────
 echo "==> Running migration job (cp + verify)"
+# nosemgrep: bash.lang.correctness.useless-cat
 cat <<'JOBEOF' | sed "s/\${OLD_PVC}/${OLD_PVC}/g; s/\${NEW_PVC}/${NEW_PVC}/g; s/\${JOB_NAME}/${JOB_NAME}/g; s/\${NAMESPACE}/${NAMESPACE}/g" | kubectl apply -f -
 apiVersion: batch/v1
 kind: Job
