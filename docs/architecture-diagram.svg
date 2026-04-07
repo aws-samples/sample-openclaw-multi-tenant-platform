@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" font-family="system-ui,sans-serif" font-size="12">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/></marker>
+  </defs>
+  <style>
+    .box{fill:#fff;stroke:#333;stroke-width:1.5;rx:6}
+    .aws{fill:#FF9900;stroke:none;rx:4}
+    .label{font-weight:600;font-size:13px}
+    .sublabel{font-size:10px;fill:#666}
+    .arrow{stroke:#666;stroke-width:1.5;fill:none;marker-end:url(#arrow)}
+  </style>
+
+  <!-- Title -->
+  <text x="400" y="25" text-anchor="middle" font-size="16" font-weight="700">OpenClaw Platform Architecture</text>
+
+  <!-- Internet -->
+  <rect x="340" y="45" width="120" height="35" class="box" fill="#f0f0f0"/>
+  <text x="400" y="67" text-anchor="middle" class="label">Internet</text>
+
+  <!-- CloudFront -->
+  <rect x="300" y="120" width="200" height="50" class="box" fill="#FFF3E0"/>
+  <text x="400" y="140" text-anchor="middle" class="label">Amazon CloudFront</text>
+  <text x="400" y="155" text-anchor="middle" class="sublabel">/ → S3 Auth UI | /t/* → ALB</text>
+  <line x1="400" y1="80" x2="400" y2="120" class="arrow"/>
+
+  <!-- Auth UI (S3) -->
+  <rect x="100" y="200" width="150" height="45" class="box" fill="#E8F5E9"/>
+  <text x="175" y="220" text-anchor="middle" class="label">Amazon S3</text>
+  <text x="175" y="235" text-anchor="middle" class="sublabel">Auth UI (login/signup)</text>
+  <line x1="350" y1="170" x2="175" y2="200" class="arrow"/>
+
+  <!-- ALB -->
+  <rect x="530" y="200" width="170" height="45" class="box" fill="#FFF3E0"/>
+  <text x="615" y="220" text-anchor="middle" class="label">ALB + AWS WAF</text>
+  <text x="615" y="235" text-anchor="middle" class="sublabel">CF-only SG (prefix list)</text>
+  <line x1="450" y1="170" x2="615" y2="200" class="arrow"/>
+
+  <!-- Cognito -->
+  <rect x="100" y="280" width="150" height="45" class="box" fill="#E3F2FD"/>
+  <text x="175" y="300" text-anchor="middle" class="label">Amazon Cognito</text>
+  <text x="175" y="315" text-anchor="middle" class="sublabel">User Pool + Lambda triggers</text>
+  <line x1="175" y1="245" x2="175" y2="280" class="arrow"/>
+
+  <!-- EKS Cluster -->
+  <rect x="430" y="280" width="350" height="180" class="box" fill="#FFF8E1" stroke="#FF9900"/>
+  <text x="605" y="300" text-anchor="middle" class="label">Amazon EKS Cluster (Graviton ARM64)</text>
+
+  <!-- Tenant Pod -->
+  <rect x="450" y="315" width="140" height="55" class="box" fill="#E8F5E9"/>
+  <text x="520" y="335" text-anchor="middle" class="label">Tenant Pod</text>
+  <text x="520" y="350" text-anchor="middle" class="sublabel">openclaw-{tenant} ns</text>
+  <text x="520" y="362" text-anchor="middle" class="sublabel">NetworkPolicy isolated</text>
+  <line x1="615" y1="245" x2="520" y2="315" class="arrow"/>
+
+  <!-- EFS -->
+  <rect x="450" y="390" width="140" height="40" class="box" fill="#E8F5E9"/>
+  <text x="520" y="410" text-anchor="middle" class="label">Amazon EFS</text>
+  <text x="520" y="425" text-anchor="middle" class="sublabel">Per-tenant PVC</text>
+  <line x1="520" y1="370" x2="520" y2="390" class="arrow"/>
+
+  <!-- KEDA -->
+  <rect x="620" y="315" width="140" height="40" class="box" fill="#F3E5F5"/>
+  <text x="690" y="335" text-anchor="middle" class="label">KEDA</text>
+  <text x="690" y="350" text-anchor="middle" class="sublabel">Scale-to-zero</text>
+
+  <!-- ArgoCD -->
+  <rect x="620" y="375" width="140" height="40" class="box" fill="#E3F2FD"/>
+  <text x="690" y="395" text-anchor="middle" class="label">ArgoCD</text>
+  <text x="690" y="410" text-anchor="middle" class="sublabel">ApplicationSet GitOps</text>
+
+  <!-- Bedrock -->
+  <rect x="300" y="390" width="120" height="40" class="box" fill="#FFF3E0"/>
+  <text x="360" y="410" text-anchor="middle" class="label">Amazon Bedrock</text>
+  <text x="360" y="425" text-anchor="middle" class="sublabel">LLM (Pod Identity)</text>
+  <line x1="480" y1="370" x2="420" y2="390" class="arrow"/>
+
+  <!-- NAT -->
+  <rect x="300" y="440" width="120" height="35" class="box" fill="#f0f0f0"/>
+  <text x="360" y="462" text-anchor="middle" class="sublabel">NAT Gateway (HA)</text>
+  <line x1="360" y1="430" x2="360" y2="440" class="arrow"/>
+</svg>

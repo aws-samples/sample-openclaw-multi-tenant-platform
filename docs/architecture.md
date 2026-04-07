@@ -2,6 +2,8 @@
 
 > Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated workspace powered by Amazon Bedrock.
 
+![Architecture Diagram](architecture-diagram.svg)
+
 ## Overview
 
 ```

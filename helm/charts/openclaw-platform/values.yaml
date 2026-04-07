@@ -124,6 +124,9 @@ config:
         fallbacks:
           - amazon-bedrock/us.anthropic.claude-sonnet-4-6
           - amazon-bedrock/deepseek.v3.2
+      # Model list is for reference only. All models are accessed through Amazon Bedrock.
+      # Users must verify model availability in their region and comply with each
+      # model provider's terms of service.
       models:
         amazon-bedrock/us.anthropic.claude-opus-4-6-v1:
           alias: opus

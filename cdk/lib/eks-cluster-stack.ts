@@ -663,6 +663,11 @@ export class EksClusterStack extends cdk.Stack {
     // ── S3: Error Pages Bucket ──────────────────────────────────────────────
     const errorPagesBucket = new s3.Bucket(this, 'ErrorPagesBucket', {
       removalPolicy: cdk.RemovalPolicy.RETAIN,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      versioned: true,
+      // Production: add server access logging to a dedicated log bucket
     });
 
     // S3: tenant pods read chart assets from error-pages bucket
@@ -928,6 +933,11 @@ export class EksClusterStack extends cdk.Stack {
     const authUiBucket = new s3.Bucket(this, 'AuthUiBucket', {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      versioned: true,
+      // Production: add server access logging to a dedicated log bucket
     });
 
     const oai = new cloudfront.OriginAccessIdentity(this, 'AuthUiOAI');
