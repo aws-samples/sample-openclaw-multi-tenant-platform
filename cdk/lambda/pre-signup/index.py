@@ -50,7 +50,7 @@ def handler(event, context):
     email = event['request']['userAttributes'].get('email', '')
     domain = email.split('@')[-1].lower() if '@' in email else ''
 
-    if domain not in ALLOWED_DOMAINS:
+    if '*' not in ALLOWED_DOMAINS and domain not in ALLOWED_DOMAINS:
         raise Exception('Registration is restricted to company email addresses.')
 
     # Rate limit: max RATE_LIMIT signups per domain per hour
