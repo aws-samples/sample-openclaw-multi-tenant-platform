@@ -72,6 +72,9 @@ jobs:
       - name: ShellCheck
         run: shellcheck --severity=error scripts/*.sh
 
+      - name: Rubric compliance
+        run: bash scripts/check-rubric.sh
+
   # ============================================================
   # Security (every PR) ~1 min
   # ============================================================

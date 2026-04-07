@@ -1,7 +1,7 @@
 .PHONY: lint test validate check-cdk check-helm check-python check-sensitive check-cjk check-shell check-cdk-test test-lambda
 
 # --- Aggregates ---
-lint: check-cdk check-cdk-test check-helm check-python check-shell check-sensitive check-cjk
+lint: check-cdk check-cdk-test check-helm check-python check-shell check-sensitive check-cjk check-rubric
 
 test: check-cdk-test test-lambda
 
@@ -42,3 +42,6 @@ test-lambda:
 	python3 -m pytest cdk/lambda/pre-signup/test_index.py -v
 	python3 -m pytest cdk/lambda/post-confirmation/test_index.py -v
 	python3 -m pytest cdk/lambda/cost-enforcer/test_index.py -v
+
+check-rubric:
+	bash scripts/check-rubric.sh
