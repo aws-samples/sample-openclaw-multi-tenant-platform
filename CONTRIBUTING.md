@@ -18,7 +18,7 @@ Thank you for your interest in contributing to OpenClaw Platform!
 git clone https://github.com/snese/sample-openclaw-multi-tenant-platform.git
 cd sample-openclaw-multi-tenant-platform
 
-# CDK dependencies
+# AWS CDK dependencies
 cd cdk && npm install && cd ..
 
 # Copy and fill in your values
@@ -100,10 +100,10 @@ All deployment-specific values live in `cdk/cdk.json` (gitignored). See `cdk/cdk
 ## Coding Standards
 
 - **Language**: All code, comments, documentation, issue titles, PR titles, and issue/PR bodies in English
-- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup Lambda")
+- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup AWS Lambda")
 - **PR titles**: English, conventional commit prefix: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
-- **CDK**: TypeScript, follow existing patterns in `eks-cluster-stack.ts`
-- **Lambda**: Python 3.12, boto3, handle errors with `ClientError`
+- **AWS CDK**: TypeScript, follow existing patterns in `eks-cluster-stack.ts`
+- **AWS Lambda**: Python 3.12, boto3, handle errors with `ClientError`
 - **Scripts**: Bash, `set -euo pipefail`, use `get_output()` for CloudFormation outputs
 - **Commits**: Imperative mood, prefixed: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 

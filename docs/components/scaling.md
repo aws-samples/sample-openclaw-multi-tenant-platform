@@ -9,7 +9,7 @@ Idle tenant pods scale to 0 replicas via KEDA HTTP Add-on. When an HTTP request 
 ```
 Client -> ALB -> KEDA HTTP Interceptor Proxy -> Pod (0->1)
                    (holds request if pod=0)       |
-                                                  PVC (EFS)
+                                                  PVC (Amazon EFS)
 ```
 
 1. Pod running -> interceptor proxies directly to pod

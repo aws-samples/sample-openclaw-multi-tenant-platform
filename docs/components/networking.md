@@ -102,7 +102,7 @@ spec:
     # DNS
     - to: [{ namespaceSelector: {} }]
       ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
-    # EKS Pod Identity Agent
+    # Amazon EKS Pod Identity Agent
     - to: [{ ipBlock: { cidr: 169.254.170.23/32 } }]
       ports: [{ protocol: TCP, port: 80 }]
     # EC2 IMDS

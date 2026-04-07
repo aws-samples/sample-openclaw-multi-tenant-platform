@@ -41,15 +41,15 @@ For per-tenant image overrides, set `spec.image.tag` on the ApplicationSet eleme
 ./scripts/deploy-auth-ui.sh us-west-2
 ```
 
-Reads AWS CDK stack outputs, injects config into `auth-ui/*.html`, syncs to S3.
+Reads AWS CDK stack outputs, injects config into `auth-ui/*.html`, syncs to Amazon S3.
 
 ## Audit Logging
 
 ```bash
-# Audit logging is managed by CDK -- no manual script needed
+# Audit logging is managed by AWS CDK -- no manual script needed
 ```
 
-Sets up CloudTrail + S3 + Athena for Amazon Bedrock API audit.
+Sets up CloudTrail + Amazon S3 + Athena for Amazon Bedrock API audit.
 
 ## Files
 
@@ -57,4 +57,4 @@ Sets up CloudTrail + S3 + Athena for Amazon Bedrock API audit.
 |---|---|
 | `.github/workflows/ci.yml` | GitHub Actions CI pipeline |
 | `helm/charts/openclaw-platform/values.yaml` | Image tag and chart defaults |
-| `scripts/deploy-auth-ui.sh` | S3 + Amazon CloudFront auth UI deployment |
+| `scripts/deploy-auth-ui.sh` | Amazon S3 + Amazon CloudFront auth UI deployment |

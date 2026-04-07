@@ -24,7 +24,7 @@ Path-based routing via Gateway API: `claw.example.com/t/<tenant>/` -- one domain
 ## Tenant Lifecycle
 
 ```
-Cognito SignUp
+Amazon Cognito SignUp
   -> Pre-signup Lambda (email domain gate)
   -> Post-confirmation Lambda (creates ApplicationSet element)
   -> ApplicationSet generates Applications via SSA:
@@ -67,14 +67,14 @@ The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync en
 ## Amazon EKS Cluster
 
 ```
-EKS Cluster (v1.35)
+Amazon EKS Cluster (v1.35)
 |  Managed Node Group (Graviton ARM64 t4g.medium) + Karpenter (arm64 spot)
-|  Add-ons: ALB Controller, EBS CSI, EFS CSI, Pod Identity, CloudWatch Insights
+|  Add-ons: ALB Controller, EBS CSI, Amazon EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
 |
 +-- namespace: openclaw-{tenant}
 |   All managed by ArgoCD (Helm chart):
-|     Namespace                      PVC (EFS)
+|     Namespace                      PVC (Amazon EFS)
 |     ArgoCD Application            ServiceAccount (Pod Identity)
 |     ReferenceGrant (in keda ns)   Deployment + Service + ConfigMap
 |                                    HTTPRoute + TGC + NetworkPolicy
@@ -84,7 +84,7 @@ EKS Cluster (v1.35)
 |   +-- ApplicationSet (ArgoCD generator)
 |
 +-- namespace: argocd
-|   +-- ArgoCD (EKS add-on)
+|   +-- ArgoCD (Amazon EKS add-on)
 |   +-- ArgoCD Application per tenant
 ```
 
@@ -92,7 +92,7 @@ EKS Cluster (v1.35)
 
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
-| Infrastructure | AWS CDK (TypeScript) | VPC, Amazon EKS, IAM, AWS Lambda, S3, Amazon CloudFront, AWS WAF |
+| Infrastructure | AWS CDK (TypeScript) | VPC, Amazon EKS, IAM, AWS Lambda, Amazon S3, Amazon CloudFront, AWS WAF |
 | ApplicationSet | ArgoCD generator | Generates per-tenant Applications from list elements |
 | Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
 | Auth | Amazon Cognito + custom UI | Signup, login, email domain gate |
@@ -128,7 +128,7 @@ ArgoCD tracks sync status for each tenant Application:
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero (Amazon EFS, multi-AZ) |
-| Audit | CloudTrail + S3 + Athena + Amazon EKS control plane logging |
+| Audit | CloudTrail + Amazon S3 + Athena + Amazon EKS control plane logging |
 
 ## Data Flow
 

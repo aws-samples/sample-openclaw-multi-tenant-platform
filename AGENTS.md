@@ -48,7 +48,7 @@ These MUST be true at all times. Violating any = broken deployment.
 
 ```
 cdk/cdk.json.example  <- Template for cdk.json (real values gitignored)
-cdk/lib/eks-cluster-stack.ts  <- Main CDK stack, references Lambda code
+cdk/lib/eks-cluster-stack.ts  <- Main AWS CDK stack, references AWS Lambda code
 cdk/lambda/pre-signup/index.py  <- Email domain gate
 cdk/lambda/post-confirmation/index.py  <- Tenant provisioning (adds element to ApplicationSet)
 cdk/lambda/cost-enforcer/index.py  <- Per-tenant cost enforcement
@@ -59,10 +59,10 @@ helm/gateway.yaml  <- Gateway API resources (GatewayClass + LoadBalancerConfigur
 scripts/deploy-platform.sh  <- Deploys ApplicationSet + Gateway (injects cdk.json values)
 scripts/create-tenant.sh  <- Adds tenant to ApplicationSet elements
 scripts/delete-tenant.sh  <- Removes tenant from ApplicationSet + cleanup
-scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation Lambda fails
+scripts/provision-tenant.sh  <- Full tenant recovery when PostConfirmation AWS Lambda fails
 scripts/setup-argocd.sh  <- ArgoCD via Helm
 scripts/setup-keda.sh  <- KEDA + HTTP Add-on
-scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to S3, uses sed to inject config
+scripts/deploy-auth-ui.sh  <- Uploads auth-ui/ to Amazon S3, uses sed to inject config
 scripts/lib/preflight.sh  <- Pre-flight checks (tools, AWS, cdk.json)
 scripts/lib/generate-config.sh  <- Interactive cdk.json generator
 scripts/lib/common.sh  <- Shared helpers (require_cluster, get_output, log)
@@ -71,6 +71,32 @@ Makefile  <- Aggregate lint/test/validate targets for all components
 auth-ui/index.html  <- SPA, config injected by deploy-auth-ui.sh via sed
 auth-ui/admin.html  <- Admin dashboard, same sed injection pattern
 ```
+
+
+## AWS Service Naming Rules
+
+All prose (docs, comments, HTML, commit messages) must use full AWS service names. CI enforces this via `scripts/check-rubric.sh`.
+
+| Short | Full Name | When to use short |
+|-------|-----------|-------------------|
+| Bedrock | Amazon Bedrock | Code identifiers, URLs, CLI commands |
+| EKS | Amazon EKS | Code identifiers, URLs, CLI commands |
+| S3 | Amazon S3 | Code identifiers, URLs, CLI commands |
+| EFS | Amazon EFS | Code identifiers, URLs, CLI commands |
+| CloudFront | Amazon CloudFront | Code identifiers, URLs, CLI commands |
+| Cognito | Amazon Cognito | Code identifiers, URLs, CLI commands |
+| Lambda | AWS Lambda | Code identifiers, URLs, CLI commands |
+| CDK | AWS CDK | Code identifiers, URLs, CLI commands |
+| WAF | AWS WAF | Code identifiers, URLs, CLI commands |
+
+**Examples:**
+- ✅ "powered by Amazon Bedrock" (prose)
+- ✅ `bedrock:InvokeModel` (code)
+- ❌ `"powered by Bedrock"` (prose — missing "Amazon")
+
+**Security claims:** Use "designed to", "configured to", or "by default" qualifiers. Never say "ensures" or "guarantees" without qualification.
+
+**Run before committing:** `bash scripts/check-rubric.sh`
 
 ## How to Make Changes
 
@@ -82,7 +108,7 @@ npx tsc --noEmit          # Must pass
 npx cdk diff              # Review changes
 npx cdk deploy OpenClawEksStack --require-approval broadening
 # IMPORTANT: re-run after deploy (triggers get wiped)
-# Cognito triggers are managed by CDK -- no manual script needed
+# Amazon Cognito triggers are managed by AWS CDK -- no manual script needed
 ```
 
 ### Helm Chart
@@ -100,7 +126,7 @@ helm lint helm/charts/openclaw-platform/  # Lint check
 # IMPORTANT: deploy-auth-ui.sh uses sed to inject config
 # Patterns like clientId:'' must match exactly (minified, no spaces)
 bash scripts/deploy-auth-ui.sh
-# Invalidate CloudFront cache after deploy
+# Invalidate Amazon CloudFront cache after deploy
 ```
 
 ### AWS Lambda Functions
@@ -110,7 +136,7 @@ python3 -m py_compile cdk/lambda/pre-signup/index.py
 python3 -m py_compile cdk/lambda/post-confirmation/index.py
 python3 -m py_compile cdk/lambda/cost-enforcer/index.py
 cd cdk && npx cdk deploy OpenClawEksStack --require-approval broadening
-# Cognito triggers managed by CDK CognitoTriggers custom resource
+# Cognito triggers managed by AWS CDK CognitoTriggers custom resource
 ```
 
 ```
@@ -119,7 +145,7 @@ cd cdk && npx cdk deploy OpenClawEksStack --require-approval broadening
 
 Before declaring any change complete:
 
-- [ ] `cd cdk && npx tsc --noEmit` -- CDK compiles
+- [ ] `cd cdk && npx tsc --noEmit` -- AWS CDK compiles
 - [ ] `cd cdk && npx cdk synth --no-staging` -- cdk-nag runs (review findings, suppress with rationale if needed)
 - [ ] `cd cdk && npx cdk diff` -- Shows expected changes (or no differences)
 - [ ] `python3 -m py_compile cdk/lambda/pre-signup/index.py` -- Lambda syntax OK
@@ -143,18 +169,18 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 
 | Pitfall | Cause | Fix |
 |---------|-------|-----|
-| Cognito triggers disappear | `update-user-pool` without `--lambda-config` | CDK CognitoTriggers custom resource re-attaches on every deploy |
+| Cognito triggers disappear | `update-user-pool` without `--lambda-config` | AWS CDK CognitoTriggers custom resource re-attaches on every deploy |
 | `deploy-auth-ui.sh` sed fails silently | Spaces in minified JS patterns | Match exact minified format: `clientId:''` not `clientId: ''` |
-| CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
+| AWS CDK deploy rollback | Template literal escaping (`\${this.region}`) | Use `${this.region}` in backtick strings, never escape |
 | Namespace stuck in Terminating | TargetGroupBinding finalizer | Recreate ns -> delete TGB -> delete ns |
 | ArgoCD sync conflict | Manual kubectl edit conflicts with ArgoCD selfHeal | Never manually edit ArgoCD-managed resources; change Helm chart instead |
 
 ## Conventions
 
-- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup Lambda")
+- **Issues**: English, imperative verb start, descriptive (e.g., "Add signup rate limit to pre-signup AWS Lambda")
 - **PR titles**: English, conventional commit prefix: `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
 - Commit messages: English, imperative mood, prefix with `feat:`, `fix:`, `docs:`, `perf:`, `chore:`
-- Commit messages: **NEVER** include real domain names, AWS account IDs, ARNs, CloudFront distribution IDs, or any deployment-specific values. Use `example.com`, `123456789012`, etc.
+- Commit messages: **NEVER** include real domain names, AWS account IDs, ARNs, Amazon CloudFront distribution IDs, or any deployment-specific values. Use `example.com`, `123456789012`, etc.
 - Run `bash scripts/install-hooks.sh` after clone to enable commit-msg scanning
 - Scripts: Bash, `set -euo pipefail`, use `get_output()` helper for CloudFormation outputs
 - CDK context: All configurable values in `cdk.json`, template in `cdk.json.example`
