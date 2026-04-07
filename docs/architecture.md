@@ -10,7 +10,7 @@ Internet
   +- claw.your-domain.com --> CloudFront (single distribution)
   |                            /        -> S3 (auth UI)           [CDK-managed]
   |                            /t/*     -> Internet-facing ALB    [post-deploy.sh]
-  |                                               (CF-only SG + WAF)
+  |                                               (CF-only SG + AWS WAF)
   |
   +- Outbound only: EKS Pod --> NAT Gateway (HA) --> Internet
 ```
@@ -88,7 +88,7 @@ EKS Cluster (v1.35)
 
 | Component | Technology | Purpose |
 |-----------|-----------|--------|
-| Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, WAF |
+| Infrastructure | AWS CDK (TypeScript) | VPC, EKS, IAM, Lambda, S3, CloudFront, AWS WAF |
 | ApplicationSet | ArgoCD generator | Generates per-tenant Applications from list elements |
 | Helm chart | ArgoCD-synced | Source of truth for tenant workload resources |
 | Auth | Cognito + custom UI | Signup, login, email domain gate |
@@ -115,13 +115,13 @@ ArgoCD tracks sync status for each tenant Application:
 
 | Layer | Control |
 |-------|--------|
-| Edge | CloudFront + WAF (AWS Common Rules + rate limit) |
-| Signup | WAF Bot Control (opt-in) + email domain restriction + rate limiting |
-| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + WAF + HTTPS |
+| Edge | CloudFront + AWS WAF (AWS Common Rules + rate limit) |
+| Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
+| Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Cognito + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand via aws-sm provider |
-| LLM | Bedrock via Pod Identity -- zero API keys |
+| LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero (EFS, multi-AZ) |
 | Audit | CloudTrail + S3 + Athena + EKS control plane logging |
@@ -131,7 +131,7 @@ ArgoCD tracks sync status for each tenant Application:
 ```
 User Request:
   Browser -> CloudFront (/t/*) -> ALB (CF-only SG) -> HTTPRoute -> Pod
-  Pod -> Bedrock (via Pod Identity, cross-region inference profiles)
+  Pod -> Amazon Bedrock (via Pod Identity, cross-region inference profiles)
 
 Tenant Provisioning:
   Cognito SignUp -> Pre-signup Lambda (email gate)

@@ -9,7 +9,7 @@
 4. Platform     -> bash scripts/deploy-platform.sh (ApplicationSet + Gateway)
 5. KEDA         -> bash scripts/setup-keda.sh
 6. First tenant -> scripts/create-tenant.sh alice
-7. ALB setup    -> scripts/post-deploy.sh (CloudFront ALB origin, Route53, WAF)
+7. ALB setup    -> scripts/post-deploy.sh (CloudFront ALB origin, Route53, AWS WAF)
 8. Auth UI      -> scripts/deploy-auth-ui.sh
 9. Verify       -> scripts/health-check.sh
 ```
@@ -94,7 +94,7 @@ cd cdk && npx cdk deploy
 | Alert | Trigger | Action |
 |-------|---------|--------|
 | Pod restart | CloudWatch: restart count > 0 | Check pod logs |
-| Bedrock latency | P95 > 10 seconds | Check model availability |
+| Amazon Bedrock latency | P95 > 10 seconds | Check model availability |
 | Cold start slow | Pod startup > 60 seconds | Check node capacity |
 | Budget 80% | Cost-enforcer Lambda | Notify tenant |
 | Budget 100% | Cost-enforcer Lambda | Decide: increase or restrict |

@@ -17,14 +17,14 @@ All alarms publish to the `OpenClawAlerts` SNS topic.
 | Alarm | Metric | Condition | Setup |
 |---|---|---|---|
 | `OpenClaw-PodRestartCount` | `ContainerInsights/pod_number_of_container_restarts` | Sum > 0 in 5 min | CDK (automatic) |
-| `openclaw-bedrock-p95-latency` | `OpenClaw/Bedrock/BedrockResponseTimeMs` | P95 > 10s for 2x 5-min | CDK `BedrockLatencyAlarm` |
+| `openclaw-bedrock-p95-latency` | `OpenClaw/Amazon Bedrock/BedrockResponseTimeMs` | P95 > 10s for 2x 5-min | CDK `BedrockLatencyAlarm` |
 | `openclaw-pod-coldstart-slow` | `OpenClaw/ColdStart/PodStartupDurationSeconds` | Max > 60s in 5 min | CDK `ColdStartAlarm` |
 
 ## Usage Tracking
 
-All tenants share a single IAM Role. Bedrock CloudWatch metrics cannot distinguish tenants at the IAM level.
+All tenants share a single IAM Role. Amazon Bedrock CloudWatch metrics cannot distinguish tenants at the IAM level.
 
-Solution: OpenClaw gateway logs each Bedrock invocation with token counts. Container Insights collects pod stdout tagged with Kubernetes namespace (1:1 mapping to tenants).
+Solution: OpenClaw gateway logs each Amazon Bedrock invocation with token counts. Container Insights collects pod stdout tagged with Kubernetes namespace (1:1 mapping to tenants).
 
 ```
 OpenClaw Pod (stdout) -> Container Insights -> CloudWatch Logs
@@ -52,10 +52,10 @@ OpenClaw Pod (stdout) -> Container Insights -> CloudWatch Logs
 
 | Script | Purpose |
 |---|---|
-| `health-check.sh` | JSON health report (KEDA, PVCs, ALB, CloudFront, WAF) |
+| `health-check.sh` | JSON health report (KEDA, PVCs, ALB, CloudFront, AWS WAF) |
 | `usage-report.sh --month YYYY-MM` | Monthly per-tenant cost report |
 | CDK metric filters | Metric filters + dashboard |
-| CDK `BedrockLatencyAlarm` | Bedrock P95 latency alarm |
+| CDK `BedrockLatencyAlarm` | Amazon Bedrock P95 latency alarm |
 | CDK `ColdStartAlarm` | Cold start alarm |
 
 ## Cost
