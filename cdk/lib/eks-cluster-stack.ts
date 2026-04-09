@@ -18,8 +18,10 @@ import * as cr from 'aws-cdk-lib/custom-resources';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as efs from 'aws-cdk-lib/aws-efs';
+import * as kms from 'aws-cdk-lib/aws-kms';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
+import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
 
 export class EksClusterStack extends cdk.Stack {
@@ -70,6 +72,13 @@ export class EksClusterStack extends cdk.Stack {
       trafficType: ec2.FlowLogTrafficType.ALL,
     });
 
+    // KMS key for EKS envelope encryption of Kubernetes secrets
+    const eksSecretsKey = new kms.Key(this, 'EksSecretsKey', {
+      alias: 'openclaw/eks-secrets',
+      description: 'Envelope encryption for Kubernetes secrets in EKS cluster',
+      enableKeyRotation: true,
+    });
+
     const cluster = new eks.Cluster(this, 'Cluster', {
       vpc,
       version: eks.KubernetesVersion.V1_35,
@@ -77,6 +86,7 @@ export class EksClusterStack extends cdk.Stack {
       clusterName: (this.node.tryGetContext('clusterName') as string) || 'openclaw-cluster',
       authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
       kubectlLayer: new KubectlV35Layer(this, 'KubectlLayer'),
+      secretsEncryptionKey: eksSecretsKey,
       clusterLogging: [
         eks.ClusterLoggingTypes.API,
         eks.ClusterLoggingTypes.AUDIT,
@@ -326,8 +336,15 @@ export class EksClusterStack extends cdk.Stack {
         'shield:GetSubscriptionState', 'shield:DescribeProtection',
         'shield:CreateProtection', 'shield:DeleteProtection',
       ],
+      // Wildcard required: AWS Load Balancer Controller manages dynamically-created
+      // ALBs, target groups, security groups, and listeners. Resource ARNs are not
+      // known at deploy time. See: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/installation/#iam-permissions
       resources: ['*'],
     }));
+    NagSuppressions.addResourceSuppressions(lbcSa.role, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'AWS Load Balancer Controller requires wildcard resources to manage dynamically-created ALBs, target groups, and security groups. Per official IAM policy: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/deploy/installation/#iam-permissions',
+    }], true);
 
     cluster.addHelmChart('LbController', {
       chart: 'aws-load-balancer-controller',
@@ -402,8 +419,15 @@ export class EksClusterStack extends cdk.Stack {
         'sqs:DeleteMessage', 'sqs:GetQueueAttributes',
         'sqs:GetQueueUrl', 'sqs:ReceiveMessage',
       ],
+      // Wildcard required: Karpenter dynamically provisions and terminates EC2
+      // instances, launch templates, and instance profiles. Resource ARNs are
+      // generated at runtime. See: https://karpenter.sh/docs/getting-started/getting-started-with-karpenter/#create-the-karpenter-iam-role
       resources: ['*'],
     }));
+    NagSuppressions.addResourceSuppressions(karpenterSa.role, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'Karpenter requires wildcard resources to dynamically provision EC2 instances, launch templates, and instance profiles. Per official IAM policy: https://karpenter.sh/docs/getting-started/',
+    }], true);
 
     // Helm chart
     const karpenterChart = cluster.addHelmChart('Karpenter', {
@@ -514,8 +538,16 @@ export class EksClusterStack extends cdk.Stack {
     tenantRole.addToPrincipalPolicy(new iam.PolicyStatement({
       sid: 'BedrockDiscovery',
       actions: ['bedrock:ListFoundationModels', 'bedrock:ListInferenceProfiles', 'bedrock:GetInferenceProfile'],
+      // Wildcard required: ListFoundationModels and ListInferenceProfiles are
+      // account-level APIs that only support '*' as resource ARN.
+      // See: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html
       resources: ['*'],
     }));
+    NagSuppressions.addResourceSuppressions(tenantRole, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'Amazon Bedrock ListFoundationModels/ListInferenceProfiles are account-level APIs that only support wildcard resource. See: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_ListFoundationModels.html',
+      appliesTo: ['Resource::*'],
+    }], true);
 
     // Secrets Manager: ABAC — tenant can only read secrets tagged with its own namespace
     tenantRole.addToPrincipalPolicy(new iam.PolicyStatement({
@@ -1042,8 +1074,15 @@ export class EksClusterStack extends cdk.Stack {
     }));
     costEnforcerFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:DescribeSecret', 'secretsmanager:ListSecrets'],
+      // Wildcard required: CostEnforcer scans all tenant secrets to read
+      // per-tenant budget tags. Cannot scope to specific ARNs because tenant
+      // secrets are created dynamically by PostConfirmation Lambda.
       resources: ['*'],
     }));
+    NagSuppressions.addResourceSuppressions(costEnforcerFn, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'CostEnforcer Lambda needs ListSecrets/DescribeSecret across all tenant secrets to read budget tags. Tenant secrets are created dynamically; ARNs not known at deploy time.',
+    }], true);
 
     new events.Rule(this, 'CostEnforcerSchedule', {
       schedule: events.Schedule.rate(cdk.Duration.days(1)),

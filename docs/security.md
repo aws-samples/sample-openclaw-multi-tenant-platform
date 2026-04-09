@@ -286,7 +286,7 @@ Internet --> CloudFront --> ALB (internet-facing, CF prefix list SG) --> Pod
 | Secrets rotation | SM secrets not auto-rotated |
 | AWS WAF logging | Sampled requests only, no full logging |
 | GuardDuty | No runtime threat detection for Amazon EKS |
-| KMS encryption | Amazon EFS encrypted at rest (AWS managed key) |
+| KMS encryption | Amazon EFS encrypted at rest (AWS managed key), Amazon EKS secrets encrypted with CMK |
 
 ---
 
@@ -307,6 +307,7 @@ For production deployments, consider the following enhancements:
 8. **GuardDuty Amazon EKS Runtime Monitoring**: detect container-level threats
 9. **KMS CMK**: use customer-managed keys for EBS encryption and Secrets Manager
 10. **Secrets rotation**: enable Secrets Manager automatic rotation with a AWS Lambda rotator
+11. **Amazon EKS API endpoint access**: the default configuration uses public+private endpoint access so that customers can run `kubectl` after cloning the sample. For production, restrict to `EndpointAccess.PRIVATE` (requires VPN/Direct Connect) or `EndpointAccess.PUBLIC_AND_PRIVATE` with CIDR restrictions limiting API access to your corporate IP ranges
 
 ---
 
