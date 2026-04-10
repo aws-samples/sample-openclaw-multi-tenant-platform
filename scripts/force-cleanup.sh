@@ -12,6 +12,16 @@ DELETE_STACK=false
 
 echo "==> Force cleanup for $STACK in $REGION"
 
+# 0. Delete Kubernetes-managed ALB (created by ALB Controller, not CDK)
+echo "  -> Removing Kubernetes-managed ALBs..."
+for alb_arn in $(aws elbv2 describe-load-balancers --region "$REGION" \
+  --query "LoadBalancers[?contains(LoadBalancerName,'openclaw')].LoadBalancerArn" --output text 2>/dev/null); do
+  [[ -n "$alb_arn" && "$alb_arn" != "None" ]] && \
+    aws elbv2 delete-load-balancer --load-balancer-arn "$alb_arn" --region "$REGION" 2>/dev/null && \
+    echo "     Deleted ALB: $alb_arn"
+done
+sleep 10  # Wait for ALB ENIs to release
+
 # 1. Kill ASG lifecycle hooks (EKS adds 30-min terminate hooks)
 echo "  -> Removing ASG lifecycle hooks..."
 for asg in $(aws autoscaling describe-auto-scaling-groups --region "$REGION" \
@@ -32,12 +42,14 @@ VPC_ID=$(aws ec2 describe-vpcs --region "$REGION" \
   --query 'Vpcs[0].VpcId' --output text 2>/dev/null)
 
 if [[ -n "$VPC_ID" && "$VPC_ID" != "None" ]]; then
-  # 3. Delete GuardDuty managed security groups
-  echo "  -> Cleaning GuardDuty security groups..."
+  # 3. Delete GuardDuty managed security groups and ALB security groups
+  echo "  -> Cleaning security groups..."
   aws ec2 describe-security-groups --region "$REGION" \
-    --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=GuardDutyManagedSecurityGroup-*" \
-    --query 'SecurityGroups[*].GroupId' --output text 2>/dev/null | tr '\t' '\n' | while read sg; do
-    [[ -n "$sg" && "$sg" != "None" ]] && aws ec2 delete-security-group --group-id "$sg" --region "$REGION" 2>/dev/null && echo "     Deleted SG: $sg"
+    --filters "Name=vpc-id,Values=$VPC_ID" \
+    --query 'SecurityGroups[?GroupName!=`default`].[GroupId,GroupName]' --output text 2>/dev/null | while read sg name; do
+    if [[ "$name" == *"GuardDuty"* || "$name" == *"k8s-"* ]]; then
+      aws ec2 delete-security-group --group-id "$sg" --region "$REGION" 2>/dev/null && echo "     Deleted SG: $sg ($name)"
+    fi
   done
 
   # 4. Delete VPC endpoints
