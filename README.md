@@ -77,6 +77,8 @@ cd sample-openclaw-multi-tenant-platform
 - Docker or [Finch](https://github.com/runfinch/finch) (running — required for AWS CDK asset bundling). If using Finch, set `export CDK_DOCKER=finch` before running CDK commands
 - kubectl + Helm 3, Node.js 22+
 - Amazon Cognito User Pool + App Client (**no client secret** -- public client for SPA)
+
+> **Important**: Set `allowedEmailDomains` in `cdk.json` to restrict who can sign up (e.g., `your-company.com`). Without this, anyone with a valid email can create a tenant. To disable self-signup entirely, set `AdminCreateUserConfig.AllowAdminCreateUserOnly` to `true` on your Amazon Cognito User Pool.
 - (Optional) Route53 hosted zone + ACM certificate in us-east-1. Without a custom domain, the platform uses the CloudFront default domain (`xxxxxx.cloudfront.net`)
 
 #### 1. Configure
@@ -178,6 +180,8 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 |----------|-----------|-------------|
 | Amazon EKS control plane | ~$73 | ~$73 |
 | EC2 (3x t4g.large system + Karpenter spot) | ~$93 | ~$93-180 |
+
+> System nodegroup uses 3x t4g.large to run platform components (ArgoCD, KEDA, ALB Controller, Karpenter, CloudWatch, GuardDuty). These components request ~8.5 vCPU total (upstream Helm/addon defaults), though actual usage is ~15-25%. Karpenter provisions additional spot nodes for tenant pods on demand.
 | Amazon EFS (per actual usage) | ~$0.15 | ~$75 |
 | ALB + NAT (x2) + Amazon CloudFront + AWS WAF | ~$60 | ~$65 |
 | CloudWatch + AWS Lambda + Amazon S3 | ~$15 | ~$20 |

@@ -50,6 +50,13 @@ Prevents unauthorized account creation and bot signups.
 - Rate limiting: max 5 signups per email domain per hour
 - AWS WAF Bot Control (if `enableBotControl` AWS CDK context is true)
 
+> **Important**: Configure `allowedEmailDomains` in `cdk.json` before deploying. This controls who can create accounts. To disable self-signup entirely (admin-only user creation), set `AllowAdminCreateUserOnly: true` on your Amazon Cognito User Pool:
+> ```bash
+> aws cognito-idp update-user-pool --user-pool-id <pool-id> \
+>   --admin-create-user-config AllowAdminCreateUserOnly=true
+> ```
+> When self-signup is disabled, the auth UI Sign Up tab still appears but returns an error message ("Registration is restricted").
+
 **AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `PreSignupFn`
 
 ---

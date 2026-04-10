@@ -22,21 +22,14 @@ echo "  Pool ID:   $POOL_ID"
 echo "  Client ID: $CLIENT_ID"
 echo "  Domain:    $DOMAIN"
 
-# Inject config into HTML files
+# Generate config.js and copy static files
 TMPDIR=$(mktemp -d)
-INJECT="s|userPoolId:''|userPoolId: '${POOL_ID}'|;s|clientId:''|clientId: '${CLIENT_ID}'|;s|domain:''|domain: '${DOMAIN}'|"
+echo "var C={region:'${REGION}',userPoolId:'${POOL_ID}',clientId:'${CLIENT_ID}',domain:'${DOMAIN}'};" > "${TMPDIR}/config.js"
 
-sed "${INJECT}" \
-  auth-ui/index.html > "${TMPDIR}/index.html"
-sed "${INJECT}" auth-ui/admin.html > "${TMPDIR}/admin.html"
-for f in auth-ui/*.html; do
-  name="$(basename "$f")"
-  [ "$name" = "index.html" ] || [ "$name" = "admin.html" ] && continue
-  cp "$f" "${TMPDIR}/"
+# Copy all auth-ui files as-is (index.html loads config.js via <script src="/config.js">)
+for f in auth-ui/*.html auth-ui/*.json auth-ui/*.svg; do
+  [ -f "$f" ] && cp "$f" "${TMPDIR}/"
 done
-cp auth-ui/manifest.json "${TMPDIR}/"
-cp auth-ui/logo.svg "${TMPDIR}/"
-[ -f auth-ui/config.js ] && cp auth-ui/config.js "${TMPDIR}/"
 
 # Upload
 aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --content-type "text/html" --region "$REGION"
