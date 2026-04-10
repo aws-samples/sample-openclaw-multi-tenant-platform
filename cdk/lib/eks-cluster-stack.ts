@@ -10,7 +10,6 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cw_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
-import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -24,16 +23,9 @@ import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
 
-export interface EksClusterStackProps extends cdk.StackProps {
-  /** WAF WebACL ARN with CLOUDFRONT scope (from CloudFrontWafStack in us-east-1) */
-  cloudFrontWafAclArn?: string;
-}
-
 export class EksClusterStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: EksClusterStackProps) {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
-    const cloudFrontWafAclArn = props?.cloudFrontWafAclArn;
 
     // ── Validate required CDK context (before any resource creation) ─────
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
@@ -648,7 +640,7 @@ export class EksClusterStack extends cdk.Stack {
     const perfLogGroup = new logs.LogGroup(this, 'PerfLogGroup', {
       logGroupName: `/aws/containerinsights/${cluster.clusterName}/performance`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
     const coldStartFilter = new logs.MetricFilter(this, 'ColdStartFilter', {
       logGroup: perfLogGroup,
@@ -676,7 +668,7 @@ export class EksClusterStack extends cdk.Stack {
     const appLogGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: `/aws/containerinsights/${cluster.clusterName}/application`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
     const bedrockLatencyFilter = new logs.MetricFilter(this, 'BedrockLatencyFilter', {
       logGroup: appLogGroup,
@@ -910,79 +902,85 @@ export class EksClusterStack extends cdk.Stack {
       username: 'lambda-post-confirm',
     });
 
-    // ── CloudFront + WAF ────────────────────────────────────────────────────
+    // ── CloudFront WAF (via Custom Resource in us-east-1) ─────────────────
+    // CloudFront WAF must be in us-east-1 regardless of stack region.
+    // Uses a custom resource (AwsSdkCall) to create/delete the WAF in us-east-1,
+    // avoiding cross-region stack dependencies that complicate deployment and deletion.
     const enableBotControl = this.node.tryGetContext('enableBotControl') === true;
 
-    const wafRules: wafv2.CfnWebACL.RuleProperty[] = [
-        {
-          name: 'AWSManagedRulesCommonRuleSet',
-          priority: 1,
-          overrideAction: { none: {} },
-          statement: {
-            managedRuleGroupStatement: {
-              vendorName: 'AWS',
-              name: 'AWSManagedRulesCommonRuleSet',
-            },
-          },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: 'CommonRuleSet',
-            sampledRequestsEnabled: true,
-          },
+    const wafRules: object[] = [
+      {
+        Name: 'AWSManagedRulesCommonRuleSet',
+        Priority: 1,
+        OverrideAction: { None: {} },
+        Statement: {
+          ManagedRuleGroupStatement: { VendorName: 'AWS', Name: 'AWSManagedRulesCommonRuleSet' },
         },
-        {
-          name: 'RateLimit',
-          priority: 2,
-          action: { block: {} },
-          statement: {
-            rateBasedStatement: {
-              limit: 2000,
-              aggregateKeyType: 'IP',
-            },
-          },
-          visibilityConfig: {
-            cloudWatchMetricsEnabled: true,
-            metricName: 'RateLimit',
-            sampledRequestsEnabled: true,
-          },
-        },
+        VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'CommonRuleSet', SampledRequestsEnabled: true },
+      },
+      {
+        Name: 'RateLimit',
+        Priority: 2,
+        Action: { Block: {} },
+        Statement: { RateBasedStatement: { Limit: 2000, AggregateKeyType: 'IP' } },
+        VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'RateLimit', SampledRequestsEnabled: true },
+      },
     ];
 
-    // Bot Control: opt-in via CDK context (incurs additional WAF charges)
     if (enableBotControl) {
       wafRules.push({
-        name: 'AWSManagedRulesBotControlRuleSet',
-        priority: 3,
-        overrideAction: { none: {} },
-        statement: {
-          managedRuleGroupStatement: {
-            vendorName: 'AWS',
-            name: 'AWSManagedRulesBotControlRuleSet',
-            managedRuleGroupConfigs: [{
-              awsManagedRulesBotControlRuleSet: {
-                inspectionLevel: 'COMMON',
-              },
-            }],
+        Name: 'AWSManagedRulesBotControlRuleSet',
+        Priority: 3,
+        OverrideAction: { None: {} },
+        Statement: {
+          ManagedRuleGroupStatement: {
+            VendorName: 'AWS', Name: 'AWSManagedRulesBotControlRuleSet',
+            ManagedRuleGroupConfigs: [{ AWSManagedRulesBotControlRuleSet: { InspectionLevel: 'COMMON' } }],
           },
         },
-        visibilityConfig: {
-          cloudWatchMetricsEnabled: true,
-          metricName: 'BotControl',
-          sampledRequestsEnabled: true,
-        },
+        VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'BotControl', SampledRequestsEnabled: true },
       });
     }
 
-    const wafAcl = new wafv2.CfnWebACL(this, 'WafAcl', {
-      defaultAction: { allow: {} },
-      scope: 'REGIONAL',
-      visibilityConfig: {
-        cloudWatchMetricsEnabled: true,
-        metricName: 'OpenClawWaf',
-        sampledRequestsEnabled: true,
+    const cfWafName = `OpenClaw-CloudFront-${this.stackName}`;
+    const createCfWaf = new cr.AwsCustomResource(this, 'CloudFrontWaf', {
+      onCreate: {
+        service: 'WAFV2',
+        action: 'createWebACL',
+        parameters: {
+          Name: cfWafName,
+          Scope: 'CLOUDFRONT',
+          DefaultAction: { Allow: {} },
+          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'OpenClawCloudFrontWaf', SampledRequestsEnabled: true },
+          Rules: wafRules,
+        },
+        region: 'us-east-1',
+        physicalResourceId: cr.PhysicalResourceId.fromResponse('Summary.ARN'),
       },
-      rules: wafRules,
+      onDelete: {
+        service: 'WAFV2',
+        action: 'deleteWebACL',
+        parameters: {
+          Name: cfWafName,
+          Scope: 'CLOUDFRONT',
+          Id: new cr.PhysicalResourceIdReference(),
+          LockToken: new cr.PhysicalResourceIdReference(),
+        },
+        region: 'us-east-1',
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['wafv2:CreateWebACL', 'wafv2:DeleteWebACL', 'wafv2:GetWebACL', 'wafv2:UpdateWebACL'],
+          resources: ['*'],
+        }),
+      ]),
     });
+    NagSuppressions.addResourceSuppressions(createCfWaf, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'WAF custom resource needs wildcard because WAF ARN is not known at deploy time (created in us-east-1 via SDK call).',
+    }], true);
+
+    const cfWafArn = createCfWaf.getResponseField('Summary.ARN');
 
     // S3 bucket for auth UI static site
     const authUiBucket = new s3.Bucket(this, 'AuthUiBucket', {
@@ -999,8 +997,8 @@ export class EksClusterStack extends cdk.Stack {
     authUiBucket.grantRead(oai);
 
     const distribution = new cloudfront.CloudFrontWebDistribution(this, 'Distribution', {
-      // CloudFront WAF (CLOUDFRONT scope, from us-east-1 stack)
-      ...(cloudFrontWafAclArn ? { webACLId: cloudFrontWafAclArn } : {}),
+      // CloudFront WAF (CLOUDFRONT scope, created in us-east-1 via custom resource)
+      webACLId: cfWafArn,
       
       ...(useCustomDomain && certificate ? {
         viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(
@@ -1135,7 +1133,7 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'PostConfirmFnArn', { value: postConfirmFn.functionArn });
     new cdk.CfnOutput(this, 'AuthUiBucketName', { value: authUiBucket.bucketName });
     new cdk.CfnOutput(this, 'DistributionDomainName', { value: distribution.distributionDomainName });
-    new cdk.CfnOutput(this, 'WafAclArn', { value: wafAcl.attrArn });
+    new cdk.CfnOutput(this, 'CloudFrontWafArn', { value: cfWafArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
     new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImage });
   }

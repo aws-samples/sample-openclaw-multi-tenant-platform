@@ -17,7 +17,6 @@ REGION="${AWS_REGION:-${1:-$(aws configure get region 2>/dev/null || echo us-eas
 # Accept --region flag
 [[ "${1:-}" == "--region" ]] && REGION="${2:-$REGION}"
 STACK="OpenClawEksStack"
-WAF_STACK="OpenClawWafStack"
 CLUSTER_NAME="openclaw-cluster"
 
 log() { echo "  $(date '+%H:%M:%S') $*"; }
@@ -130,37 +129,15 @@ else
   done
 fi
 
-# ── Step 4: Delete WAF stack ────────────────────────────────────────────────
-echo "Step 4: Deleting WAF stack (us-east-1)..."
-WAF_STATUS=$(aws cloudformation describe-stacks --stack-name "$WAF_STACK" --region us-east-1 \
-  --query 'Stacks[0].StackStatus' --output text 2>&1 || echo "does not exist")
-
-if [[ "$WAF_STATUS" == *"does not exist"* ]]; then
-  log "WAF stack already deleted"
-else
-  aws cloudformation delete-stack --stack-name "$WAF_STACK" --region us-east-1 2>/dev/null
-  for i in $(seq 1 12); do
-    WAF_STATUS=$(aws cloudformation describe-stacks --stack-name "$WAF_STACK" --region us-east-1 \
-      --query 'Stacks[0].StackStatus' --output text 2>&1 || echo "does not exist")
-    [[ "$WAF_STATUS" == *"does not exist"* ]] && log "WAF stack deleted!" && break
-    if [[ "$WAF_STATUS" == "DELETE_FAILED" ]]; then
-      FAILED=$(aws cloudformation list-stack-resources --stack-name "$WAF_STACK" --region us-east-1 \
-        --query "StackResourceSummaries[?ResourceStatus=='DELETE_FAILED'].LogicalResourceId" --output text 2>/dev/null)
-      log "WAF delete failed. Retaining: $FAILED"
-      aws cloudformation delete-stack --stack-name "$WAF_STACK" --region us-east-1 --retain-resources $FAILED 2>/dev/null
-      # Manual WAF cleanup
-      aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 \
-        --query "WebACLs[?contains(Name,'CloudFrontWaf')]" --output json 2>/dev/null | python3 -c "
-import json,sys,subprocess
-for w in json.load(sys.stdin):
-  subprocess.run(['aws','wafv2','delete-web-acl','--scope','CLOUDFRONT','--region','us-east-1',
-    '--name',w['Name'],'--id',w['Id'],'--lock-token',w['LockToken']],capture_output=True)
-" 2>/dev/null
-    fi
-    log "WAF: $WAF_STATUS"
-    sleep 15
-  done
-fi
+# ── Step 4: Clean CloudFront WAF custom resource ────────────────────────────
+echo "Step 4: Cleaning CloudFront WAF (us-east-1)..."
+for waf in $(aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 \
+  --query "WebACLs[?contains(Name,'OpenClaw')].{Id:Id,Name:Name,Lock:LockToken}" --output json 2>/dev/null | \
+  python3 -c "import json,sys; [print(f'{w[\"Name\"]}|{w[\"Id\"]}|{w[\"Lock\"]}') for w in json.load(sys.stdin)]" 2>/dev/null); do
+  IFS='|' read -r name id lock <<< "$waf"
+  log "Deleting WAF: $name"
+  aws wafv2 delete-web-acl --scope CLOUDFRONT --region us-east-1 --name "$name" --id "$id" --lock-token "$lock" 2>/dev/null
+done
 
 # ── Step 5: Clean retained resources ────────────────────────────────────────
 echo "Step 5: Cleaning retained resources..."

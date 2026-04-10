@@ -28,15 +28,14 @@
 Filters malicious traffic before it reaches the application.
 
 - Amazon CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
-- **Amazon CloudFront AWS WAF** (CLOUDFRONT scope, deployed in us-east-1 via `OpenClawWafStack`):
+- **Amazon CloudFront AWS WAF** (CLOUDFRONT scope, created in us-east-1 via AWS CDK custom resource):
   - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 (SQLi, XSS, path traversal)
   - `RateLimit` -- 2000 requests per 5 minutes per IP
   - AWS WAF Bot Control (opt-in via `enableBotControl` context)
-- **ALB AWS WAF** (REGIONAL scope, defense in depth):
-  - Same rules as Amazon CloudFront AWS WAF, applied at ALB layer
-  - Protects against requests that bypass Amazon CloudFront (e.g., direct ALB access attempts)
 
-**AWS CDK reference**: `cdk/lib/cloudfront-waf-stack.ts` (CloudFront WAF), `cdk/lib/eks-cluster-stack.ts` -> `WafAcl` (ALB WAF)
+**Production hardening**: Consider adding a REGIONAL scope AWS WAF on the ALB for defense in depth. See `docs/security.md` Production Hardening section.
+
+**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `CloudFrontWaf` (custom resource)
 
 **Script**: `scripts/post-deploy.sh` -- associates AWS WAF WebACL with the dynamic ALB ARN
 
