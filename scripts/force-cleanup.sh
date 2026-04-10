@@ -46,6 +46,15 @@ for alb_arn in $(aws elbv2 describe-load-balancers --region "$REGION" \
 done
 sleep 15  # Wait for ALB ENIs to release
 
+# Delete orphan target groups (from previous deploys)
+echo "  -> Removing orphan target groups..."
+for tg_arn in $(aws elbv2 describe-target-groups --region "$REGION" \
+  --query "TargetGroups[?contains(TargetGroupName,'openclaw')].TargetGroupArn" --output text 2>/dev/null); do
+  [[ -n "$tg_arn" && "$tg_arn" != "None" ]] && \
+    aws elbv2 delete-target-group --target-group-arn "$tg_arn" --region "$REGION" 2>/dev/null && \
+    log "Deleted TG: $tg_arn"
+done
+
 # ── Step 3: CDK destroy EKS stack ──────────────────────────────────────────
 echo "Step 3: Destroying EKS stack..."
 
