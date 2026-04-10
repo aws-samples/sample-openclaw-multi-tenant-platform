@@ -4,7 +4,7 @@
 
 ```
 1. Configure    -> cp cdk.json.example cdk.json (fill context values)
-2. Deploy infra -> npx cdk deploy --all (~15-20 min, deploys WAF + EKS stacks)
+2. Deploy infra -> npx cdk deploy (~20 min)
 3. ArgoCD       -> bash scripts/setup-argocd.sh (Helm)
 4. Platform     -> bash scripts/deploy-platform.sh (ApplicationSet + Gateway)
 5. KEDA         -> bash scripts/setup-keda.sh

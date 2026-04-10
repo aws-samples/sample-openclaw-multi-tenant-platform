@@ -15,7 +15,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 DOMAIN=$(get_output DomainName)
 CUSTOM_DOMAIN=$(get_output CustomDomain)
-WAF_ARN=$(get_output WafAclArn)
+WAF_ARN=$(get_output CloudFrontWafArn)
 ERROR_BUCKET=$(get_output ErrorPagesBucketName)
 
 echo "==> Post-deploy setup"
@@ -34,10 +34,8 @@ if [ -z "$ALB_ARN" ] || [ "$ALB_ARN" = "None" ]; then
 fi
 echo "  ALB: $ALB_DNS"
 
-# 2. Attach WAF to ALB
-echo "  -> Attaching WAF to ALB"
-aws wafv2 associate-web-acl --web-acl-arn "$WAF_ARN" --resource-arn "$ALB_ARN" --region "$REGION" 2>/dev/null || true
-echo "  WAF attached"
+# 2. WAF is on CloudFront (managed by CDK custom resource). ALB WAF is optional — see docs/security.md.
+echo "  CloudFront WAF: $WAF_ARN"
 
 # 3. Upload error pages to S3
 echo "  -> Uploading error pages to s3://${ERROR_BUCKET}"
@@ -261,7 +259,7 @@ echo "  Auth UI:    https://${DOMAIN}"
 echo "  Tenants:    https://${DOMAIN}/t/<tenant>/"
 echo "  CloudFront: ${CF_ID} (${CF_DOMAIN})"
 echo "  ALB:        ${ALB_DNS} (CF-only SG)"
-echo "  WAF:        attached to ALB"
+echo "  WAF:        CloudFront (edge)"
 echo ""
 echo "  CloudFront deployment takes ~3-5 min. Check status:"
 echo "    aws cloudfront get-distribution --id ${CF_ID} --query 'Distribution.Status'"

@@ -93,16 +93,14 @@ cp cdk/cdk.json.example cdk/cdk.json
 ```bash
 cd cdk && npm install
 cdk bootstrap  # Only needed once per account/region
-# If deploying to a non-us-east-1 region, also bootstrap us-east-1:
-#   cdk bootstrap aws://ACCOUNT/us-east-1  # Required for Amazon CloudFront AWS WAF
 # If using a named AWS profile:
 #   export AWS_PROFILE=your-profile
 # Ensure your AWS CLI default region matches your target deployment region:
 # aws configure get region   # should show your target region
-npx cdk deploy --all
+npx cdk deploy
 ```
 
-Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront, AWS WAF (edge + ALB), CloudWatch, SNS (~15-20 min). The `OpenClawWafStack` deploys in us-east-1 (required for CloudFront WAF) regardless of your target region.
+Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront + AWS WAF (edge), CloudWatch, SNS (~20 min).
 
 #### 3. Setup ArgoCD
 
@@ -163,7 +161,7 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 
 | Layer | Control |
 |-------|--------|
-| Edge | Amazon CloudFront + AWS WAF (CLOUDFRONT scope at edge + REGIONAL scope at ALB) |
+| Edge | Amazon CloudFront + AWS WAF (CLOUDFRONT scope, edge protection) |
 | Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Amazon Cognito signup + local token auth + 3-layer origin protection |
@@ -233,8 +231,8 @@ done
 
 # 2. Amazon CloudFront ALB origin and Route53 are cleaned up by cdk destroy
 
-# 3. Destroy AWS CDK stacks
-cd cdk && npx cdk destroy --all
+# 3. Destroy AWS CDK stack
+cd cdk && npx cdk destroy OpenClawEksStack
 
 # 4. Clean up retained resources (not deleted by AWS CDK — data protection)
 ./scripts/cleanup-test-resources.sh
