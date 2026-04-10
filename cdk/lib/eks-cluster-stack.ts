@@ -942,7 +942,7 @@ export class EksClusterStack extends cdk.Stack {
       });
     }
 
-    const cfWafName = `OpenClaw-CloudFront-${this.stackName}`;
+    const cfWafName = `OpenClaw-CF-WAF-${this.region}`;
     const createCfWaf = new cr.AwsCustomResource(this, 'CloudFrontWaf', {
       onCreate: {
         service: 'WAFV2',
@@ -957,20 +957,11 @@ export class EksClusterStack extends cdk.Stack {
         region: 'us-east-1',
         physicalResourceId: cr.PhysicalResourceId.fromResponse('Summary.ARN'),
       },
-      onDelete: {
-        service: 'WAFV2',
-        action: 'deleteWebACL',
-        parameters: {
-          Name: cfWafName,
-          Scope: 'CLOUDFRONT',
-          Id: new cr.PhysicalResourceIdReference(),
-          LockToken: new cr.PhysicalResourceIdReference(),
-        },
-        region: 'us-east-1',
-      },
+      // onDelete not implemented — WAF deletion requires LockToken which changes.
+      // Use force-cleanup.sh to delete WAF after stack destroy.
       policy: cr.AwsCustomResourcePolicy.fromStatements([
         new iam.PolicyStatement({
-          actions: ['wafv2:CreateWebACL', 'wafv2:DeleteWebACL', 'wafv2:GetWebACL', 'wafv2:UpdateWebACL'],
+          actions: ['wafv2:CreateWebACL', 'wafv2:GetWebACL'],
           resources: ['*'],
         }),
       ]),
