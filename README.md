@@ -177,12 +177,12 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 | Resource | 3 tenants | 100 tenants |
 |----------|-----------|-------------|
 | Amazon EKS control plane | ~$73 | ~$73 |
-| EC2 (2x t4g.large system + Karpenter spot) | ~$62 | ~$62-150 |
+| EC2 (3x t4g.large system + Karpenter spot) | ~$93 | ~$93-180 |
 | Amazon EFS (per actual usage) | ~$0.15 | ~$75 |
 | ALB + NAT (x2) + Amazon CloudFront + AWS WAF | ~$60 | ~$65 |
 | CloudWatch + AWS Lambda + Amazon S3 | ~$15 | ~$20 |
 | Amazon Bedrock | varies | varies |
-| **Total (infra)** | **~$212/mo** | **~$300-388/mo** |
+| **Total (infra)** | **~$243/mo** | **~$331-418/mo** |
 
 > KEDA scale-to-zero active. EC2 scales with concurrent usage, not total tenants.
 
