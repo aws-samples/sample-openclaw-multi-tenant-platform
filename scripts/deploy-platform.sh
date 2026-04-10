@@ -34,7 +34,7 @@ else
   exit 1
 fi
 
-for var_name in DOMAIN GITHUB_OWNER GITHUB_REPO COGNITO_POOL_ARN COGNITO_CLIENT_ID COGNITO_DOMAIN; do
+for var_name in GITHUB_OWNER GITHUB_REPO COGNITO_POOL_ARN COGNITO_CLIENT_ID COGNITO_DOMAIN; do
   val="${!var_name}"
   if [[ -z "$val" ]]; then
     echo "Error: $var_name is empty in cdk.json."
@@ -42,12 +42,35 @@ for var_name in DOMAIN GITHUB_OWNER GITHUB_REPO COGNITO_POOL_ARN COGNITO_CLIENT_
   fi
 done
 
+# Domain is optional — when empty, use CloudFront distribution domain from stack output.
+# The domain is needed by Helm charts for basePath and allowedOrigins even without custom DNS.
+if [[ -z "$DOMAIN" || "$DOMAIN" == "example.com" ]]; then
+  echo "  No custom domain configured. Fetching CloudFront domain from stack output..."
+  DOMAIN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text 2>/dev/null || echo "")
+  if [[ -z "$DOMAIN" ]]; then
+    echo "  WARNING: Could not fetch CloudFront domain. Gateway hostname and basePath will be empty."
+    echo "  Run post-deploy.sh after first tenant to finalize."
+  else
+    echo "  Using CloudFront domain: $DOMAIN"
+  fi
+fi
+
 CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
+
+# Determine listener mode based on cert availability
+CERT_ARN_CHECK=$(node -e "console.log(require('./$CDK_JSON').context.certificateArn || '')" 2>/dev/null)
+if [ -n "$CERT_ARN_CHECK" ]; then
+  LISTENER_NAME="https"
+else
+  LISTENER_NAME="http"
+fi
 
 echo "==> Deploying ApplicationSet (patching placeholders)"
 sed \
   -e "s|\"HELM_REPO_URL\"|\"${CHART_REPO}\"|g" \
   -e "s|\"DOMAIN\"|\"${DOMAIN}\"|g" \
+  -e "s|\"LISTENER_NAME\"|\"${LISTENER_NAME}\"|g" \
   -e "s|\"COGNITO_POOL_ARN\"|\"${COGNITO_POOL_ARN}\"|g" \
   -e "s|\"COGNITO_CLIENT_ID\"|\"${COGNITO_CLIENT_ID}\"|g" \
   -e "s|\"COGNITO_DOMAIN\"|\"${COGNITO_DOMAIN}\"|g" \
@@ -155,10 +178,43 @@ if [ -z "$CF_PREFIX_LIST" ] || [ "$CF_PREFIX_LIST" = "None" ]; then
   echo "ERROR: Could not find CloudFront managed prefix list in ${REGION}"
   exit 1
 fi
-sed \
-  -e "s|\"DOMAIN\"|\"${DOMAIN}\"|g" \
-  -e "s|\"CF_PREFIX_LIST_ID\"|\"${CF_PREFIX_LIST}\"|g" \
-  helm/gateway.yaml | kubectl apply -f -
+
+# Check if custom domain has an ACM cert (needed for HTTPS listener on ALB)
+CERT_ARN=$(node -e "console.log(require('./$CDK_JSON').context.certificateArn || '')" 2>/dev/null)
+
+if [ -n "$DOMAIN" ] && [ -n "$CERT_ARN" ]; then
+  # Custom domain with ACM cert — HTTPS listener
+  echo "  Gateway: HTTPS listener on ${DOMAIN}"
+  sed \
+    -e "s|\"DOMAIN\"|\"${DOMAIN}\"|g" \
+    -e "s|\"CF_PREFIX_LIST_ID\"|\"${CF_PREFIX_LIST}\"|g" \
+    helm/gateway.yaml | kubectl apply -f -
+else
+  # No custom domain or no cert — HTTP listener (CloudFront handles TLS termination)
+  # Use python for reliable YAML manipulation instead of fragile sed
+  echo "  Gateway: HTTP listener (no custom domain, CloudFront terminates TLS)"
+  python3 - "$CF_PREFIX_LIST" <<'PYEOF' | kubectl apply -f -
+import yaml, sys
+prefix_list = sys.argv[1]
+with open('helm/gateway.yaml') as f:
+    docs = list(yaml.safe_load_all(f))
+output = []
+for doc in docs:
+    if not doc:
+        continue
+    if doc.get('kind') == 'Gateway':
+        doc['spec']['listeners'] = [{
+            'name': 'http',
+            'protocol': 'HTTP',
+            'port': 80,
+            'allowedRoutes': {'namespaces': {'from': 'All'}}
+        }]
+    if doc.get('kind') == 'LoadBalancerConfiguration':
+        doc['spec']['securityGroupPrefixes'] = [prefix_list]
+    output.append(yaml.dump(doc, default_flow_style=False))
+print('---\n'.join(output))
+PYEOF
+fi
 
 echo ""
 echo "=== Platform Deployed ==="

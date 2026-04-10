@@ -74,10 +74,10 @@ cd sample-openclaw-multi-tenant-platform
 
 - AWS CLI v2 + configured profile
 - AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
-- Docker (running — required for AWS CDK asset bundling)
+- Docker or [Finch](https://github.com/runfinch/finch) (running — required for AWS CDK asset bundling). If using Finch, set `export CDK_DOCKER=finch` before running CDK commands
 - kubectl + Helm 3, Node.js 22+
-- Route53 hosted zone + ACM certificates (deployment region + us-east-1)
 - Amazon Cognito User Pool + App Client (**no client secret** -- public client for SPA)
+- (Optional) Route53 hosted zone + ACM certificate in us-east-1. Without a custom domain, the platform uses the CloudFront default domain (`xxxxxx.cloudfront.net`)
 
 #### 1. Configure
 
@@ -91,12 +91,16 @@ cp cdk/cdk.json.example cdk/cdk.json
 ```bash
 cd cdk && npm install
 cdk bootstrap  # Only needed once per account/region
-n# Ensure your AWS CLI default region matches your target deployment region:
+# If deploying to a non-us-east-1 region, also bootstrap us-east-1:
+#   cdk bootstrap aws://ACCOUNT/us-east-1  # Required for Amazon CloudFront AWS WAF
+# If using a named AWS profile:
+#   export AWS_PROFILE=your-profile
+# Ensure your AWS CLI default region matches your target deployment region:
 # aws configure get region   # should show your target region
-npx cdk deploy
+npx cdk deploy --all
 ```
 
-Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront, AWS WAF, CloudWatch, SNS (~15-20 min).
+Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront, AWS WAF (edge + ALB), CloudWatch, SNS (~15-20 min). The `OpenClawWafStack` deploys in us-east-1 (required for CloudFront WAF) regardless of your target region.
 
 #### 3. Setup ArgoCD
 
@@ -157,7 +161,7 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 
 | Layer | Control |
 |-------|--------|
-| Edge | Amazon CloudFront + AWS WAF (AWS Common Rules + rate limit) |
+| Edge | Amazon CloudFront + AWS WAF (CLOUDFRONT scope at edge + REGIONAL scope at ALB) |
 | Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Amazon Cognito signup + local token auth + 3-layer origin protection |
@@ -173,12 +177,12 @@ Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking ar
 | Resource | 3 tenants | 100 tenants |
 |----------|-----------|-------------|
 | Amazon EKS control plane | ~$73 | ~$73 |
-| EC2 (Graviton + Karpenter spot) | ~$48 | ~$48-150 |
+| EC2 (2x t4g.large system + Karpenter spot) | ~$62 | ~$62-150 |
 | Amazon EFS (per actual usage) | ~$0.15 | ~$75 |
 | ALB + NAT (x2) + Amazon CloudFront + AWS WAF | ~$60 | ~$65 |
 | CloudWatch + AWS Lambda + Amazon S3 | ~$15 | ~$20 |
 | Amazon Bedrock | varies | varies |
-| **Total (infra)** | **~$198/mo** | **~$286-388/mo** |
+| **Total (infra)** | **~$212/mo** | **~$300-388/mo** |
 
 > KEDA scale-to-zero active. EC2 scales with concurrent usage, not total tenants.
 
@@ -225,8 +229,8 @@ done
 
 # 2. Amazon CloudFront ALB origin and Route53 are cleaned up by cdk destroy
 
-# 3. Destroy AWS CDK stack
-cd cdk && npx cdk destroy OpenClawEksStack
+# 3. Destroy AWS CDK stacks
+cd cdk && npx cdk destroy --all
 
 # 4. Clean up retained resources (not deleted by AWS CDK — data protection)
 ./scripts/cleanup-test-resources.sh

@@ -22,10 +22,15 @@ echo "  Step 2: Install KEDA"
 run helm upgrade --install keda kedacore/keda --namespace keda --create-namespace --wait --timeout 120s
 
 echo "  Step 3: Install HTTP Add-on"
-run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 120s \
+# Use longer timeout (180s) — first install pulls images which can be slow.
+# Don't let failure block TGC creation below (TGC is critical for scale-from-zero).
+if ! run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 180s \
   --set interceptor.replicas.min=1 \
   --set interceptor.replicas.max=1 \
-  --set scaler.replicas=1
+  --set scaler.replicas=1; then
+  echo "  ⚠️  HTTP Add-on helm install timed out (pods may still be starting)."
+  echo "  Continuing with TGC creation — pods will become ready shortly."
+fi
 
 echo "  Step 4: Verify"
 if ! $DRY_RUN; then

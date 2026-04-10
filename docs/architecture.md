@@ -68,7 +68,7 @@ The ArgoCD Application is created with `fullnameOverride={tenant}`, auto-sync en
 
 ```
 Amazon EKS Cluster (v1.35)
-|  Managed Node Group (Graviton ARM64 t4g.medium) + Karpenter (arm64 spot)
+|  Managed Node Group (Graviton ARM64 t4g.large) + Karpenter (arm64 spot)
 |  Add-ons: ALB Controller, EBS CSI, Amazon EFS CSI, Pod Identity, CloudWatch Insights
 |  KEDA HTTP Add-on
 |

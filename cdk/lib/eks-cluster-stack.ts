@@ -24,16 +24,21 @@ import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
 
+export interface EksClusterStackProps extends cdk.StackProps {
+  /** WAF WebACL ARN with CLOUDFRONT scope (from CloudFrontWafStack in us-east-1) */
+  cloudFrontWafAclArn?: string;
+}
+
 export class EksClusterStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: EksClusterStackProps) {
     super(scope, id, props);
+
+    const cloudFrontWafAclArn = props?.cloudFrontWafAclArn;
 
     // ── Validate required CDK context (before any resource creation) ─────
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
     if (!this.node.tryGetContext('@ci-synth')) {
       const requiredContext: Record<string, string> = {
-        zoneName: 'Domain name (e.g., example.com)',
-        certificateArn: 'ACM certificate ARN (deployment region)',
         cognitoPoolId: 'Cognito User Pool ID',
         cognitoClientId: 'Cognito App Client ID',
         cognitoDomain: 'Cognito domain prefix',
@@ -63,6 +68,14 @@ export class EksClusterStack extends cdk.Stack {
         { name: 'private', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 24 },
       ],
     });
+
+    // Tag private subnets for Karpenter EC2NodeClass subnet discovery.
+    // Karpenter requires both 'internal-elb' and cluster-owned tags to match.
+    // CDK adds 'internal-elb' automatically but not the cluster-owned tag.
+    const clusterName = (this.node.tryGetContext('clusterName') as string) || 'openclaw-cluster';
+    for (const subnet of vpc.privateSubnets) {
+      cdk.Tags.of(subnet).add(`kubernetes.io/cluster/${clusterName}`, 'owned');
+    }
 
     // ── EKS Cluster ─────────────────────────────────────────────────────────
     // VPC Flow Logs — network forensics for all traffic
@@ -97,7 +110,9 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── Cluster Access: allow deployer to use kubectl ─────────
-    // Users must set 'deployerPrincipalArn' to their IAM principal ARN (SSO role, IAM role, or IAM user).
+    // Users must set 'deployerPrincipalArn' to their IAM principal ARN.
+    // This can be any IAM identity: IAM user, IAM role, or SSO/Identity Center role.
+    // It does NOT require IAM Identity Center — any IAM principal works.
     // Example: cdk deploy -c deployerPrincipalArn=arn:aws:iam::123456789012:role/MyRole
     const deployerArn = this.node.tryGetContext('deployerPrincipalArn') || this.node.tryGetContext('ssoRoleArn');
     if (deployerArn) {
@@ -113,19 +128,19 @@ export class EksClusterStack extends cdk.Stack {
     }
 
     // ── Managed Node Group ──────────────────────────────────────────────────
+    // 2x t4g.large (4 vCPU, 8 GiB) for system pods (~7.4 vCPU total requests).
     cluster.addNodegroupCapacity('SystemNodes', {
-      instanceTypes: [new ec2.InstanceType('t4g.medium')],
+      instanceTypes: [new ec2.InstanceType('t4g.large')],
       amiType: eks.NodegroupAmiType.AL2023_ARM_64_STANDARD,
-      minSize: 1,
-      maxSize: 5,
-      desiredSize: 3,
+      minSize: 2,
+      maxSize: 4,
+      desiredSize: 2,
       nodegroupName: 'system-graviton',
       labels: { role: 'system' },
     });
 
     // ── EBS CSI Driver (with Pod Identity IAM) ──────────────────────────────
     const ebsCsiRole = new iam.Role(this, 'EbsCsiRole', {
-      roleName: `EbsCsiDriverRole-${cluster.clusterName}`,
       assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonEBSCSIDriverPolicy'),
@@ -155,7 +170,6 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── CloudWatch Container Insights ─────────────────────────────────────
     const cwObsRole = new iam.Role(this, 'CwObservabilityRole', {
-      roleName: `CwObservabilityRole-${cluster.clusterName}`,
       assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchAgentServerPolicy'),
@@ -217,7 +231,6 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── EFS CSI Driver (with Pod Identity IAM) ──────────────────────────────
     const efsCsiRole = new iam.Role(this, 'EfsCsiRole', {
-      roleName: `EfsCsiDriverRole-${cluster.clusterName}`,
       assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonEFSCSIDriverPolicy'),
@@ -363,7 +376,6 @@ export class EksClusterStack extends cdk.Stack {
 
     // Node IAM Role
     const karpenterNodeRole = new iam.Role(this, 'KarpenterNodeRole', {
-      roleName: `KarpenterNodeRole-${cluster.clusterName}`,
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonEKSWorkerNodePolicy'),
@@ -374,7 +386,6 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     new iam.CfnInstanceProfile(this, 'KarpenterInstanceProfile', {
-      instanceProfileName: `KarpenterNodeInstanceProfile-${cluster.clusterName}`,
       roles: [karpenterNodeRole.roleName],
     });
 
@@ -515,7 +526,6 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── Shared Tenant IAM Role ──────────────────────────────────────────────
     const tenantRole = new iam.Role(this, 'TenantRole', {
-      roleName: 'OpenClawTenantRole',
       assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
       description: 'Shared IAM role for all OpenClaw tenant pods (ABAC via EKS Pod Identity)',
     });
@@ -578,7 +588,11 @@ export class EksClusterStack extends cdk.Stack {
     }));
 
     // ── Imported Resources (existing, not managed by this stack) ───────────
-    const domainName = this.node.tryGetContext('zoneName') || 'example.com';
+    // Custom domain is optional. When zoneName and certificateArn are provided,
+    // CloudFront uses your domain (e.g., claw.example.com). When omitted,
+    // CloudFront uses its default domain (xxxxxx.cloudfront.net).
+    const domainName = this.node.tryGetContext('zoneName') || '';
+    const useCustomDomain = !!domainName && domainName !== 'example.com';
     const cognitoPoolId = this.node.tryGetContext('cognitoPoolId') || '';
     const cognitoClientId = this.node.tryGetContext('cognitoClientId') || '';
     const albClientId = this.node.tryGetContext('albClientId') || cognitoClientId;
@@ -587,10 +601,10 @@ export class EksClusterStack extends cdk.Stack {
     const githubOwner = this.node.tryGetContext('githubOwner') || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'openclaw-platform';
 
-
-    const certificate = acm.Certificate.fromCertificateArn(this, 'Certificate',
-      this.node.tryGetContext('certificateArn') || '',
-    );
+    const certArn = this.node.tryGetContext('certificateArn') || '';
+    const certificate = certArn
+      ? acm.Certificate.fromCertificateArn(this, 'Certificate', certArn)
+      : undefined;
 
     const userPool = cognito.UserPool.fromUserPoolId(this, 'UserPool', cognitoPoolId);
 
@@ -628,8 +642,14 @@ export class EksClusterStack extends cdk.Stack {
     podRestartAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
 
     // Cold start alarm — alert when pod startup exceeds 60s
-    const perfLogGroup = logs.LogGroup.fromLogGroupName(this, 'PerfLogGroup',
-      `/aws/containerinsights/${cluster.clusterName}/performance`);
+    // Create log groups explicitly so MetricFilters don't fail when
+    // Container Insights hasn't created them yet. retentionDays ensures
+    // CDK owns the log group; Container Insights will write to it once active.
+    const perfLogGroup = new logs.LogGroup(this, 'PerfLogGroup', {
+      logGroupName: `/aws/containerinsights/${cluster.clusterName}/performance`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     const coldStartFilter = new logs.MetricFilter(this, 'ColdStartFilter', {
       logGroup: perfLogGroup,
       filterPattern: logs.FilterPattern.all(
@@ -653,8 +673,11 @@ export class EksClusterStack extends cdk.Stack {
     coldStartAlarm.addAlarmAction(new cw_actions.SnsAction(alertsTopic));
 
     // Bedrock latency alarm — alert when P95 response time exceeds 10s
-    const appLogGroup = logs.LogGroup.fromLogGroupName(this, 'AppLogGroup',
-      `/aws/containerinsights/${cluster.clusterName}/application`);
+    const appLogGroup = new logs.LogGroup(this, 'AppLogGroup', {
+      logGroupName: `/aws/containerinsights/${cluster.clusterName}/application`,
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
     const bedrockLatencyFilter = new logs.MetricFilter(this, 'BedrockLatencyFilter', {
       logGroup: appLogGroup,
       filterPattern: logs.FilterPattern.literal('{ $.message = "*bedrock*response*" && $.duration = * }'),
@@ -733,7 +756,7 @@ export class EksClusterStack extends cdk.Stack {
       environment: {
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         CLUSTER_NAME: cluster.clusterName,
-        CERTIFICATE_ARN: certificate.certificateArn,
+        CERTIFICATE_ARN: certificate?.certificateArn || '',
         DOMAIN: domainName,
         OPENCLAW_IMAGE: openclawImage,
         TENANT_ROLE_ARN: tenantRole.roleArn,
@@ -976,19 +999,20 @@ export class EksClusterStack extends cdk.Stack {
     authUiBucket.grantRead(oai);
 
     const distribution = new cloudfront.CloudFrontWebDistribution(this, 'Distribution', {
+      // CloudFront WAF (CLOUDFRONT scope, from us-east-1 stack)
+      ...(cloudFrontWafAclArn ? { webACLId: cloudFrontWafAclArn } : {}),
       
-      viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(
-        acm.Certificate.fromCertificateArn(this, 'CfCert',
-          // CloudFront requires us-east-1 cert — use the same cert if in us-east-1,
-          // otherwise need a separate cert. For now, use the existing cert ARN.
-          // NOTE: If your cert is NOT in us-east-1, you must create one there.
-          this.node.tryGetContext('cloudfrontCertificateArn') || certificate.certificateArn,
+      ...(useCustomDomain && certificate ? {
+        viewerCertificate: cloudfront.ViewerCertificate.fromAcmCertificate(
+          acm.Certificate.fromCertificateArn(this, 'CfCert',
+            this.node.tryGetContext('cloudfrontCertificateArn') || certificate.certificateArn,
+          ),
+          {
+            aliases: [domainName],
+            securityPolicy: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+          },
         ),
-        {
-          aliases: [domainName],
-          securityPolicy: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
-        },
-      ),
+      } : {}),
       originConfigs: [
         {
           // Auth UI static site (login, signup, welcome pages)
@@ -1011,7 +1035,10 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── Auth UI: Deploy static files + generate config.js ───────────────────
-    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${domainName}'};`;
+    // Auth UI config: use custom domain if set, otherwise CloudFront will
+    // inject its own domain at runtime via distribution.distributionDomainName
+    const authDomain = useCustomDomain ? domainName : distribution.distributionDomainName;
+    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${authDomain}'};`;
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [
@@ -1059,7 +1086,7 @@ export class EksClusterStack extends cdk.Stack {
       code: lambda.Code.fromAsset('lambda/cost-enforcer'),
       environment: {
         CLUSTER_NAME: cluster.clusterName,
-        CERTIFICATE_ARN: certificate.certificateArn,
+        CERTIFICATE_ARN: certificate?.certificateArn || '',
         LOG_GROUP: `/aws/containerinsights/${cluster.clusterName}/application`,
         SNS_TOPIC_ARN: alertsTopic.topicArn,
         REGION: this.region,
@@ -1096,8 +1123,9 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'KubeconfigCommand', {
       value: `aws eks update-kubeconfig --region ${this.region} --name ${cluster.clusterName}`,
     });
-    new cdk.CfnOutput(this, 'DomainName', { value: domainName });
-    new cdk.CfnOutput(this, 'CertificateArn', { value: certificate.certificateArn });
+    new cdk.CfnOutput(this, 'DomainName', { value: useCustomDomain ? domainName : distribution.distributionDomainName });
+    new cdk.CfnOutput(this, 'CustomDomain', { value: useCustomDomain ? 'true' : 'false' });
+    new cdk.CfnOutput(this, 'CertificateArn', { value: certificate?.certificateArn || '' });
     new cdk.CfnOutput(this, 'CognitoPoolId', { value: userPool.userPoolId });
     new cdk.CfnOutput(this, 'CognitoClientId', { value: cognitoClientId });
     new cdk.CfnOutput(this, 'CognitoDomain', { value: cognitoDomain });

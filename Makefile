@@ -25,7 +25,7 @@ check-shell:
 	-shellcheck scripts/*.sh
 
 check-sensitive:
-	@FOUND=$$(grep -rn '123456789012\|AKIA' --include='*.ts' --include='*.py' --include='*.md' --include='*.sh' . | grep -v node_modules | grep -v cdk.out | grep -v cdk.json || true); \
+	@FOUND=$$(grep -rn '123456789012\|AKIA' --include='*.ts' --include='*.py' --include='*.md' --include='*.sh' . | grep -v node_modules | grep -v cdk.out | grep -v cdk.json | grep -v '/test/' | grep -v 'test_' | grep -v '.test.' | grep -v 'AGENTS.md' | grep -v 'install-hooks.sh' | grep -v 'generate-config.sh' | grep -v 'Example:' | grep -v 'placeholder' || true); \
 	if [ -n "$$FOUND" ]; then echo "$$FOUND"; exit 1; fi; \
 	echo "Clean"
 

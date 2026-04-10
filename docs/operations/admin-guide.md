@@ -4,13 +4,13 @@
 
 ```
 1. Configure    -> cp cdk.json.example cdk.json (fill context values)
-2. Deploy infra -> npx cdk deploy (~15-20 min)
+2. Deploy infra -> npx cdk deploy --all (~15-20 min, deploys WAF + EKS stacks)
 3. ArgoCD       -> bash scripts/setup-argocd.sh (Helm)
 4. Platform     -> bash scripts/deploy-platform.sh (ApplicationSet + Gateway)
 5. KEDA         -> bash scripts/setup-keda.sh
 6. First tenant -> scripts/create-tenant.sh alice
-7. ALB setup    -> scripts/post-deploy.sh (CloudFront ALB origin, Route53, AWS WAF)
-8. Auth UI      -> scripts/deploy-auth-ui.sh
+7. ALB setup    -> scripts/post-deploy.sh (CloudFront ALB origin, Route53 if custom domain, AWS WAF)
+8. Auth UI      -> Deployed automatically by CDK. Manual: scripts/deploy-auth-ui.sh
 9. Verify       -> scripts/health-check.sh
 ```
 

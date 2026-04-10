@@ -203,20 +203,54 @@ aws cloudformation delete-stack --stack-name OpenClawEksStack \
 
 ### `cdk deploy` fails with "already exists" after failed destroy
 
-**Cause**: Previous `cdk destroy` used `--retain-resources` to skip stuck resources. IAM roles or Amazon EKS cluster remain in the account.
+**Symptom**: `cdk deploy` fails with `Resource of type 'AWS::IAM::Role' with identifier '...' already exists`.
 
-**Fix**: Clean up orphan resources before redeploying:
+**Cause**: A previous deployment was destroyed incompletely (rollback, `--retain-resources`, or manual abort), leaving orphaned resources in the account. IAM roles created by AWS CDK use auto-generated names, but some resources (Amazon EKS cluster, Amazon Cognito triggers) may conflict.
 
+**Fix**: Use the force-cleanup script to remove orphaned resources:
 ```bash
-# Check for orphan Amazon EKS cluster
-aws eks describe-cluster --name openclaw-cluster --query 'cluster.status' 2>/dev/null
+./scripts/force-cleanup.sh --delete
+```
 
-# Check for orphan IAM roles
-aws iam list-roles --query 'Roles[?contains(RoleName,`openclaw-cluster`)].RoleName' --output text
+Then redeploy:
+```bash
+cd cdk && npx cdk deploy
+```
 
-# Delete orphan cluster (delete nodegroups first)
-aws eks delete-nodegroup --cluster-name openclaw-cluster --nodegroup-name <name>
-aws eks delete-cluster --name openclaw-cluster
+### Amazon EKS nodegroup deletion takes 30+ minutes during rollback
+
+**Symptom**: CloudFormation rollback or `cdk destroy` hangs on `AWS::EKS::Nodegroup` (Amazon EKS managed nodegroup) for 30 minutes.
+
+**Cause**: Amazon EKS managed nodegroups have an ASG terminate lifecycle hook with a 30-minute heartbeat timeout. During deletion, the hook waits for a signal from the Amazon EKS service account. If the signal is delayed, deletion blocks until the timeout expires.
+
+**Fix**: Delete the lifecycle hook to unblock:
+```bash
+# Find the ASG name
+ASG_NAME=$(aws autoscaling describe-auto-scaling-groups \
+  --query "AutoScalingGroups[?contains(AutoScalingGroupName,'system')].AutoScalingGroupName" --output text)
+
+# Delete the hook
+aws autoscaling delete-lifecycle-hook \
+  --lifecycle-hook-name Terminate-LC-Hook \
+  --auto-scaling-group-name "$ASG_NAME"
+```
+
+This is normal Amazon EKS behavior and does not indicate a problem with the platform.
+
+### VPC deletion blocked by GuardDuty managed security group
+
+**Symptom**: CloudFormation rollback or `cdk destroy` hangs on `AWS::EC2::VPC` deletion. The VPC has a security group named `GuardDutyManagedSecurityGroup-vpc-xxxxx`.
+
+**Cause**: If GuardDuty Amazon EKS Runtime Monitoring is enabled in the account, GuardDuty creates a managed security group in the Amazon EKS VPC. CloudFormation cannot delete it because it was not created by the stack.
+
+**Fix**:
+```bash
+# Find the GuardDuty SG
+VPC_ID=<your-vpc-id>
+SG_ID=$(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=$VPC_ID" "Name=group-name,Values=GuardDutyManagedSecurityGroup-*" --query 'SecurityGroups[0].GroupId' --output text)
+
+# Delete it
+aws ec2 delete-security-group --group-id "$SG_ID"
 ```
 
 ### Retained resources after `cdk destroy`

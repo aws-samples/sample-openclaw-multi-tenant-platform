@@ -3,7 +3,7 @@
 ## Flow
 
 ```
-1. Open https://your-domain.com
+1. Open https://your-domain.com (or https://xxxxxx.cloudfront.net if no custom domain)
    -> CloudFront #1 -> S3 -> Custom auth UI
 
 2. Sign Up (email + password + CAPTCHA)
@@ -33,7 +33,7 @@
 
 ### Landing Page
 
-- URL: `https://your-domain.com`
+- URL: `https://your-domain.com` (or `https://xxxxxx.cloudfront.net` if no custom domain configured)
 - Amazon CloudFront #1 -> S3 bucket
 - Custom auth UI with tabbed Sign In / Sign Up
 
