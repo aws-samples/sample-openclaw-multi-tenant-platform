@@ -47,6 +47,8 @@ echo ""
 echo "=== Auth UI Deployed ==="
 echo "  S3:         s3://${BUCKET}/"
 echo "  CloudFront: https://${CF_DOMAIN}"
-echo ""
-echo "  Next: Point Route53 ${DOMAIN} to CloudFront distribution"
+if [[ -n "$DOMAIN" && "$DOMAIN" != "$CF_DOMAIN" ]]; then
+  echo ""
+  echo "  Next: Point Route53 ${DOMAIN} to CloudFront distribution"
+fi
 echo "========================"

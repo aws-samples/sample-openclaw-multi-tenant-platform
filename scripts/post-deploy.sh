@@ -14,11 +14,13 @@ set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
 
 DOMAIN=$(get_output DomainName)
+CUSTOM_DOMAIN=$(get_output CustomDomain)
 WAF_ARN=$(get_output WafAclArn)
 ERROR_BUCKET=$(get_output ErrorPagesBucketName)
 
 echo "==> Post-deploy setup"
 echo "  Domain: $DOMAIN"
+echo "  Custom domain: $CUSTOM_DOMAIN"
 
 # 1. Find internet-facing ALB (created by ALB Controller when Gateway is reconciled)
 ALB_ARN=$(aws elbv2 describe-load-balancers --region "$REGION" \
@@ -56,12 +58,19 @@ if [ -z "$OAC_ID" ]; then
 fi
 echo "  OAC: $OAC_ID"
 
-# 5. Find CDK-managed CloudFront distribution (serves auth UI on DOMAIN)
-CF_ID=$(aws cloudfront list-distributions \
-  --query "DistributionList.Items[?Aliases.Items[0]=='${DOMAIN}'].Id" --output text 2>/dev/null | head -1)
+# 5. Find CDK-managed CloudFront distribution
+if [ "$CUSTOM_DOMAIN" = "true" ]; then
+  CF_ID=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?Aliases.Items[0]=='${DOMAIN}'].Id" --output text 2>/dev/null | head -1)
+else
+  # No custom domain — find by distribution domain name from stack output
+  CF_DOMAIN_NAME=$(get_output DistributionDomainName)
+  CF_ID=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?DomainName=='${CF_DOMAIN_NAME}'].Id" --output text 2>/dev/null | head -1)
+fi
 
 if [ -z "$CF_ID" ]; then
-  log_error "CloudFront distribution for ${DOMAIN} not found. Run 'cdk deploy' first."
+  log_error "CloudFront distribution not found. Run 'cdk deploy' first."
   exit 1
 fi
 echo "  CloudFront: $CF_ID"
@@ -107,7 +116,7 @@ try:
             'CustomOriginConfig': {
                 'HTTPPort': 80,
                 'HTTPSPort': 443,
-                'OriginProtocolPolicy': 'https-only',
+                'OriginProtocolPolicy': 'http-only' if '${CUSTOM_DOMAIN}' != 'true' else 'https-only',
                 'OriginKeepaliveTimeout': 5,
                 'OriginReadTimeout': 60,
                 'OriginSslProtocols': {'Quantity': 1, 'Items': ['TLSv1.2']}
@@ -229,17 +238,22 @@ aws s3api put-bucket-policy --bucket "$ERROR_BUCKET" --policy "{
   }]
 }" --region "$REGION"
 
-# 8. Ensure Route53 points to this CloudFront
-CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)
-ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
-echo "  -> Updating Route53 ${DOMAIN} -> $CF_DOMAIN"
-aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
-  \"Changes\": [{\"Action\": \"UPSERT\", \"ResourceRecordSet\": {
-    \"Name\": \"${DOMAIN}\", \"Type\": \"A\",
-    \"AliasTarget\": {\"HostedZoneId\": \"Z2FDTNDATAQYW2\", \"DNSName\": \"${CF_DOMAIN}\", \"EvaluateTargetHealth\": false}
-  }}]
-}" > /dev/null
-echo "  Route53 updated"
+# 8. Update Route53 if using custom domain
+if [ "$CUSTOM_DOMAIN" = "true" ]; then
+  CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)
+  ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
+  echo "  -> Updating Route53 ${DOMAIN} -> $CF_DOMAIN"
+  aws route53 change-resource-record-sets --hosted-zone-id "$ZONE_ID" --change-batch "{
+    \"Changes\": [{\"Action\": \"UPSERT\", \"ResourceRecordSet\": {
+      \"Name\": \"${DOMAIN}\", \"Type\": \"A\",
+      \"AliasTarget\": {\"HostedZoneId\": \"Z2FDTNDATAQYW2\", \"DNSName\": \"${CF_DOMAIN}\", \"EvaluateTargetHealth\": false}
+    }}]
+  }" > /dev/null
+  echo "  Route53 updated"
+else
+  CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)
+  echo "  -> No custom domain. Access via CloudFront: https://${CF_DOMAIN}"
+fi
 
 echo ""
 echo "=== Post-deploy complete ==="

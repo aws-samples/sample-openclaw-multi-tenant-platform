@@ -19,7 +19,7 @@ Always-on node group for system workloads (CoreDNS, Karpenter, LB controller, Cl
 
 | Setting | Value |
 |---------|-------|
-| Instance type | `t4g.medium` (ARM64 Graviton) |
+| Instance type | `t4g.large` (ARM64 Graviton) |
 | AMI | AL2023 ARM64 Standard |
 | Min / Desired / Max | 1 / 2 / 5 |
 | Node label | `role=system` |

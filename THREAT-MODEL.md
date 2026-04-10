@@ -70,7 +70,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 |---|--------|----------|------------|
 | E1 | Container breakout | TB3 | Non-root (UID 1000), runAsNonRoot: true, readOnlyRootFilesystem: true, no privileged |
 | E2 | OpenClaw shell execution | TB3 | exec: deny, elevated: disabled, tool_policy: deny (explicit allowlist only) |
-| E3 | Pod Identity cross-account | TB4 | Shared OpenClawTenantRole with ABAC tags. No cross-account assume-role |
+| E3 | Pod Identity cross-account | TB4 | Shared tenant role with ABAC tags. No cross-account assume-role |
 | E4 | ArgoCD privilege escalation | TB7 | ApplicationSet uses SSA (Server-Side Apply). ArgoCD Application scoped to tenant namespace only |
 
 ## Known Gaps (Documented, Not Production-Ready)

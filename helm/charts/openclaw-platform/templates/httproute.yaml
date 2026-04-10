@@ -12,7 +12,7 @@ spec:
       kind: Gateway
       name: {{ .Values.gateway.gatewayName | default "openclaw-gateway" }}
       namespace: {{ .Values.gateway.gatewayNamespace | default "openclaw-system" }}
-      sectionName: https
+      sectionName: {{ .Values.gateway.listenerName | default "https" }}
   rules:
     - matches:
         - path:

@@ -28,11 +28,15 @@
 Filters malicious traffic before it reaches the application.
 
 - Amazon CloudFront distribution terminates TLS at edge (ACM cert in us-east-1)
-- AWS WAF WebACL (REGIONAL scope) attached to ALB:
+- **Amazon CloudFront AWS WAF** (CLOUDFRONT scope, deployed in us-east-1 via `OpenClawWafStack`):
   - `AWSManagedRulesCommonRuleSet` -- OWASP Top 10 (SQLi, XSS, path traversal)
   - `RateLimit` -- 2000 requests per 5 minutes per IP
+  - AWS WAF Bot Control (opt-in via `enableBotControl` context)
+- **ALB AWS WAF** (REGIONAL scope, defense in depth):
+  - Same rules as Amazon CloudFront AWS WAF, applied at ALB layer
+  - Protects against requests that bypass Amazon CloudFront (e.g., direct ALB access attempts)
 
-**AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `WafAcl`
+**AWS CDK reference**: `cdk/lib/cloudfront-waf-stack.ts` (CloudFront WAF), `cdk/lib/eks-cluster-stack.ts` -> `WafAcl` (ALB WAF)
 
 **Script**: `scripts/post-deploy.sh` -- associates AWS WAF WebACL with the dynamic ALB ARN
 
@@ -151,7 +155,7 @@ Prevents one tenant from accessing another tenant's resources.
 - ResourceQuota per namespace: CPU 4 cores, memory 8Gi, max 10 pods
 - NetworkPolicy: default-deny + explicit allowlist (see Layer 3)
 - IAM ABAC: `aws:PrincipalTag/kubernetes-namespace` must match `secretsmanager:ResourceTag/tenant-namespace`
-- Separate ServiceAccount per tenant -> Pod Identity Association -> shared `OpenClawTenantRole` with ABAC tags
+- Separate ServiceAccount per tenant -> Pod Identity Association -> shared tenant role with ABAC tags
 - PodDisruptionBudget: `minAvailable: 1`
 
 **AWS CDK reference**: `cdk/lib/eks-cluster-stack.ts` -> `TenantRole` (ABAC policy)
@@ -184,7 +188,7 @@ On-demand secret access without persisting credentials on disk.
 LLM access without API keys, with model-level control.
 
 - Amazon Bedrock accessed via Pod Identity -- zero API keys
-- `OpenClawTenantRole` grants `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
+- The shared tenant role grants `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream`
 - OpenClaw application-level controls (set in Helm ConfigMap):
   - `tool_policy: deny` -- explicit tool allowlist only
   - `exec: deny` -- no shell execution by default
