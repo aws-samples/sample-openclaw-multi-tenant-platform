@@ -1038,7 +1038,7 @@ export class EksClusterStack extends cdk.Stack {
     // Auth UI config: use custom domain if set, otherwise CloudFront will
     // inject its own domain at runtime via distribution.distributionDomainName
     const authDomain = useCustomDomain ? domainName : distribution.distributionDomainName;
-    const configJs = `const C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${authDomain}'};`;
+    const configJs = `var C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${authDomain}'};`;
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [

@@ -5,4 +5,4 @@ description: |
   Tenant provisioning is handled by ArgoCD ApplicationSet. Each tenant gets an ArgoCD Application that syncs this chart.
 type: application
 version: 1.3.14
-appVersion: "2026.3.24"
+appVersion: "2026.4.9"
