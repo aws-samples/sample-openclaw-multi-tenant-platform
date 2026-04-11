@@ -189,6 +189,10 @@ config:
           - TENANT_NAMESPACE
           - NODE_PATH
 
+# Skills to install via clawhub in the init-skills init container.
+# On first launch (empty EFS volume), each skill takes ~20s to install from npm.
+# Subsequent launches skip installation (skills persist on EFS).
+# To eliminate first-launch latency, pre-bake skills into the container image.
 skills:
   - weather
   - gog

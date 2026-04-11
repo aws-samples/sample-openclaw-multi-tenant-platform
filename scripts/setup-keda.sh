@@ -27,6 +27,7 @@ echo "  Step 3: Install HTTP Add-on"
 if ! run helm upgrade --install http-add-on kedacore/keda-add-ons-http --namespace keda --wait --timeout 180s \
   --set interceptor.replicas.min=1 \
   --set interceptor.replicas.max=1 \
+  --set interceptor.config.waitTimeout=90s \
   --set scaler.replicas=1; then
   echo "  ⚠️  HTTP Add-on helm install timed out (pods may still be starting)."
   echo "  Continuing with TGC creation — pods will become ready shortly."
