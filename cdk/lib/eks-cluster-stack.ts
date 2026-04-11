@@ -627,7 +627,7 @@ export class EksClusterStack extends cdk.Stack {
     const perfLogGroup = new logs.LogGroup(this, 'PerfLogGroup', {
       logGroupName: `/aws/containerinsights/${cluster.clusterName}/performance`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     const coldStartFilter = new logs.MetricFilter(this, 'ColdStartFilter', {
       logGroup: perfLogGroup,
@@ -655,7 +655,7 @@ export class EksClusterStack extends cdk.Stack {
     const appLogGroup = new logs.LogGroup(this, 'AppLogGroup', {
       logGroupName: `/aws/containerinsights/${cluster.clusterName}/application`,
       retention: logs.RetentionDays.ONE_MONTH,
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
     const bedrockLatencyFilter = new logs.MetricFilter(this, 'BedrockLatencyFilter', {
       logGroup: appLogGroup,

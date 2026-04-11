@@ -166,9 +166,14 @@ for key in $(aws kms list-keys --region "$REGION" --query 'Keys[*].KeyId' --outp
   fi
 done
 
-# Orphan log groups
+# Orphan log groups (CDK RETAIN + Container Insights auto-created)
 echo "  -> Cleaning log groups..."
-for lg in /aws/containerinsights/${CLUSTER_NAME}/performance /aws/containerinsights/${CLUSTER_NAME}/application; do
+for lg in $(aws logs describe-log-groups --log-group-name-prefix "/aws/containerinsights/${CLUSTER_NAME}" --region "$REGION" \
+  --query 'logGroups[].logGroupName' --output text 2>/dev/null); do
+  aws logs delete-log-group --log-group-name "$lg" --region "$REGION" 2>/dev/null && log "Deleted log group: $lg"
+done
+for lg in $(aws logs describe-log-groups --log-group-name-prefix "/aws/lambda/OpenClawEksStack" --region "$REGION" \
+  --query 'logGroups[].logGroupName' --output text 2>/dev/null); do
   aws logs delete-log-group --log-group-name "$lg" --region "$REGION" 2>/dev/null && log "Deleted log group: $lg"
 done
 
