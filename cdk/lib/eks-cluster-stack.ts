@@ -793,8 +793,21 @@ export class EksClusterStack extends cdk.Stack {
     }));
 
     // ── Cognito: Lambda Triggers ──────────────────────────────────────────
-    userPool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, preSignupFn);
-    userPool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, postConfirmFn);
+    // Use L1 escape hatch to set triggers without creating circular dependency.
+    // CDK L2 addTrigger creates UserPool→Lambda + Lambda→UserPool deps = cycle.
+    const cfnUserPool = userPool.node.defaultChild as cognito.CfnUserPool;
+    cfnUserPool.lambdaConfig = {
+      preSignUp: preSignupFn.functionArn,
+      postConfirmation: postConfirmFn.functionArn,
+    };
+    preSignupFn.addPermission('CognitoPreSignUp', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: userPool.userPoolArn,
+    });
+    postConfirmFn.addPermission('CognitoPostConfirm', {
+      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
+      sourceArn: userPool.userPoolArn,
+    });
 
     cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
       groups: ['system:masters'],
