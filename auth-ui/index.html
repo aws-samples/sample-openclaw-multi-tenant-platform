@@ -165,15 +165,15 @@ function pollWorkspace(url,isNewSignup,gwToken){
   showSection('loading-section');
   spinner.style.display='inline-block';
   title.textContent=isNewSignup?'Creating your workspace...':'Opening your workspace...';
-  msg.textContent=isNewSignup?'This usually takes about 2 minutes.':'This may take up to 30 seconds if your workspace was idle.';
+  msg.textContent=isNewSignup?'This usually takes about 2-3 minutes.':'This may take up to 30 seconds if your workspace was idle.';
   progress.style.display=isNewSignup?'block':'none';
   fallback.style.display='none';
   if(isNewSignup){bar.style.width='5%';bar.style.background='var(--primary)';ptext.textContent='Setting up...';}
-  const max=isNewSignup?60:20;
+  const max=isNewSignup?90:20;
   let i=0;
   const poll=async()=>{
     i++;
-    if(isNewSignup){const p=Math.min(5+i*1.5,95);bar.style.width=p+'%';ptext.textContent=i<8?'Setting up account...':i<18?'Configuring AI assistant...':i<30?'Deploying workspace...':'Almost ready...';}
+    if(isNewSignup){const p=Math.min(5+i*1.1,95);bar.style.width=p+'%';ptext.textContent=i<10?'Setting up account...':i<25?'Configuring AI assistant...':i<50?'Deploying workspace...':i<70?'Starting AI assistant...':'Almost ready...';}
     try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status===401){window.location.href='/';return;}const isWorkspace=r.headers.get('x-keda-http-cold-start')!==null||r.headers.get('x-openclaw')!==null;if(r.status>=200&&r.status<400&&isWorkspace){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';const dest=gwToken?url+(url.includes('#')?'':'#token=')+gwToken:url;setTimeout(()=>{window.location.href=dest},800);return;}}catch(e){}
     if(i>=max){
       // Terminal error state: stop spinner, show clear failure
