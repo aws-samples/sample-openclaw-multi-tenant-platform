@@ -32,9 +32,6 @@ export class EksClusterStack extends cdk.Stack {
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
     if (!this.node.tryGetContext('@ci-synth')) {
       const requiredContext: Record<string, string> = {
-        cognitoPoolId: 'Cognito User Pool ID',
-        cognitoClientId: 'Cognito App Client ID',
-        cognitoDomain: 'Cognito domain prefix',
       };
       const missingCtx = Object.entries(requiredContext)
         .filter(([key]) => {
@@ -580,16 +577,53 @@ export class EksClusterStack extends cdk.Stack {
       resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:browser/*`],
     }));
 
-    // ── Imported Resources (existing, not managed by this stack) ───────────
-    // Custom domain is optional. When zoneName and certificateArn are provided,
-    // CloudFront uses your domain (e.g., claw.example.com). When omitted,
-    // CloudFront uses its default domain (xxxxxx.cloudfront.net).
+    // ── Cognito User Pool (CDK-managed) ────────────────────────────────────
+    const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
+
+    const userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `openclaw-${this.stackName}`,
+      selfSignUpEnabled: selfSignupEnabled,
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+      passwordPolicy: {
+        minLength: 12,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireDigits: true,
+        requireSymbols: false,
+      },
+      customAttributes: {
+        gateway_token: new cognito.StringAttribute({ mutable: true }),
+        tenant_name: new cognito.StringAttribute({ mutable: true }),
+      },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const cognitoDomainPrefix = this.node.tryGetContext('cognitoDomain')
+      || `openclaw-${this.account}-${this.region}`.slice(0, 63);
+    userPool.addDomain('CognitoDomain', {
+      cognitoDomain: { domainPrefix: cognitoDomainPrefix },
+    });
+
+    const userPoolClient = userPool.addClient('WebClient', {
+      generateSecret: false,
+      authFlows: {
+        userPassword: true,
+        userSrp: true,
+      },
+      readAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true })
+        .withCustomAttributes('gateway_token', 'tenant_name'),
+      writeAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true }),
+    });
+
+    const cognitoPoolId = userPool.userPoolId;
+    const cognitoClientId = userPoolClient.userPoolClientId;
+
+    // ── Other imported/optional resources ────────────────────────────────────
     const domainName = this.node.tryGetContext('zoneName') || '';
     const useCustomDomain = !!domainName && domainName !== 'example.com';
-    const cognitoPoolId = this.node.tryGetContext('cognitoPoolId') || '';
-    const cognitoClientId = this.node.tryGetContext('cognitoClientId') || '';
-    const albClientId = this.node.tryGetContext('albClientId') || cognitoClientId;
-    const cognitoDomain = this.node.tryGetContext('cognitoDomain') || '';
     const allowedEmailDomains = this.node.tryGetContext('allowedEmailDomains') || 'example.com';
     const githubOwner = this.node.tryGetContext('githubOwner') || '';
     const githubRepo = this.node.tryGetContext('githubRepo') || 'openclaw-platform';
@@ -598,23 +632,6 @@ export class EksClusterStack extends cdk.Stack {
     const certificate = certArn
       ? acm.Certificate.fromCertificateArn(this, 'Certificate', certArn)
       : undefined;
-
-    const userPool = cognito.UserPool.fromUserPoolId(this, 'UserPool', cognitoPoolId);
-
-    // ── Context Validation ─────────────────────────────────────────────────
-    // Warn on placeholder values that will produce broken IAM policies or
-    // Cognito custom resources. CI uses cdk.json.example (non-empty placeholders)
-    // so synth passes, but empty values indicate a misconfigured cdk.json.
-    const contextChecks: Record<string, string> = {
-      cognitoPoolId, cognitoClientId, cognitoDomain,
-    };
-    for (const [key, val] of Object.entries(contextChecks)) {
-      if (!val) {
-        cdk.Annotations.of(this).addWarningV2(`OpenClaw:${key}`,
-          `CDK context '${key}' is empty. Lambda IAM policies and Cognito triggers will be misconfigured. ` +
-          `Fill in cdk/cdk.json or run setup.sh to generate it.`);
-      }
-    }
 
     // ── CloudWatch Alerts ──────────────────────────────────────────────────
     const alertsTopic = new sns.Topic(this, 'AlertsTopic', { topicName: 'OpenClawAlerts' });
@@ -775,128 +792,9 @@ export class EksClusterStack extends cdk.Stack {
       resources: [tenantRole.roleArn],
     }));
 
-    // ── Cognito: Lambda Triggers (survives cdk deploy) ──────────────────────
-    // update-user-pool wipes LambdaConfig if not included. This Custom Resource
-    // ensures triggers are always re-attached after every deployment.
-    const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
-
-    // Lambda invoke permissions for Cognito (must exist before Custom Resource)
-    preSignupFn.addPermission('CognitoInvoke', {
-      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
-      sourceArn: `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`,
-    });
-    postConfirmFn.addPermission('CognitoInvoke', {
-      principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
-      sourceArn: `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`,
-    });
-
-    new cr.AwsCustomResource(this, 'CognitoTriggers', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          LambdaConfig: {
-            PreSignUp: preSignupFn.functionArn,
-            PostConfirmation: postConfirmFn.functionArn,
-          },
-          AutoVerifiedAttributes: ['email'],
-          AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
-      },
-      onUpdate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          LambdaConfig: {
-            PreSignUp: preSignupFn.functionArn,
-            PostConfirmation: postConfirmFn.functionArn,
-          },
-          AutoVerifiedAttributes: ['email'],
-          AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
-      },
-      onDelete: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          LambdaConfig: {},
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:UpdateUserPool'],
-          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
-        }),
-      ]),
-    });
-
-    // ── Cognito: Ensure custom attributes exist in pool schema ────────────
-    // The pool is imported (not CDK-managed), so custom attributes must be
-    // added explicitly. ignoreErrorCodesMatching handles the already-exists case.
-    const cognitoCustomAttrs = new cr.AwsCustomResource(this, 'CognitoCustomAttrs', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'addCustomAttributes',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          CustomAttributes: [
-            { Name: 'gateway_token', AttributeDataType: 'String', Mutable: true },
-            { Name: 'tenant_name', AttributeDataType: 'String', Mutable: true },
-          ],
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-custom-attrs'),
-        ignoreErrorCodesMatching: 'InvalidParameterException',
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:AddCustomAttributes'],
-          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
-        }),
-      ]),
-    });
-
-    // ── Cognito: App Client ReadAttributes (include custom:gateway_token) ───
-    // Without explicit ReadAttributes, custom attributes are NOT included in
-    // ID token claims. This ensures auth-ui can read the gateway token.
-    const cognitoClientAttrs = new cr.AwsCustomResource(this, 'CognitoClientAttributes', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPoolClient',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          ClientId: cognitoClientId,
-          ExplicitAuthFlows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
-          ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
-          WriteAttributes: ['email'],
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
-      },
-      onUpdate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPoolClient',
-        parameters: {
-          UserPoolId: cognitoPoolId,
-          ClientId: cognitoClientId,
-          ExplicitAuthFlows: ['ALLOW_USER_PASSWORD_AUTH', 'ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH'],
-          ReadAttributes: ['email', 'custom:gateway_token', 'custom:tenant_name'],
-          WriteAttributes: ['email'],
-        },
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-client-attrs'),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:UpdateUserPoolClient'],
-          resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
-        }),
-      ]),
-    });
-    cognitoClientAttrs.node.addDependency(cognitoCustomAttrs);
+    // ── Cognito: Lambda Triggers ──────────────────────────────────────────
+    userPool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, preSignupFn);
+    userPool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, postConfirmFn);
 
     cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
       groups: ['system:masters'],
@@ -1141,7 +1039,7 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'CertificateArn', { value: certificate?.certificateArn || '' });
     new cdk.CfnOutput(this, 'CognitoPoolId', { value: userPool.userPoolId });
     new cdk.CfnOutput(this, 'CognitoClientId', { value: cognitoClientId });
-    new cdk.CfnOutput(this, 'CognitoDomain', { value: cognitoDomain });
+    new cdk.CfnOutput(this, 'CognitoDomain', { value: cognitoDomainPrefix });
     new cdk.CfnOutput(this, 'AlertsTopicArn', { value: alertsTopic.topicArn });
     new cdk.CfnOutput(this, 'ErrorPagesBucketName', { value: errorPagesBucket.bucketName });
     new cdk.CfnOutput(this, 'PreSignupFnArn', { value: preSignupFn.functionArn });

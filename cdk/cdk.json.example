@@ -104,9 +104,6 @@
         "zoneName": "your-domain.com",
         "_comment_certificateArn": "Optional: required only when zoneName is set. ACM cert must be in us-east-1 for CloudFront",
         "certificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/xxx",
-        "cognitoPoolId": "us-east-1_XXXXXXXXX",
-        "cognitoClientId": "xxxxxxxxxxxxxxxxxx",
-        "cognitoDomain": "your-app",
         "allowedEmailDomains": "your-company.com",
         "githubOwner": "your-org",
         "githubRepo": "openclaw-platform",
@@ -114,7 +111,6 @@
         "cloudfrontCertificateArn": "arn:aws:acm:us-east-1:123456789012:certificate/xxx",
         "_comment_deployerPrincipalArn": "IAM principal ARN for kubectl access. Any IAM user, role, or SSO role works — does NOT require IAM Identity Center",
         "deployerPrincipalArn": "arn:aws:iam::123456789012:role/your-deployer-role",
-        "albClientId": "YOUR_ALB_CLIENT_ID",
         "openclawImage": "ghcr.io/openclaw/openclaw:latest",
         "_comment_ghcrCredentialArn": "Optional: set to enable ECR pull-through cache for GHCR",
         "ghcrCredentialArn": ""

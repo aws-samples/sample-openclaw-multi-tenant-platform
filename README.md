@@ -76,9 +76,8 @@ cd sample-openclaw-multi-tenant-platform
 - AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
 - Docker or [Finch](https://github.com/runfinch/finch) (running — required for AWS CDK asset bundling). If using Finch, set `export CDK_DOCKER=finch` before running CDK commands
 - kubectl + Helm 3, Node.js 22+
-- Amazon Cognito User Pool + App Client (**no client secret** -- public client for SPA)
 
-> **Important**: Set `allowedEmailDomains` in `cdk.json` to restrict who can sign up (e.g., `your-company.com`). Without this, anyone with a valid email can create a tenant. To disable self-signup entirely, set `AdminCreateUserConfig.AllowAdminCreateUserOnly` to `true` on your Amazon Cognito User Pool.
+> **Important**: Set `allowedEmailDomains` in `cdk.json` to restrict who can sign up (e.g., `your-company.com`). Without this, anyone with a valid email can create a tenant. To disable self-signup entirely, set `selfSignupEnabled` to `false` in `cdk.json`.
 - (Optional) Route53 hosted zone + ACM certificate in us-east-1. Without a custom domain, the platform uses the CloudFront default domain (`xxxxxx.cloudfront.net`)
 
 #### 1. Configure
