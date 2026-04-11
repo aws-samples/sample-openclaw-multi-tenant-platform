@@ -8,7 +8,7 @@
 
 Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated namespace with a private OpenClaw workspace powered by Amazon Bedrock. Self-service signup via Amazon Cognito, GitOps-managed tenant lifecycle via ArgoCD ApplicationSet.
 
-Traffic path: Internet → Amazon CloudFront (single distribution) → Internet-facing ALB (CF prefix list SG + AWS WAF) → Amazon EKS Pod
+Traffic path: Internet → Amazon CloudFront (single distribution) → Internet-facing ALB (CF prefix list SG) → Amazon EKS Pod
 
 ## Trust Boundaries
 

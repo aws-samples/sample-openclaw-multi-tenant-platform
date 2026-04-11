@@ -3,7 +3,7 @@ set -euo pipefail
 
 TENANT="${1:?Usage: $0 <tenant-name> <s3-bucket>}"
 BUCKET="${2:?Usage: $0 <tenant-name> <s3-bucket>}"
-NS="tenant-${TENANT}"
+NS="openclaw-${TENANT}"
 POD_LABEL="app.kubernetes.io/instance=openclaw-${TENANT}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 LOCAL_FILE="/tmp/${TENANT}-${TIMESTAMP}.tar.gz"

@@ -1,14 +1,27 @@
-# Welcome to your CDK TypeScript project
+# OpenClaw CDK Infrastructure
 
-This is a blank project for CDK development with TypeScript.
+Single AWS CDK stack (`OpenClawEksStack`) that provisions all infrastructure:
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+- Amazon VPC with VPC endpoints (S3 Gateway, ECR, STS)
+- Amazon EKS cluster with Karpenter auto-scaling
+- Amazon EFS for per-tenant persistent storage
+- Amazon Cognito for user authentication (self-signup with email domain restriction)
+- Amazon CloudFront with AWS WAF for edge protection
+- AWS Lambda triggers for tenant provisioning
+- Amazon CloudWatch alarms and Container Insights
 
-## Useful commands
+## Usage
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `npx cdk deploy`  deploy this stack to your default AWS account/region
-* `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template
+```bash
+# Copy and configure
+cp cdk.json.example cdk.json
+# Edit cdk.json with your values
+
+# Deploy
+npx cdk deploy
+
+# Destroy
+npx cdk destroy
+```
+
+See the root [README.md](../README.md) for full deployment instructions.

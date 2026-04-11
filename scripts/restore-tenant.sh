@@ -3,7 +3,7 @@ set -euo pipefail
 
 TENANT="${1:?Usage: $0 <tenant-name> <s3-backup-path>}"
 S3_PATH="${2:?Usage: $0 <tenant-name> <s3-backup-path>}"
-NS="tenant-${TENANT}"
+NS="openclaw-${TENANT}"
 POD_LABEL="app.kubernetes.io/instance=openclaw-${TENANT}"
 LOCAL_FILE="/tmp/${TENANT}-restore.tar.gz"
 
