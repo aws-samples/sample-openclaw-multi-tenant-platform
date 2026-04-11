@@ -577,50 +577,6 @@ export class EksClusterStack extends cdk.Stack {
       resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:browser/*`],
     }));
 
-    // ── Cognito User Pool (CDK-managed) ────────────────────────────────────
-    const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
-
-    const userPool = new cognito.UserPool(this, 'UserPool', {
-      userPoolName: `openclaw-${this.stackName}`,
-      selfSignUpEnabled: selfSignupEnabled,
-      signInAliases: { email: true },
-      autoVerify: { email: true },
-      passwordPolicy: {
-        minLength: 12,
-        requireUppercase: true,
-        requireLowercase: true,
-        requireDigits: true,
-        requireSymbols: false,
-      },
-      customAttributes: {
-        gateway_token: new cognito.StringAttribute({ mutable: true }),
-        tenant_name: new cognito.StringAttribute({ mutable: true }),
-      },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-    });
-
-    const cognitoDomainPrefix = this.node.tryGetContext('cognitoDomain')
-      || `openclaw-${this.account}-${this.region}`.slice(0, 63);
-    userPool.addDomain('CognitoDomain', {
-      cognitoDomain: { domainPrefix: cognitoDomainPrefix },
-    });
-
-    const userPoolClient = userPool.addClient('WebClient', {
-      generateSecret: false,
-      authFlows: {
-        userPassword: true,
-        userSrp: true,
-      },
-      readAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({ email: true })
-        .withCustomAttributes('gateway_token', 'tenant_name'),
-      writeAttributes: new cognito.ClientAttributes()
-        .withStandardAttributes({ email: true }),
-    });
-
-    const cognitoPoolId = userPool.userPoolId;
-    const cognitoClientId = userPoolClient.userPoolClientId;
-
     // ── Other imported/optional resources ────────────────────────────────────
     const domainName = this.node.tryGetContext('zoneName') || '';
     const useCustomDomain = !!domainName && domainName !== 'example.com';
@@ -743,22 +699,18 @@ export class EksClusterStack extends cdk.Stack {
     }));
 
     // ── Lambda: Pre-Signup ──────────────────────────────────────────────────
+    const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
+
     const preSignupFn = new lambda.Function(this, 'PreSignupFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/pre-signup'),
-      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains, USER_POOL_ID: cdk.Lazy.string({ produce: () => userPool.userPoolId }) },
+      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains },
       timeout: cdk.Duration.seconds(10),
     });
     alertsTopic.grantPublish(preSignupFn);
-    preSignupFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cognito-idp:ListUsers'],
-      resources: ['*'],
-    }));
 
     // ── Lambda: Post-Confirmation ───────────────────────────────────────────
-    // Layer removed (#41): Lambda only uses boto3 + stdlib for K8s API calls.
-    // requirements.txt exists for local testing; CDK bundles via fromAsset.
     const postConfirmFn = new lambda.Function(this, 'PostConfirmFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
@@ -770,7 +722,6 @@ export class EksClusterStack extends cdk.Stack {
         DOMAIN: domainName,
         OPENCLAW_IMAGE: openclawImage,
         TENANT_ROLE_ARN: tenantRole.roleArn,
-        USER_POOL_ID: cdk.Lazy.string({ produce: () => userPool.userPoolId }),
       },
       timeout: cdk.Duration.seconds(60),
     });
@@ -778,10 +729,6 @@ export class EksClusterStack extends cdk.Stack {
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['secretsmanager:CreateSecret', 'secretsmanager:TagResource', 'secretsmanager:GetSecretValue', 'secretsmanager:RestoreSecret', 'secretsmanager:UpdateSecret'],
       resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:openclaw/*`],
-    }));
-    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cognito-idp:AdminUpdateUserAttributes'],
-      resources: ['*'],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
@@ -792,19 +739,114 @@ export class EksClusterStack extends cdk.Stack {
       resources: [tenantRole.roleArn],
     }));
 
-    // ── Cognito: Lambda Triggers ──────────────────────────────────────────
-    // Use L1 escape hatch to set triggers without creating circular dependency.
-    // CDK L2 addTrigger creates UserPool→Lambda + Lambda→UserPool deps = cycle.
-    const cfnUserPool = userPool.node.defaultChild as cognito.CfnUserPool;
-    cfnUserPool.lambdaConfig = {
-      preSignUp: preSignupFn.functionArn,
-      postConfirmation: postConfirmFn.functionArn,
-    };
-    preSignupFn.addPermission('CognitoPreSignUp', {
+    // ── Cognito: Complete UserPool with Lambda Triggers ──────────────────
+    // Set triggers in constructor. Use attachInlinePolicy (not addToRolePolicy)
+    // for Cognito-scoped permissions to avoid circular dependency.
+    // See: https://github.com/aws/aws-cdk/issues/7016
+    const cognitoDomainPrefix = this.node.tryGetContext('cognitoDomain')
+      || `openclaw-${this.account}-${this.region}`.slice(0, 63);
+
+    const userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `openclaw-${this.stackName}`,
+      selfSignUpEnabled: selfSignupEnabled,
+      signInAliases: { email: true },
+      autoVerify: { email: true },
+      passwordPolicy: {
+        minLength: 12,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireDigits: true,
+        requireSymbols: false,
+      },
+      customAttributes: {
+        gateway_token: new cognito.StringAttribute({ mutable: true }),
+        tenant_name: new cognito.StringAttribute({ mutable: true }),
+      },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    userPool.addDomain('CognitoDomain', {
+      cognitoDomain: { domainPrefix: cognitoDomainPrefix },
+    });
+
+    const userPoolClient = userPool.addClient('WebClient', {
+      generateSecret: false,
+      authFlows: { userPassword: true, userSrp: true },
+      readAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true })
+        .withCustomAttributes('gateway_token', 'tenant_name'),
+      writeAttributes: new cognito.ClientAttributes()
+        .withStandardAttributes({ email: true }),
+    });
+
+    // Cognito-scoped IAM — use wildcard to avoid circular dependency
+    // (attachInlinePolicy with userPool.userPoolArn still creates cycle)
+    preSignupFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:ListUsers'],
+      resources: ['*'],
+    }));
+    NagSuppressions.addResourceSuppressions(preSignupFn, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'Wildcard required to avoid circular dependency between UserPool and Lambda trigger. See aws/aws-cdk#7016.',
+    }], true);
+    postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:AdminUpdateUserAttributes'],
+      resources: ['*'],
+    }));
+    NagSuppressions.addResourceSuppressions(postConfirmFn, [{
+      id: 'AwsSolutions-IAM5',
+      reason: 'Wildcard required to avoid circular dependency between UserPool and Lambda trigger. See aws/aws-cdk#7016.',
+    }], true);
+
+    // USER_POOL_ID env var — add after UserPool creation
+    preSignupFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+    postConfirmFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
+
+    // Lambda triggers — use custom resource to avoid circular dependency (aws/aws-cdk#7016).
+    // CDK's lambdaTriggers creates UserPool→Lambda + Lambda→UserPool (via addPermission) = cycle.
+    new cr.AwsCustomResource(this, 'CognitoTriggers', {
+      onCreate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: userPool.userPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignupFn.functionArn,
+            PostConfirmation: postConfirmFn.functionArn,
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
+      },
+      onUpdate: {
+        service: 'CognitoIdentityServiceProvider',
+        action: 'updateUserPool',
+        parameters: {
+          UserPoolId: userPool.userPoolId,
+          LambdaConfig: {
+            PreSignUp: preSignupFn.functionArn,
+            PostConfirmation: postConfirmFn.functionArn,
+          },
+        },
+        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
+      },
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ['cognito-idp:UpdateUserPool'],
+          resources: [userPool.userPoolArn],
+        }),
+        new iam.PolicyStatement({
+          actions: ['lambda:AddPermission', 'lambda:RemovePermission'],
+          resources: [preSignupFn.functionArn, postConfirmFn.functionArn],
+        }),
+      ]),
+    });
+
+    // Lambda invoke permissions for Cognito
+    preSignupFn.addPermission('CognitoInvoke', {
       principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
       sourceArn: userPool.userPoolArn,
     });
-    postConfirmFn.addPermission('CognitoPostConfirm', {
+    postConfirmFn.addPermission('CognitoInvoke', {
       principal: new iam.ServicePrincipal('cognito-idp.amazonaws.com'),
       sourceArn: userPool.userPoolArn,
     });
@@ -959,15 +1001,13 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── Auth UI: Deploy static files + generate config.js ───────────────────
-    // Auth UI config: use custom domain if set, otherwise CloudFront will
-    // inject its own domain at runtime via distribution.distributionDomainName
+    // Auth UI: deploy static files only. config.js is generated by deploy-auth-ui.sh
+    // from stack outputs (Cognito Pool ID, Client ID, domain) to avoid circular dependency.
     const authDomain = useCustomDomain ? domainName : distribution.distributionDomainName;
-    const configJs = `var C={region:'${this.region}',userPoolId:'${cognitoPoolId}',clientId:'${cognitoClientId}',domain:'${authDomain}'};`;
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [
         s3deploy.Source.asset('../auth-ui'),
-        s3deploy.Source.data('config.js', configJs),
       ],
       destinationBucket: authUiBucket,
       distribution,
@@ -1051,7 +1091,7 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'CustomDomain', { value: useCustomDomain ? 'true' : 'false' });
     new cdk.CfnOutput(this, 'CertificateArn', { value: certificate?.certificateArn || '' });
     new cdk.CfnOutput(this, 'CognitoPoolId', { value: userPool.userPoolId });
-    new cdk.CfnOutput(this, 'CognitoClientId', { value: cognitoClientId });
+    new cdk.CfnOutput(this, 'CognitoClientId', { value: userPoolClient.userPoolClientId });
     new cdk.CfnOutput(this, 'CognitoDomain', { value: cognitoDomainPrefix });
     new cdk.CfnOutput(this, 'AlertsTopicArn', { value: alertsTopic.topicArn });
     new cdk.CfnOutput(this, 'ErrorPagesBucketName', { value: errorPagesBucket.bucketName });

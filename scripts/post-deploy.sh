@@ -254,6 +254,15 @@ else
   echo "  -> No custom domain. Access via CloudFront: https://${CF_DOMAIN}"
 fi
 
+# 9. Deploy auth UI config.js (Cognito values from stack outputs)
+echo "  -> Deploying auth UI config.js"
+POOL_ID=$(get_output CognitoPoolId)
+CLIENT_ID=$(get_output CognitoClientId)
+AUTH_BUCKET=$(get_output AuthUiBucketName)
+echo "var C={region:'${REGION}',userPoolId:'${POOL_ID}',clientId:'${CLIENT_ID}',domain:'${DOMAIN}'};" | \
+  aws s3 cp - "s3://${AUTH_BUCKET}/config.js" --content-type "application/javascript" --region "$REGION"
+echo "  config.js deployed"
+
 echo ""
 echo "=== Post-deploy complete ==="
 echo "  Auth UI:    https://${DOMAIN}"
