@@ -24,7 +24,7 @@ check "keda" "kubectl get pods -n keda --no-headers 2>/dev/null | grep -v Runnin
 check "pvc" "kubectl get pvc -A -l app.kubernetes.io/name=openclaw-helm --no-headers 2>/dev/null | grep -v Bound && exit 1 || true"
 
 # ALB health (internal, best-effort)
-ALB_DNS=$(kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
+ALB_DNS=$(kubectl get httproute -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null || echo "")
 if [ -n "$ALB_DNS" ]; then
   check "alb" "curl -sf -o /dev/null -w '%{http_code}' --max-time 5 http://${ALB_DNS}/healthz || exit 1"
 else
@@ -40,6 +40,6 @@ else
 fi
 
 # WAF
-check "waf" "aws wafv2 list-web-acls --scope REGIONAL --region $REGION --query 'WebACLs[0].Name' --output text | grep -v None"
+check "waf" "aws wafv2 list-web-acls --scope CLOUDFRONT --region $REGION --query 'WebACLs[0].Name' --output text | grep -v None"
 
 jq -n --arg s "$STATUS" --argjson c "$COMPONENTS" '{"status": $s, "components": $c}'

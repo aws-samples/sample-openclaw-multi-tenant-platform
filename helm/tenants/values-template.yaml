@@ -4,7 +4,7 @@
 tenant:
   name: "{{TENANT}}"
 
-fullnameOverride: "openclaw-{{TENANT}}"
+fullnameOverride: "{{TENANT}}"
 
 ingress:
   enabled: true

@@ -32,7 +32,7 @@ check "Pod ready" kubectl wait pod -n "${NAMESPACE}" -l "app.kubernetes.io/insta
 echo ""
 echo "--- Network ---"
 check "Service exists" kubectl get svc -n "${NAMESPACE}" "${RELEASE}"
-check "Ingress exists" kubectl get ingress -n "${NAMESPACE}" "${RELEASE}"
+check "Ingress exists" kubectl get httproute -n "${NAMESPACE}" "${RELEASE}"
 check "NetworkPolicy exists" kubectl get networkpolicy -n "${NAMESPACE}" "${RELEASE}"
 
 # 3. PVC

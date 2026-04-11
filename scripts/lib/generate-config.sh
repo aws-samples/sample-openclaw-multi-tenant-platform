@@ -59,9 +59,6 @@ generate_config() {
   read -rp "  Hosted Zone ID: " hosted_zone
   read -rp "  ACM Certificate ARN (deployment region): " cert_arn
   read -rp "  ACM Certificate ARN (us-east-1, for CloudFront): " cf_cert_arn
-  read -rp "  Cognito User Pool ID: " cognito_pool
-  read -rp "  Cognito App Client ID: " cognito_client
-  read -rp "  Cognito domain prefix: " cognito_domain
   read -rp "  Allowed email domains (comma-separated): " allowed_domains
   read -rp "  Deployer IAM Principal ARN (SSO role, IAM role, or IAM user): " deployer_arn
 
@@ -80,9 +77,6 @@ generate_config() {
   HOSTED_ZONE="$hosted_zone" \
   CERT_ARN="$cert_arn" \
   CF_CERT_ARN="$cf_cert_arn" \
-  COGNITO_POOL="$cognito_pool" \
-  COGNITO_CLIENT="$cognito_client" \
-  COGNITO_DOMAIN="$cognito_domain" \
   ALLOWED_DOMAINS="$allowed_domains" \
   DEPLOYER_ARN="$deployer_arn" \
   GITHUB_OWNER="$github_owner" \
@@ -96,9 +90,6 @@ generate_config() {
     c.hostedZoneId = process.env.HOSTED_ZONE;
     c.certificateArn = process.env.CERT_ARN;
     c.cloudfrontCertificateArn = process.env.CF_CERT_ARN;
-    c.cognitoPoolId = process.env.COGNITO_POOL;
-    c.cognitoClientId = process.env.COGNITO_CLIENT;
-    c.cognitoDomain = process.env.COGNITO_DOMAIN;
     c.allowedEmailDomains = process.env.ALLOWED_DOMAINS;
     c.deployerPrincipalArn = process.env.DEPLOYER_ARN;
     c.githubOwner = process.env.GITHUB_OWNER;

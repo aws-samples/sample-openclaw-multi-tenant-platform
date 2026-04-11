@@ -9,12 +9,12 @@ const baseContext = {
   cloudfrontCertificateArn: 'arn:aws:acm:us-east-1:123456789012:certificate/test',
   cognitoPoolId: 'us-west-2_test',
   cognitoClientId: 'testclient',
-  albClientId: 'testalbclient',
+  
   cognitoDomain: 'test-domain',
   allowedEmailDomains: 'example.com',
   githubOwner: 'test',
   githubRepo: 'test',
-  ssoRoleArn: 'arn:aws:iam::123456789012:role/test',
+  deployerPrincipalArn: 'arn:aws:iam::123456789012:role/test',
   openclawImage: '123456789012.dkr.ecr.us-west-2.amazonaws.com/ghcr/openclaw/openclaw:latest',
 };
 
