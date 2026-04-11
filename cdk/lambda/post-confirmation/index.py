@@ -180,6 +180,25 @@ def add_tenant_to_applicationset(tenant, email):
             raise
 
 
+def _ensure_namespace(tenant, ns):
+    """Create namespace if it doesn't exist. ArgoCD adopts it via server-side apply."""
+    endpoint, ssl_ctx, bearer = _get_eks_context()
+    url = f"{endpoint}/api/v1/namespaces/{ns}"
+    body = {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+            "name": ns,
+            "labels": {
+                "app.kubernetes.io/managed-by": "post-confirmation-lambda",
+                "openclaw.io/tenant": tenant,
+            },
+        },
+    }
+    _k8s_apply(endpoint, ssl_ctx, bearer, url, body)
+    logger.info('Namespace %s ensured', ns)
+
+
 def create_gateway_secret(tenant, ns, token):
     """Create K8s Secret with gateway token so pod and auth-ui use the same token."""
     endpoint, ssl_ctx, bearer = _get_eks_context()
@@ -256,24 +275,18 @@ def handler(event, context):
             {'Name': 'custom:tenant_name', 'Value': tenant},
         ])
 
-    # 6. Add tenant to ApplicationSet -> ArgoCD creates Application -> Helm syncs resources
+    # 6. Create namespace first (before ApplicationSet) to avoid race condition.
+    # ArgoCD will adopt the existing namespace via server-side apply.
+    _ensure_namespace(tenant, ns)
+
+    # 7. Create K8s Secret with gateway token (namespace exists from step 6)
+    create_gateway_secret(tenant, ns, token)
+
+    # 8. Add tenant to ApplicationSet -> ArgoCD creates Application -> Helm syncs resources
+    # Namespace and secret already exist — ArgoCD adopts them.
     add_tenant_to_applicationset(tenant, email)
 
-    # 7. Create K8s Secret with gateway token
-    # Race condition: ArgoCD creates namespace async after step 6 (CreateNamespace=true).
-    # Retry with backoff until namespace exists.
-    import time
-    for attempt in range(5):
-        try:
-            create_gateway_secret(tenant, ns, token)
-            break
-        except urllib.error.HTTPError as e:
-            if e.code == 404 and attempt < 4:
-                time.sleep(2 ** attempt)  # 1, 2, 4, 8s
-                continue
-            raise
-
-    # 8. Notify admin
+    # 9. Notify admin
     sns.publish(
         TopicArn=TOPIC_ARN, Subject='New Tenant Created',
         Message=f'Tenant: {tenant} ({email})\nURL: https://{DOMAIN}/t/{tenant}',
