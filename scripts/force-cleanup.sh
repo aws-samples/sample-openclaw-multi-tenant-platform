@@ -151,6 +151,22 @@ done
 # ── Step 5: Clean retained resources ────────────────────────────────────────
 echo "Step 5: Cleaning retained resources..."
 
+# KMS keys + aliases (EKS secrets encryption)
+echo "  -> Cleaning KMS keys..."
+aws kms delete-alias --alias-name alias/openclaw/eks-secrets --region "$REGION" 2>/dev/null && log "Deleted KMS alias"
+for key in $(aws kms list-keys --region "$REGION" --query 'Keys[*].KeyId' --output text 2>/dev/null); do
+  DESC=$(aws kms describe-key --key-id "$key" --region "$REGION" --query 'KeyMetadata.{State:KeyState,Desc:Description}' --output text 2>/dev/null)
+  if echo "$DESC" | grep -qi "openclaw\|eks.*secret" && echo "$DESC" | grep -q "Enabled"; then
+    aws kms schedule-key-deletion --key-id "$key" --pending-window-in-days 7 --region "$REGION" 2>/dev/null && log "Scheduled KMS key deletion: $key"
+  fi
+done
+
+# Orphan log groups
+echo "  -> Cleaning log groups..."
+for lg in /aws/containerinsights/${CLUSTER_NAME}/performance /aws/containerinsights/${CLUSTER_NAME}/application; do
+  aws logs delete-log-group --log-group-name "$lg" --region "$REGION" 2>/dev/null && log "Deleted log group: $lg"
+done
+
 # Orphan IAM roles (Karpenter instance profile)
 for role in $(aws iam list-roles --query "Roles[?contains(RoleName,'OpenClawEksStack')].RoleName" --output text 2>/dev/null); do
   log "Cleaning IAM role: $role"
