@@ -26,9 +26,15 @@ if [[ -f "$CDK_JSON" ]]; then
   DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')")
   GITHUB_OWNER=$(node -e "console.log(require('./$CDK_JSON').context.githubOwner || '')")
   GITHUB_REPO=$(node -e "console.log(require('./$CDK_JSON').context.githubRepo || '')")
-  COGNITO_POOL_ARN=$(node -e "const c=require('./$CDK_JSON').context; const id=c.cognitoPoolId||''; const r='${REGION}'; const a=c.accountId||'${ACCOUNT}'; console.log(id ? 'arn:aws:cognito-idp:'+r+':'+a+':userpool/'+id : '')")
-  COGNITO_CLIENT_ID=$(node -e "console.log(require('./$CDK_JSON').context.cognitoClientId || '')")
-  COGNITO_DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.cognitoDomain || '')")
+  COGNITO_POOL_ARN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='CognitoPoolId'].OutputValue" --output text 2>/dev/null)
+  if [ -n "$COGNITO_POOL_ARN" ]; then
+    COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:${ACCOUNT}:userpool/${COGNITO_POOL_ARN}"
+  fi
+  COGNITO_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='CognitoClientId'].OutputValue" --output text 2>/dev/null)
+  COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='CognitoDomain'].OutputValue" --output text 2>/dev/null)
 else
   echo "Error: cdk/cdk.json not found."
   exit 1
