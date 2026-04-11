@@ -184,16 +184,14 @@ try:
 
     config['CacheBehaviors'] = {'Quantity': len(behaviors), 'Items': behaviors}
 
-    # Merge custom error responses (preserve existing, upsert 502/503)
+    # Merge custom error responses — add 502/503/504, preserve CDK-managed 403/404
     existing_errors = config.get('CustomErrorResponses', {}).get('Items', [])
-    error_codes_to_set = {403, 404, 502, 503, 504}
-    merged = [e for e in existing_errors if e['ErrorCode'] not in error_codes_to_set]
+    error_codes_to_add = {502, 503, 504}
+    merged = [e for e in existing_errors if e['ErrorCode'] not in error_codes_to_add]
     merged.extend([
-        {'ErrorCode': 403, 'ErrorCachingMinTTL': 5},
-        {'ErrorCode': 404, 'ResponsePagePath': '/index.html', 'ResponseCode': '200', 'ErrorCachingMinTTL': 5},
         {'ErrorCode': 502, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
         {'ErrorCode': 503, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
-        {'ErrorCode': 504, 'ErrorCachingMinTTL': 5},
+        {'ErrorCode': 504, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
     ])
     config['CustomErrorResponses'] = {'Quantity': len(merged), 'Items': merged}
 
