@@ -1133,6 +1133,8 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'CloudFrontWafArn', { value: cfWafArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
     new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImage });
+    new cdk.CfnOutput(this, 'GithubOwner', { value: githubOwner || 'aws-samples' });
+    new cdk.CfnOutput(this, 'GithubRepo', { value: githubRepo || 'openclaw-platform' });
 
     // ── cdk-nag Stack-Level Suppressions ────────────────────────────────────
     // These are acceptable trade-offs for a sample project. Production deployments

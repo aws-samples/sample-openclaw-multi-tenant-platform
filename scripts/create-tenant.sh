@@ -137,13 +137,7 @@ kubectl create secret generic "${TENANT}-gateway-token" \
 # Verify: wait for ArgoCD sync + trigger scale-up + confirm endpoint
 echo "  → Verifying deployment..."
 ALB=$(kubectl get gateway openclaw-gateway -n openclaw-system -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
-DOMAIN=$(node -e "try{console.log(require('cdk/cdk.json').context.zoneName||'')}catch(e){console.log('')}" 2>/dev/null)
-
-# If no custom domain, use CloudFront distribution domain
-if [[ -z "$DOMAIN" || "$DOMAIN" == "example.com" ]]; then
-  DOMAIN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "${AWS_REGION:-us-east-1}" \
-    --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text 2>/dev/null || echo "")
-fi
+DOMAIN=$(get_output DomainName 2>/dev/null || echo "")
 
 if [[ -z "$ALB" || -z "$DOMAIN" ]]; then
   echo ""
