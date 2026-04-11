@@ -198,6 +198,10 @@ if [ -n "$DOMAIN" ] && [ -n "$CERT_ARN" ]; then
 else
   # No custom domain or no cert — HTTP listener (CloudFront handles TLS termination)
   # Use python for reliable YAML manipulation instead of fragile sed
+  if ! python3 -c "import yaml" 2>/dev/null; then
+    echo "ERROR: python3 + pyyaml required for no-domain mode. Install: pip3 install pyyaml"
+    exit 1
+  fi
   echo "  Gateway: HTTP listener (no custom domain, CloudFront terminates TLS)"
   python3 - "$CF_PREFIX_LIST" <<'PYEOF' | kubectl apply -f -
 import yaml, sys

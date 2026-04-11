@@ -11,7 +11,7 @@
 
 > Multi-tenant AI assistant platform on Amazon EKS. Each user gets an isolated, private AI workspace powered by Amazon Bedrock -- zero API keys, zero shared data.
 
-Deploy in 20 minutes. Scale to 500 users. Pay only for what you use.
+Deploy in ~30 minutes. Scale to 500 users. Pay only for what you use.
 
 > **Experimental** — This project is provided for experimentation and learning purposes only. It is **not intended for production use**. APIs, architecture, and configuration may change without notice. See [Security](docs/security.md) for details.
 
@@ -76,6 +76,7 @@ cd sample-openclaw-multi-tenant-platform
 - AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
 - Docker or [Finch](https://github.com/runfinch/finch) (running — required for AWS CDK asset bundling). If using Finch, set `export CDK_DOCKER=finch` before running CDK commands
 - kubectl + Helm 3, Node.js 22+
+- Python 3 + PyYAML (`pip3 install pyyaml`) — required for no-domain deployment
 
 > **Important**: Set `allowedEmailDomains` in `cdk.json` to restrict who can sign up (e.g., `your-company.com`). Without this, anyone with a valid email can create a tenant. To disable self-signup entirely, set `selfSignupEnabled` to `false` in `cdk.json`.
 - (Optional) Route53 hosted zone + ACM certificate in us-east-1. Without a custom domain, the platform uses the CloudFront default domain (`xxxxxx.cloudfront.net`)

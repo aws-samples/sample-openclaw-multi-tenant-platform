@@ -17,7 +17,12 @@ REGION="${AWS_REGION:-${1:-$(aws configure get region 2>/dev/null || echo us-eas
 # Accept --region flag
 [[ "${1:-}" == "--region" ]] && REGION="${2:-$REGION}"
 STACK="OpenClawEksStack"
-CLUSTER_NAME="openclaw-cluster"
+_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
+if [[ -f "${_REPO_ROOT}/cdk/cdk.json" ]]; then
+  CLUSTER_NAME="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo 'openclaw-cluster')"
+else
+  CLUSTER_NAME="openclaw-cluster"
+fi
 
 log() { echo "  $(date '+%H:%M:%S') $*"; }
 
@@ -157,7 +162,7 @@ aws kms delete-alias --alias-name alias/openclaw/eks-secrets --region "$REGION" 
 for key in $(aws kms list-keys --region "$REGION" --query 'Keys[*].KeyId' --output text 2>/dev/null); do
   DESC=$(aws kms describe-key --key-id "$key" --region "$REGION" --query 'KeyMetadata.{State:KeyState,Desc:Description}' --output text 2>/dev/null)
   if echo "$DESC" | grep -qi "openclaw\|eks.*secret" && echo "$DESC" | grep -q "Enabled"; then
-    aws kms schedule-key-deletion --key-id "$key" --pending-window-in-days 7 --region "$REGION" 2>/dev/null && log "Scheduled KMS key deletion: $key"
+    aws kms schedule-key-deletion --key-id "$key" --pending-window-in-days 30 --region "$REGION" 2>/dev/null && log "Scheduled KMS key deletion: $key"
   fi
 done
 

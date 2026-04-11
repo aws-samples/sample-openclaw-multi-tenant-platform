@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REGION="${1:-us-west-2}"
-STACK="OpenClawEksStack"
-
-get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+source "$(dirname "$0")/lib/common.sh"
 
 BUCKET=$(get_output AuthUiBucketName)
 POOL_ID=$(get_output CognitoPoolId)
@@ -32,7 +29,7 @@ for f in auth-ui/*.html auth-ui/*.json auth-ui/*.svg; do
 done
 
 # Upload
-aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --content-type "text/html" --region "$REGION"
+aws s3 sync "${TMPDIR}/" "s3://${BUCKET}/" --delete --region "$REGION"
 rm -rf "$TMPDIR"
 
 CF_DOMAIN=$(get_output DistributionDomainName)

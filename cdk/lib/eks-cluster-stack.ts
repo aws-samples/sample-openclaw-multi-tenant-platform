@@ -32,6 +32,8 @@ export class EksClusterStack extends cdk.Stack {
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
     if (!this.node.tryGetContext('@ci-synth')) {
       const requiredContext: Record<string, string> = {
+        allowedEmailDomains: 'Email domain allowlist (e.g., your-company.com)',
+        githubOwner: 'GitHub org for Helm chart repo',
       };
       const missingCtx = Object.entries(requiredContext)
         .filter(([key]) => {
@@ -257,12 +259,10 @@ export class EksClusterStack extends cdk.Stack {
           basePath: '/tenants',
           subPathPattern: '${.PVC.namespace}',
           ensureUniqueDirectory: 'false',
-          // OpenClaw runs as uid:gid 1000:1000 (node user). All APs use the same
-          // GID so the container can read/write without running as root.
-          // GID 1000 for all APs — matches OpenClaw container user (node:1000:1000).
-          // Intentionally same start/end: all tenants share UID/GID, isolation is via AP chroot.
+          // GID range for EFS access points. Each tenant gets a unique GID.
+          // Range must be large enough for max expected tenants.
           gidRangeStart: '1000',
-          gidRangeEnd: '1001',
+          gidRangeEnd: '2000',
         },
         reclaimPolicy: 'Delete',
         volumeBindingMode: 'Immediate',
@@ -492,8 +492,9 @@ export class EksClusterStack extends cdk.Stack {
               requirements: [
                 { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand', 'spot'] },
                 { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
-                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r', 't'] },
                 { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+                { key: 'karpenter.k8s.aws/instance-size', operator: 'In', values: ['medium', 'large', 'xlarge'] },
               ],
             },
           },
@@ -762,7 +763,7 @@ export class EksClusterStack extends cdk.Stack {
         gateway_token: new cognito.StringAttribute({ mutable: true }),
         tenant_name: new cognito.StringAttribute({ mutable: true }),
       },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,  // Protect user accounts on stack delete
     });
 
     userPool.addDomain('CognitoDomain', {
@@ -803,32 +804,37 @@ export class EksClusterStack extends cdk.Stack {
     postConfirmFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 
     // Lambda triggers — use custom resource to avoid circular dependency (aws/aws-cdk#7016).
-    // CDK's lambdaTriggers creates UserPool→Lambda + Lambda→UserPool (via addPermission) = cycle.
+    // IMPORTANT: updateUserPool is a full replacement — ALL properties must be included
+    // or they get reset to defaults. Mirror CDK UserPool constructor settings here.
+    const cognitoTriggerParams = {
+      UserPoolId: userPool.userPoolId,
+      AutoVerifiedAttributes: ['email'],
+      Policies: {
+        PasswordPolicy: {
+          MinimumLength: 12,
+          RequireUppercase: true,
+          RequireLowercase: true,
+          RequireNumbers: true,
+          RequireSymbols: false,
+        },
+      },
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
+      LambdaConfig: {
+        PreSignUp: preSignupFn.functionArn,
+        PostConfirmation: postConfirmFn.functionArn,
+      },
+    };
     new cr.AwsCustomResource(this, 'CognitoTriggers', {
       onCreate: {
         service: 'CognitoIdentityServiceProvider',
         action: 'updateUserPool',
-        parameters: {
-          UserPoolId: userPool.userPoolId,
-          AutoVerifiedAttributes: ["email"],
-          LambdaConfig: {
-            PreSignUp: preSignupFn.functionArn,
-            PostConfirmation: postConfirmFn.functionArn,
-          },
-        },
+        parameters: cognitoTriggerParams,
         physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
       },
       onUpdate: {
         service: 'CognitoIdentityServiceProvider',
         action: 'updateUserPool',
-        parameters: {
-          UserPoolId: userPool.userPoolId,
-          AutoVerifiedAttributes: ["email"],
-          LambdaConfig: {
-            PreSignUp: preSignupFn.functionArn,
-            PostConfirmation: postConfirmFn.functionArn,
-          },
-        },
+        parameters: cognitoTriggerParams,
         physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
       },
       policy: cr.AwsCustomResourcePolicy.fromStatements([
@@ -997,8 +1003,8 @@ export class EksClusterStack extends cdk.Stack {
         },
       ],
       errorConfigurations: [
-        { errorCode: 404, responseCode: 200, responsePagePath: '/index.html' },
-        { errorCode: 403, responseCode: 200, responsePagePath: '/index.html' },
+        { errorCode: 404, responseCode: 200, responsePagePath: '/index.html', errorCachingMinTtl: 5 },
+        { errorCode: 403, responseCode: 200, responsePagePath: '/index.html', errorCachingMinTtl: 5 },
       ],
     });
 
