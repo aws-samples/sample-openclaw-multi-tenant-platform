@@ -747,13 +747,13 @@ export class EksClusterStack extends cdk.Stack {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/pre-signup'),
-      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains, USER_POOL_ID: cognitoPoolId },
+      environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains, USER_POOL_ID: cdk.Lazy.string({ produce: () => userPool.userPoolId }) },
       timeout: cdk.Duration.seconds(10),
     });
     alertsTopic.grantPublish(preSignupFn);
     preSignupFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cognito-idp:ListUsers'],
-      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+      resources: ['*'],
     }));
 
     // ── Lambda: Post-Confirmation ───────────────────────────────────────────
@@ -770,7 +770,7 @@ export class EksClusterStack extends cdk.Stack {
         DOMAIN: domainName,
         OPENCLAW_IMAGE: openclawImage,
         TENANT_ROLE_ARN: tenantRole.roleArn,
-        USER_POOL_ID: cognitoPoolId,
+        USER_POOL_ID: cdk.Lazy.string({ produce: () => userPool.userPoolId }),
       },
       timeout: cdk.Duration.seconds(60),
     });
@@ -781,7 +781,7 @@ export class EksClusterStack extends cdk.Stack {
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cognito-idp:AdminUpdateUserAttributes'],
-      resources: [`arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${cognitoPoolId}`],
+      resources: ['*'],
     }));
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:CreatePodIdentityAssociation', 'eks:DescribeCluster'],
