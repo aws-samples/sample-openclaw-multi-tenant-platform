@@ -31,8 +31,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── Validate required CDK context (before any resource creation) ─────
     // Skip validation during CI synth (uses placeholder values from cdk.json.example)
-    // TEMPORARY: Skip validation to deploy systematic Cognito fix
-    if (false && !this.node.tryGetContext('@ci-synth')) {
+    if (!this.node.tryGetContext('@ci-synth')) {
       const requiredContext: Record<string, string> = {
         allowedEmailDomains: 'Email domain allowlist (e.g., your-company.com)',
         githubOwner: 'GitHub org for Helm chart repo',
