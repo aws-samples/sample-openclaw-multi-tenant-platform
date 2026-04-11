@@ -2,7 +2,8 @@
 # Deploy platform resources: ApplicationSet + Gateway API
 # Usage: bash scripts/deploy-platform.sh
 #
-# Reads cdk/cdk.json for configuration, injects values via sed, and applies:
+# Reads all config from CloudFormation stack outputs (not cdk.json).
+# This allows parallel multi-region deploys without cdk.json conflicts.
 #   1. ApplicationSet (multi-tenant ArgoCD generator)
 #   2. Gateway API resources (GatewayClass + LoadBalancerConfiguration + Gateway)
 set -euo pipefail
@@ -20,58 +21,53 @@ else
   REGION="$AWS_REGION"
 fi
 
-echo "==> Reading config from cdk.json"
-CDK_JSON="cdk/cdk.json"
-if [[ -f "$CDK_JSON" ]]; then
-  DOMAIN=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')")
-  GITHUB_OWNER=$(node -e "console.log(require('./$CDK_JSON').context.githubOwner || '')")
-  GITHUB_REPO=$(node -e "console.log(require('./$CDK_JSON').context.githubRepo || '')")
-  COGNITO_POOL_ARN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='CognitoPoolId'].OutputValue" --output text 2>/dev/null)
-  if [ -n "$COGNITO_POOL_ARN" ]; then
-    COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:${ACCOUNT}:userpool/${COGNITO_POOL_ARN}"
-  fi
-  COGNITO_CLIENT_ID=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='CognitoClientId'].OutputValue" --output text 2>/dev/null)
-  COGNITO_DOMAIN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='CognitoDomain'].OutputValue" --output text 2>/dev/null)
-else
-  echo "Error: cdk/cdk.json not found."
-  exit 1
+echo "==> Reading config from stack outputs"
+STACK="OpenClawEksStack"
+
+get_stack_output() {
+  aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null
+}
+
+DOMAIN=$(get_stack_output DomainName)
+CUSTOM_DOMAIN=$(get_stack_output CustomDomain)
+CERT_ARN=$(get_stack_output CertificateArn)
+COGNITO_POOL_ID=$(get_stack_output CognitoPoolId)
+COGNITO_CLIENT_ID=$(get_stack_output CognitoClientId)
+COGNITO_DOMAIN=$(get_stack_output CognitoDomain)
+
+if [ -n "$COGNITO_POOL_ID" ]; then
+  COGNITO_POOL_ARN="arn:aws:cognito-idp:${REGION}:${ACCOUNT}:userpool/${COGNITO_POOL_ID}"
 fi
 
-for var_name in GITHUB_OWNER GITHUB_REPO COGNITO_POOL_ARN COGNITO_CLIENT_ID COGNITO_DOMAIN; do
+# githubOwner/Repo: from stack outputs (added by CDK), fallback to cdk.json for backward compat
+GITHUB_OWNER=$(get_stack_output GithubOwner)
+GITHUB_REPO=$(get_stack_output GithubRepo)
+if [[ -z "$GITHUB_OWNER" ]]; then
+  CDK_JSON="cdk/cdk.json"
+  if [[ -f "$CDK_JSON" ]]; then
+    GITHUB_OWNER=$(node -e "console.log(require('./$CDK_JSON').context.githubOwner || 'aws-samples')")
+    GITHUB_REPO=$(node -e "console.log(require('./$CDK_JSON').context.githubRepo || 'openclaw-platform')")
+  else
+    GITHUB_OWNER="${GITHUB_OWNER:-aws-samples}"
+    GITHUB_REPO="${GITHUB_REPO:-openclaw-platform}"
+  fi
+fi
+
+for var_name in GITHUB_OWNER GITHUB_REPO COGNITO_POOL_ARN COGNITO_CLIENT_ID COGNITO_DOMAIN DOMAIN; do
   val="${!var_name}"
   if [[ -z "$val" ]]; then
-    echo "Error: $var_name is empty in cdk.json."
+    echo "Error: $var_name is empty. Check stack outputs: aws cloudformation describe-stacks --stack-name $STACK --region $REGION"
     exit 1
   fi
 done
 
-# Domain is optional — when empty, use CloudFront distribution domain from stack output.
-# The domain is needed by Helm charts for basePath and allowedOrigins even without custom DNS.
-if [[ -z "$DOMAIN" || "$DOMAIN" == "example.com" ]]; then
-  echo "  No custom domain configured. Fetching CloudFront domain from stack output..."
-  DOMAIN=$(aws cloudformation describe-stacks --stack-name OpenClawEksStack --region "$REGION" \
-    --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text 2>/dev/null || echo "")
-  if [[ -z "$DOMAIN" ]]; then
-    echo "  WARNING: Could not fetch CloudFront domain. Gateway hostname and basePath will be empty."
-    echo "  Run post-deploy.sh after first tenant to finalize."
-  else
-    echo "  Using CloudFront domain: $DOMAIN"
-  fi
-fi
+echo "  Domain: $DOMAIN (custom=$CUSTOM_DOMAIN)"
 
 CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
 
-# Determine listener mode based on cert availability
-CERT_ARN_CHECK=$(node -e "console.log(require('./$CDK_JSON').context.certificateArn || '')" 2>/dev/null)
-ZONE_NAME=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')" 2>/dev/null)
-if [ -n "$ZONE_NAME" ] && [ "$ZONE_NAME" != "example.com" ] && [ -z "$CERT_ARN_CHECK" ]; then
-  echo "ERROR: Custom domain '$ZONE_NAME' requires certificateArn in cdk.json"
-  exit 1
-fi
-if [ -n "$CERT_ARN_CHECK" ]; then
+# Determine listener mode: custom domain with cert → HTTPS, otherwise HTTP
+if [ "$CUSTOM_DOMAIN" = "true" ] && [ -n "$CERT_ARN" ]; then
   LISTENER_NAME="https"
 else
   LISTENER_NAME="http"
@@ -191,9 +187,7 @@ if [ -z "$CF_PREFIX_LIST" ] || [ "$CF_PREFIX_LIST" = "None" ]; then
 fi
 
 # Check if custom domain has an ACM cert (needed for HTTPS listener on ALB)
-CERT_ARN=$(node -e "console.log(require('./$CDK_JSON').context.certificateArn || '')" 2>/dev/null)
-
-if [ -n "$DOMAIN" ] && [ -n "$CERT_ARN" ]; then
+if [ "$CUSTOM_DOMAIN" = "true" ] && [ -n "$CERT_ARN" ]; then
   # Custom domain with ACM cert — HTTPS listener
   echo "  Gateway: HTTPS listener on ${DOMAIN}"
   sed \
