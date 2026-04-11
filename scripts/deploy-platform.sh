@@ -66,8 +66,9 @@ CHART_REPO="https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}.git"
 
 # Determine listener mode based on cert availability
 CERT_ARN_CHECK=$(node -e "console.log(require('./$CDK_JSON').context.certificateArn || '')" 2>/dev/null)
-if [ -n "$DOMAIN" ] && [ "$DOMAIN" != "example.com" ] && [ -z "$CERT_ARN_CHECK" ]; then
-  echo "ERROR: Custom domain '$DOMAIN' requires certificateArn in cdk.json"
+ZONE_NAME=$(node -e "console.log(require('./$CDK_JSON').context.zoneName || '')" 2>/dev/null)
+if [ -n "$ZONE_NAME" ] && [ "$ZONE_NAME" != "example.com" ] && [ -z "$CERT_ARN_CHECK" ]; then
+  echo "ERROR: Custom domain '$ZONE_NAME' requires certificateArn in cdk.json"
   exit 1
 fi
 if [ -n "$CERT_ARN_CHECK" ]; then
