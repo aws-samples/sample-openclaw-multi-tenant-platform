@@ -14,3 +14,5 @@ cdk/cdk.json
 logos/
 __pycache__/
 operator/target/
+cdk/cdk.json.usw2
+cdk/cdk.json.use1

@@ -1156,5 +1156,27 @@ export class EksClusterStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'CloudFrontWafArn', { value: cfWafArn });
     new cdk.CfnOutput(this, 'CloudFrontCertificateArn', { value: this.node.tryGetContext('cloudfrontCertificateArn') || '' });
     new cdk.CfnOutput(this, 'OpenClawImageUri', { value: openclawImage });
+
+    // ── cdk-nag Stack-Level Suppressions ────────────────────────────────────
+    // These are acceptable trade-offs for a sample project. Production deployments
+    // should address each finding individually. See docs/security.md for details.
+    const nagSuppressions = [
+      { id: 'AwsSolutions-IAM4', reason: 'AWS managed policies are appropriate for EKS add-on roles and CDK provider Lambdas.' },
+      { id: 'AwsSolutions-IAM5', reason: 'Wildcard permissions documented inline. CDK EKS provider framework uses wildcards internally.' },
+      { id: 'AwsSolutions-L1', reason: 'Lambda runtime Python 3.12 is current. CDK provider Lambdas use CDK-managed runtimes.' },
+      { id: 'AwsSolutions-S1', reason: 'S3 access logging omitted for sample cost. See security.md Production Hardening.' },
+      { id: 'AwsSolutions-SQS4', reason: 'DLQ is internal (Lambda async failures only). SSL enforcement is production hardening.' },
+      { id: 'AwsSolutions-COG1', reason: 'Password policy: 12 chars, upper/lower/digits. Symbols omitted for sample UX.' },
+      { id: 'AwsSolutions-COG2', reason: 'MFA omitted for sample simplicity. See security.md Production Hardening.' },
+      { id: 'AwsSolutions-COG3', reason: 'AdvancedSecurityMode adds cost. See security.md Production Hardening.' },
+      { id: 'AwsSolutions-CFR1', reason: 'Geo restrictions not needed for sample.' },
+      { id: 'AwsSolutions-CFR3', reason: 'CloudFront access logging omitted for sample cost.' },
+      { id: 'AwsSolutions-CFR7', reason: 'Using OAI for CloudFrontWebDistribution. OAC requires Distribution L2 migration.' },
+      { id: 'AwsSolutions-EC23', reason: 'ALB SG restricted to CloudFront prefix list IPs, not 0.0.0.0/0.' },
+      { id: 'AwsSolutions-EKS1', reason: 'EKS public endpoint for kubectl access. See security.md.' },
+      { id: 'AwsSolutions-SF1', reason: 'CDK EKS provider Step Functions — not user-controlled.' },
+      { id: 'AwsSolutions-SF2', reason: 'CDK EKS provider Step Functions — not user-controlled.' },
+    ];
+    NagSuppressions.addStackSuppressions(this, nagSuppressions, true);
   }
 }
