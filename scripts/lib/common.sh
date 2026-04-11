@@ -5,10 +5,34 @@
 set -euo pipefail
 
 REGION="${REGION:-${AWS_DEFAULT_REGION:-${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}}}"
-STACK="${STACK:-OpenClawEksStack}"
+
+# Dynamic stack name discovery
+discover_stack_name() {
+  # 1. Use explicit override
+  if [[ -n "${CDK_STACK_NAME:-}" ]]; then
+    echo "$CDK_STACK_NAME"
+    return
+  fi
+
+  # 2. Discover from active deployments (excluding nested stacks)
+  local active_stack
+  active_stack=$(aws cloudformation list-stacks --region "$REGION" \
+    --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
+    --output text 2>/dev/null | head -1 || echo "")
+
+  if [[ -n "$active_stack" && "$active_stack" != "None" ]]; then
+    echo "$active_stack"
+    return
+  fi
+
+  # 3. Fallback to legacy name for backward compatibility
+  echo "OpenClawEksStack"
+}
+
+STACK="${STACK:-$(discover_stack_name)}"
 
 # Cluster name — read from cdk.json if available
-_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)"
+_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
 if [[ -z "${CLUSTER:-}" ]] && [[ -f "${_REPO_ROOT}/cdk/cdk.json" ]]; then
   CLUSTER="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo 'openclaw-cluster')"
 fi

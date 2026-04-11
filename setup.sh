@@ -10,6 +10,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 START_PHASE=0
 START_TIME=$(date +%s)
 
+# Generate and export stack name for consistency across deployment session
+if [[ -z "${CDK_STACK_SUFFIX:-}" ]]; then
+  export CDK_STACK_SUFFIX=$(date +%Y-%m-%dT%H-%M-%S)
+fi
+export CDK_STACK_NAME="OpenClawEksStack-${CDK_STACK_SUFFIX}"
+
 # ── Parse args ──────────────────────────────────────────────────────────────
 usage() {
   echo "Usage: ./setup.sh [OPTIONS]"
@@ -17,11 +23,13 @@ usage() {
   echo "Options:"
   echo "  --phase N    Start from phase N (1-4)"
   echo "  --check      Run pre-flight checks only"
+  echo "  --yes        Skip confirmation prompt"
   echo "  --help       Show this help"
   exit 0
 }
 
 CHECK_ONLY=false
+AUTO_CONFIRM=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --phase)
@@ -31,6 +39,7 @@ while [[ $# -gt 0 ]]; do
       fi
       START_PHASE="$2"; shift 2 ;;
     --check) CHECK_ONLY=true; shift ;;
+    --yes)   AUTO_CONFIRM=true; shift ;;
     --help)  usage ;;
     *)       echo "Unknown option: $1"; usage ;;
   esac
@@ -67,10 +76,17 @@ run_phase() {
 
 # ── Phase functions ─────────────────────────────────────────────────────────
 phase1_run() {
-  (cd cdk && npm ci && npx cdk deploy OpenClawEksStack --require-approval broadening)
+  echo "  📋 Deploying stack: $CDK_STACK_NAME"
+  local approval_flag="--require-approval broadening"
+  if [[ "$AUTO_CONFIRM" == "true" ]]; then
+    approval_flag="--require-approval never"
+    echo "  🚀 Auto-confirming CDK deployment for non-interactive mode"
+  fi
+  (cd cdk && npm ci && npx cdk deploy $approval_flag)
 }
 phase1_verify() {
-  aws cloudformation describe-stacks --stack-name OpenClawEksStack --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -qE 'CREATE_COMPLETE|UPDATE_COMPLETE'
+  source "$SCRIPT_DIR/scripts/lib/common.sh"
+  aws cloudformation describe-stacks --stack-name "$STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null | grep -qE 'CREATE_COMPLETE|UPDATE_COMPLETE'
 }
 
 phase2_run() {
@@ -136,11 +152,15 @@ echo "  2/4: ArgoCD (Helm)    ~3 min"
 echo "  3/4: Platform (ApplicationSet)  ~1 min"
 echo "  4/4: KEDA (scale-to-zero)       ~2 min"
 echo ""
-printf "Start? (Y/n) "
-read -r answer
-if [[ "$answer" == "n" || "$answer" == "N" ]]; then
-  echo "Aborted."
-  exit 0
+if [[ "$AUTO_CONFIRM" == "true" ]]; then
+  echo "Auto-starting deployment..."
+else
+  printf "Start? (Y/n) "
+  read -r answer
+  if [[ "$answer" == "n" || "$answer" == "N" ]]; then
+    echo "Aborted."
+    exit 0
+  fi
 fi
 
 run_phase 1 "Infrastructure (CDK)"      phase1_run phase1_verify
