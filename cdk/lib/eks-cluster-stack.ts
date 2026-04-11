@@ -870,8 +870,8 @@ export class EksClusterStack extends cdk.Stack {
           kind: 'ClusterRole',
           metadata: { name: 'openclaw-tenant-provisioner' },
           rules: [
-            { apiGroups: [''], resources: ['namespaces', 'secrets', 'configmaps'], verbs: ['create', 'get', 'patch'] },
-            { apiGroups: ['argoproj.io'], resources: ['applicationsets', 'applications'], verbs: ['create', 'get', 'patch', 'list'] },
+            { apiGroups: [''], resources: ['namespaces', 'secrets', 'configmaps'], verbs: ['create', 'get', 'list', 'patch', 'update'] },
+            { apiGroups: ['argoproj.io'], resources: ['applicationsets', 'applications'], verbs: ['create', 'get', 'list', 'patch', 'update'] },
           ],
         },
         {
