@@ -824,49 +824,26 @@ export class EksClusterStack extends cdk.Stack {
     postConfirmFn.addEnvironment('USER_POOL_ID', userPool.userPoolId);
 
     // Lambda triggers — use custom resource to avoid circular dependency (aws/aws-cdk#7016).
-    // IMPORTANT: updateUserPool is a full replacement — ALL properties must be included
-    // or they get reset to defaults. Mirror CDK UserPool constructor settings here.
-    const cognitoTriggerParams = {
-      UserPoolId: userPool.userPoolId,
-      AutoVerifiedAttributes: ['email'],
-      Policies: {
-        PasswordPolicy: {
-          MinimumLength: 12,
-          RequireUppercase: true,
-          RequireLowercase: true,
-          RequireNumbers: true,
-          RequireSymbols: false,
-        },
+    // A dedicated Lambda does read-modify-write: DescribeUserPool → merge LambdaConfig → UpdateUserPool.
+    // This safely attaches triggers without overwriting any other UserPool settings.
+    const triggerAttacherFn = new lambda.Function(this, 'CognitoTriggerAttacher', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('lambda/cognito-triggers'),
+      timeout: cdk.Duration.seconds(30),
+    });
+    triggerAttacherFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:DescribeUserPool', 'cognito-idp:UpdateUserPool'],
+      resources: [userPool.userPoolArn],
+    }));
+
+    new cdk.CustomResource(this, 'CognitoTriggers', {
+      serviceToken: triggerAttacherFn.functionArn,
+      properties: {
+        UserPoolId: userPool.userPoolId,
+        PreSignUpArn: preSignupFn.functionArn,
+        PostConfirmationArn: postConfirmFn.functionArn,
       },
-      AdminCreateUserConfig: { AllowAdminCreateUserOnly: !selfSignupEnabled },
-      LambdaConfig: {
-        PreSignUp: preSignupFn.functionArn,
-        PostConfirmation: postConfirmFn.functionArn,
-      },
-    };
-    new cr.AwsCustomResource(this, 'CognitoTriggers', {
-      onCreate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: cognitoTriggerParams,
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
-      },
-      onUpdate: {
-        service: 'CognitoIdentityServiceProvider',
-        action: 'updateUserPool',
-        parameters: cognitoTriggerParams,
-        physicalResourceId: cr.PhysicalResourceId.of('cognito-triggers'),
-      },
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['cognito-idp:UpdateUserPool'],
-          resources: [userPool.userPoolArn],
-        }),
-        new iam.PolicyStatement({
-          actions: ['lambda:AddPermission', 'lambda:RemovePermission'],
-          resources: [preSignupFn.functionArn, postConfirmFn.functionArn],
-        }),
-      ]),
     });
 
     // Lambda invoke permissions for Cognito
