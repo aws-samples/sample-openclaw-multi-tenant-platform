@@ -2,11 +2,17 @@ import os
 import re
 import json
 import base64
+import logging
 import secrets
+import ssl
+import time
 import urllib.request
 import urllib.parse
 import boto3
 from botocore.exceptions import ClientError
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 eks_client = boto3.client('eks')
 sns = boto3.client('sns')
@@ -50,7 +56,6 @@ def _get_eks_context():
     if _eks_context_cache is not None:
         return _eks_context_cache
 
-    import ssl
     import tempfile
     cluster = eks_client.describe_cluster(name=CLUSTER_NAME)['cluster']
     endpoint = cluster['endpoint']
