@@ -1171,6 +1171,7 @@ export class EksClusterStack extends cdk.Stack {
       { id: 'AwsSolutions-COG3', reason: 'AdvancedSecurityMode adds cost. See security.md Production Hardening.' },
       { id: 'AwsSolutions-CFR1', reason: 'Geo restrictions not needed for sample.' },
       { id: 'AwsSolutions-CFR3', reason: 'CloudFront access logging omitted for sample cost.' },
+      { id: 'AwsSolutions-CFR4', reason: 'No-domain mode uses default CloudFront cert (TLSv1). Custom domain mode uses TLSv1.2.' },
       { id: 'AwsSolutions-CFR7', reason: 'Using OAI for CloudFrontWebDistribution. OAC requires Distribution L2 migration.' },
       { id: 'AwsSolutions-EC23', reason: 'ALB SG restricted to CloudFront prefix list IPs, not 0.0.0.0/0.' },
       { id: 'AwsSolutions-EKS1', reason: 'EKS public endpoint for kubectl access. See security.md.' },
