@@ -20,6 +20,7 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as efs from 'aws-cdk-lib/aws-efs';
 import * as kms from 'aws-cdk-lib/aws-kms';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { KubectlV35Layer } from '@aws-cdk/lambda-layer-kubectl-v35';
 import { NagSuppressions } from 'cdk-nag';
 import { Construct } from 'constructs';
@@ -68,6 +69,13 @@ export class EksClusterStack extends cdk.Stack {
     for (const subnet of vpc.privateSubnets) {
       cdk.Tags.of(subnet).add(`kubernetes.io/cluster/${clusterName}`, 'owned');
     }
+
+    // VPC Endpoints — reduce NAT Gateway costs for AWS service traffic
+    // S3 Gateway endpoint is free; Interface endpoints ~$7/mo/AZ
+    vpc.addGatewayEndpoint('S3Endpoint', { service: ec2.GatewayVpcEndpointAwsService.S3 });
+    vpc.addInterfaceEndpoint('StsEndpoint', { service: ec2.InterfaceVpcEndpointAwsService.STS });
+    vpc.addInterfaceEndpoint('EcrApiEndpoint', { service: ec2.InterfaceVpcEndpointAwsService.ECR });
+    vpc.addInterfaceEndpoint('EcrDkrEndpoint', { service: ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER });
 
     // ── EKS Cluster ─────────────────────────────────────────────────────────
     // VPC Flow Logs — network forensics for all traffic
@@ -211,16 +219,6 @@ export class EksClusterStack extends cdk.Stack {
     });
     fileSystem.connections.allowFrom(cluster, ec2.Port.tcp(2049), 'EKS nodes to EFS NFS');
 
-    // denyAnonymousAccess feature flag creates a policy missing ClientMount.
-    // EFS CSI driver needs ClientMount to mount access points.
-    fileSystem.addToResourcePolicy(new iam.PolicyStatement({
-      actions: ['elasticfilesystem:ClientMount'],
-      principals: [new iam.AnyPrincipal()],
-      conditions: {
-        Bool: { 'elasticfilesystem:AccessedViaMountTarget': 'true' },
-      },
-    }));
-
     // ── EFS CSI Driver (with Pod Identity IAM) ──────────────────────────────
     const efsCsiRole = new iam.Role(this, 'EfsCsiRole', {
       assumedBy: new iam.ServicePrincipal('pods.eks.amazonaws.com'),
@@ -242,6 +240,15 @@ export class EksClusterStack extends cdk.Stack {
       }],
     });
     efsCsiAddon.node.addDependency(fileSystem);
+
+    // EFS resource policy — scoped to EFS CSI driver role (not AnyPrincipal)
+    fileSystem.addToResourcePolicy(new iam.PolicyStatement({
+      actions: ['elasticfilesystem:ClientMount'],
+      principals: [new iam.ArnPrincipal(efsCsiRole.roleArn)],
+      conditions: {
+        Bool: { 'elasticfilesystem:AccessedViaMountTarget': 'true' },
+      },
+    }));
 
     // efs-sc StorageClass — dynamic provisioning creates per-tenant access points
     const efsStorageClass = new eks.KubernetesManifest(this, 'EfsStorageClass', {
@@ -436,6 +443,8 @@ export class EksClusterStack extends cdk.Stack {
       repository: 'oci://public.ecr.aws/karpenter/karpenter',
       namespace: 'karpenter',
       createNamespace: false,
+      // Karpenter v1.3.x uses karpenter.sh/v1 and karpenter.k8s.aws/v1 APIs.
+      // When upgrading, check API version compatibility: https://karpenter.sh/docs/upgrading/
       version: '1.3.3',
       values: {
         serviceAccount: { create: false, name: 'karpenter' },
@@ -591,7 +600,10 @@ export class EksClusterStack extends cdk.Stack {
       : undefined;
 
     // ── CloudWatch Alerts ──────────────────────────────────────────────────
-    const alertsTopic = new sns.Topic(this, 'AlertsTopic', { topicName: 'OpenClawAlerts' });
+    const alertsTopic = new sns.Topic(this, 'AlertsTopic', {
+      topicName: 'OpenClawAlerts',
+      masterKey: eksSecretsKey,
+    });
 
     const podRestartAlarm = new cloudwatch.Alarm(this, 'PodRestartAlarm', {
       alarmName: 'OpenClaw-PodRestartCount',
@@ -702,12 +714,19 @@ export class EksClusterStack extends cdk.Stack {
     // ── Lambda: Pre-Signup ──────────────────────────────────────────────────
     const selfSignupEnabled = this.node.tryGetContext('selfSignupEnabled') !== false;
 
+    // Dead-letter queue for Lambda trigger failures
+    const triggerDlq = new sqs.Queue(this, 'TriggerDLQ', {
+      encryption: sqs.QueueEncryption.SQS_MANAGED,
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
     const preSignupFn = new lambda.Function(this, 'PreSignupFn', {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'index.handler',
       code: lambda.Code.fromAsset('lambda/pre-signup'),
       environment: { SNS_TOPIC_ARN: alertsTopic.topicArn, ALLOWED_DOMAINS: allowedEmailDomains },
       timeout: cdk.Duration.seconds(10),
+      deadLetterQueue: triggerDlq,
     });
     alertsTopic.grantPublish(preSignupFn);
 
@@ -725,6 +744,7 @@ export class EksClusterStack extends cdk.Stack {
         TENANT_ROLE_ARN: tenantRole.roleArn,
       },
       timeout: cdk.Duration.seconds(60),
+      deadLetterQueue: triggerDlq,
     });
     alertsTopic.grantPublish(postConfirmFn);
     postConfirmFn.addToRolePolicy(new iam.PolicyStatement({
@@ -745,7 +765,7 @@ export class EksClusterStack extends cdk.Stack {
     // for Cognito-scoped permissions to avoid circular dependency.
     // See: https://github.com/aws/aws-cdk/issues/7016
     const cognitoDomainPrefix = this.node.tryGetContext('cognitoDomain')
-      || `openclaw-${this.account}-${this.region}`.slice(0, 63);
+      || `openclaw-${this.account}-${this.region}`;
 
     const userPool = new cognito.UserPool(this, 'UserPool', {
       userPoolName: `openclaw-${this.stackName}`,
@@ -763,7 +783,7 @@ export class EksClusterStack extends cdk.Stack {
         gateway_token: new cognito.StringAttribute({ mutable: true }),
         tenant_name: new cognito.StringAttribute({ mutable: true }),
       },
-      removalPolicy: cdk.RemovalPolicy.RETAIN,  // Protect user accounts on stack delete
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     userPool.addDomain('CognitoDomain', {
@@ -860,8 +880,32 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     cluster.awsAuth.addRoleMapping(postConfirmFn.role!, {
-      groups: ['system:masters'],
+      groups: ['openclaw:tenant-provisioner'],
       username: 'lambda-post-confirm',
+    });
+
+    // RBAC: scoped permissions for PostConfirmation Lambda (not system:masters)
+    new eks.KubernetesManifest(this, 'TenantProvisionerRbac', {
+      cluster,
+      manifest: [
+        {
+          apiVersion: 'rbac.authorization.k8s.io/v1',
+          kind: 'ClusterRole',
+          metadata: { name: 'openclaw-tenant-provisioner' },
+          rules: [
+            { apiGroups: [''], resources: ['namespaces', 'secrets', 'configmaps'], verbs: ['create', 'get', 'patch'] },
+            { apiGroups: ['argoproj.io'], resources: ['applicationsets', 'applications'], verbs: ['create', 'get', 'patch', 'list'] },
+          ],
+        },
+        {
+          apiVersion: 'rbac.authorization.k8s.io/v1',
+          kind: 'ClusterRoleBinding',
+          metadata: { name: 'openclaw-tenant-provisioner' },
+          roleRef: { apiGroup: 'rbac.authorization.k8s.io', kind: 'ClusterRole', name: 'openclaw-tenant-provisioner' },
+          subjects: [{ kind: 'Group', name: 'openclaw:tenant-provisioner', apiGroup: 'rbac.authorization.k8s.io' }],
+        },
+      ],
+      overwrite: true,
     });
 
     // ── CloudFront WAF (via Custom Resource in us-east-1) ─────────────────
@@ -944,6 +988,8 @@ export class EksClusterStack extends cdk.Stack {
           region: 'us-east-1',
           physicalResourceId: cr.PhysicalResourceId.fromResponse('Summary.ARN'),
         },
+        // NOTE: No onDelete — WAF deleteWebACL requires LockToken from GetWebACL,
+        // which AwsCustomResource cannot chain. force-cleanup.sh handles WAF deletion.
         policy: cr.AwsCustomResourcePolicy.fromStatements([
           new iam.PolicyStatement({
             actions: ['wafv2:CreateWebACL', 'wafv2:GetWebACL'],

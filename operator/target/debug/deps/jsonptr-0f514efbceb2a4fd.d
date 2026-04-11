@@ -1,0 +1,17 @@
+/Users/hclo/Documents/Demos/sample-openclaw-multi-tenant-platform/operator/target/debug/deps/jsonptr-0f514efbceb2a4fd.d: /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/lib.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/assign.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/delete.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/resolve.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/diagnostic.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer/slice.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/token.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/index.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/component.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/../README.md
+
+/Users/hclo/Documents/Demos/sample-openclaw-multi-tenant-platform/operator/target/debug/deps/libjsonptr-0f514efbceb2a4fd.rmeta: /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/lib.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/assign.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/delete.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/resolve.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/diagnostic.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer/slice.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/token.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/index.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/component.rs /Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/../README.md
+
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/lib.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/assign.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/delete.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/resolve.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/diagnostic.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/pointer/slice.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/token.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/index.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/component.rs:
+/Users/hclo/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/jsonptr-0.7.1/src/../README.md:
+
+# env-dep:CARGO_PKG_VERSION=0.7.1

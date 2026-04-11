@@ -158,12 +158,12 @@ fi
 
 VERIFIED=false
 CODE=""
-# Resolve ALB IP for --resolve (avoids -k flag, proper cert validation against DOMAIN)
-ALB_IP=$(dig +short "${ALB}" 2>/dev/null | head -1)
+# Verify through CloudFront (the actual user path), not directly to ALB
+CF_DOMAIN=$(get_output DistributionDomainName 2>/dev/null || echo "")
+VERIFY_URL="https://${CF_DOMAIN:-$DOMAIN}/t/${TENANT}/"
 for i in $(seq 1 20); do
   CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-    --resolve "${DOMAIN}:443:${ALB_IP}" \
-    "https://${DOMAIN}/t/${TENANT}/" 2>/dev/null || echo "000")
+    "${VERIFY_URL}" 2>/dev/null || echo "000")
   if [[ "$CODE" = "200" ]]; then
     VERIFIED=true
     break
@@ -184,6 +184,6 @@ else
   echo "  Namespace: ${NAMESPACE}"
   echo "  Resources created but endpoint not yet responding (HTTP ${CODE})."
   echo "  This is normal if ALB is still provisioning (~2-3 min)."
-  echo "  Check: curl --resolve '${DOMAIN}:443:${ALB_IP}' https://${DOMAIN}/t/${TENANT}/"
+  echo "  Check: curl -s -o /dev/null -w '%{http_code}' ${VERIFY_URL}"
   echo "======================================================"
 fi

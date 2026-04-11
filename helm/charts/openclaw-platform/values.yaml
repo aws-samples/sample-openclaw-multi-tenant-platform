@@ -83,6 +83,8 @@ config:
         id: gateway-token
     controlUi:
       allowedOrigins: []
+      # Device auth requires OAuth device flow support. Set to true only for
+      # web-only deployments where device auth is not needed.
       dangerouslyDisableDeviceAuth: true
   
   browser:

@@ -145,6 +145,20 @@ Tenant Provisioning:
             + HTTPRoute + TGC + NetworkPolicy + ResourceQuota + PDB + KEDA HSO
 ```
 
+## Design Decisions
+
+### ApplicationSet Delete Policy
+The ArgoCD ApplicationSet uses `Delete: false` — deleting a tenant from the ApplicationSet generator list does NOT delete the ArgoCD Application or its Kubernetes resources. This is intentional: accidental generator changes should not destroy tenant data. To remove a tenant, manually delete the ArgoCD Application and namespace.
+
+### No-Domain Mode: HTTP Origin
+When deployed without a custom domain, CloudFront connects to the ALB origin via HTTP (not HTTPS). This is because ALB default DNS names (`*.elb.amazonaws.com`) cannot have public TLS certificates — AWS does not issue certificates for `*.amazonaws.com` domains. CloudFront still serves HTTPS to end users; only the CloudFront-to-ALB hop is HTTP. The ALB security group restricts access to CloudFront prefix list IPs only.
+
+### KEDA Scale-to-Zero Trade-off
+KEDA HTTP Add-on intercepts requests to scaled-down tenants and wakes the pod. If the interceptor itself is unavailable, requests return 502. There is no fallback routing path. This is acceptable for the sample because the interceptor runs as a Deployment with multiple replicas on system nodes.
+
+### Amazon CloudFront AWS WAF Cleanup
+The Amazon CloudFront AWS WAF (CLOUDFRONT scope) is created in us-east-1 via `AwsCustomResource`. The WAF `deleteWebACL` API requires a `LockToken` from `GetWebACL`, which `AwsCustomResource` cannot chain in a single call. Therefore, AWS WAF cleanup is handled by `scripts/force-cleanup.sh` rather than AWS CDK's `onDelete` handler.
+
 ## Related Docs
 
 - [Security Deep Dive](security.md)

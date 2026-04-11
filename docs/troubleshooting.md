@@ -256,3 +256,29 @@ aws ec2 delete-security-group --group-id "$SG_ID"
 ### Retained resources after `cdk destroy`
 
 Amazon EFS file systems and Amazon S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
+
+### Amazon EFS "Failed to locate a free GID"
+
+If PVC creation fails with `Failed to locate a free GID for access point`, the Amazon EFS StorageClass GID range is exhausted. The AWS CDK stack configures `gidRangeStart: 1000` and `gidRangeEnd: 2000`, supporting up to 1000 tenants. If you hit this limit:
+
+```bash
+# Check current GID allocation
+kubectl get sc efs-sc -o yaml | grep gid
+
+# Expand range (edit StorageClass)
+kubectl edit sc efs-sc
+# Change gidRangeEnd to a higher value (e.g., 5000)
+```
+
+### Amazon CloudFront AWS WAF orphaned after `cdk destroy`
+
+When the stack is deployed outside us-east-1, the Amazon CloudFront AWS WAF is created via `AwsCustomResource` in us-east-1. `cdk destroy` cannot automatically delete it (requires `LockToken` from a separate API call). Use `scripts/force-cleanup.sh` which handles AWS WAF cleanup, or manually delete:
+
+```bash
+# List WAFs in us-east-1
+aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1
+
+# Delete (requires Id and LockToken from GetWebACL)
+aws wafv2 get-web-acl --name OpenClaw-CF-WAF-us-west-2 --scope CLOUDFRONT --id <ID> --region us-east-1
+aws wafv2 delete-web-acl --name OpenClaw-CF-WAF-us-west-2 --scope CLOUDFRONT --id <ID> --lock-token <TOKEN> --region us-east-1
+```
