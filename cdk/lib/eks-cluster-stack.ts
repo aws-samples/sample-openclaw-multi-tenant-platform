@@ -11,6 +11,7 @@ import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as cw_actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
@@ -943,35 +944,58 @@ export class EksClusterStack extends cdk.Stack {
     }
 
     const cfWafName = `OpenClaw-CF-WAF-${this.region}`;
-    const createCfWaf = new cr.AwsCustomResource(this, 'CloudFrontWaf', {
-      onCreate: {
-        service: 'WAFV2',
-        action: 'createWebACL',
-        parameters: {
-          Name: cfWafName,
-          Scope: 'CLOUDFRONT',
-          DefaultAction: { Allow: {} },
-          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'OpenClawCloudFrontWaf', SampledRequestsEnabled: true },
-          Rules: wafRules,
-        },
-        region: 'us-east-1',
-        physicalResourceId: cr.PhysicalResourceId.fromResponse('Summary.ARN'),
-      },
-      // onDelete not implemented — WAF deletion requires LockToken which changes.
-      // Use force-cleanup.sh to delete WAF after stack destroy.
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['wafv2:CreateWebACL', 'wafv2:GetWebACL'],
-          resources: ['*'],
-        }),
-      ]),
-    });
-    NagSuppressions.addResourceSuppressions(createCfWaf, [{
-      id: 'AwsSolutions-IAM5',
-      reason: 'WAF custom resource needs wildcard because WAF ARN is not known at deploy time (created in us-east-1 via SDK call).',
-    }], true);
 
-    const cfWafArn = createCfWaf.getResponseField('Summary.ARN');
+    // CloudFront WAF: if stack is in us-east-1, use native CfnWebACL (simpler, idempotent).
+    // If not, use AwsCustomResource to create WAF in us-east-1 via SDK call.
+    let cfWafArn: string;
+
+    if (this.region === 'us-east-1') {
+      const cfWaf = new wafv2.CfnWebACL(this, 'CloudFrontWaf', {
+        defaultAction: { allow: {} },
+        scope: 'CLOUDFRONT',
+        visibilityConfig: {
+          cloudWatchMetricsEnabled: true,
+          metricName: 'OpenClawCloudFrontWaf',
+          sampledRequestsEnabled: true,
+        },
+        rules: wafRules.map((r: any) => ({
+          name: r.Name, priority: r.Priority,
+          ...(r.Action ? { action: { block: {} } } : { overrideAction: { none: {} } }),
+          statement: r.Statement.RateBasedStatement
+            ? { rateBasedStatement: { limit: r.Statement.RateBasedStatement.Limit, aggregateKeyType: r.Statement.RateBasedStatement.AggregateKeyType } }
+            : { managedRuleGroupStatement: { vendorName: r.Statement.ManagedRuleGroupStatement.VendorName, name: r.Statement.ManagedRuleGroupStatement.Name } },
+          visibilityConfig: { cloudWatchMetricsEnabled: r.VisibilityConfig.CloudWatchMetricsEnabled, metricName: r.VisibilityConfig.MetricName, sampledRequestsEnabled: r.VisibilityConfig.SampledRequestsEnabled },
+        })),
+      });
+      cfWafArn = cfWaf.attrArn;
+    } else {
+      const createCfWaf = new cr.AwsCustomResource(this, 'CloudFrontWaf', {
+        onCreate: {
+          service: 'WAFV2',
+          action: 'createWebACL',
+          parameters: {
+            Name: cfWafName,
+            Scope: 'CLOUDFRONT',
+            DefaultAction: { Allow: {} },
+            VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: 'OpenClawCloudFrontWaf', SampledRequestsEnabled: true },
+            Rules: wafRules,
+          },
+          region: 'us-east-1',
+          physicalResourceId: cr.PhysicalResourceId.fromResponse('Summary.ARN'),
+        },
+        policy: cr.AwsCustomResourcePolicy.fromStatements([
+          new iam.PolicyStatement({
+            actions: ['wafv2:CreateWebACL', 'wafv2:GetWebACL'],
+            resources: ['*'],
+          }),
+        ]),
+      });
+      NagSuppressions.addResourceSuppressions(createCfWaf, [{
+        id: 'AwsSolutions-IAM5',
+        reason: 'WAF custom resource needs wildcard because WAF ARN is not known at deploy time (created in us-east-1 via SDK call).',
+      }], true);
+      cfWafArn = createCfWaf.getResponseField('Summary.ARN');
+    }
 
     // S3 bucket for auth UI static site
     const authUiBucket = new s3.Bucket(this, 'AuthUiBucket', {
