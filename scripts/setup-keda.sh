@@ -39,6 +39,7 @@ fi
 
 echo ""
 echo "==> Creating shared interceptor TargetGroupConfiguration"
+kubectl wait --for=condition=Established crd/targetgroupconfigurations.gateway.k8s.aws --timeout=30s 2>/dev/null || true
 kubectl apply -f - <<'EOF'
 apiVersion: gateway.k8s.aws/v1beta1
 kind: TargetGroupConfiguration
