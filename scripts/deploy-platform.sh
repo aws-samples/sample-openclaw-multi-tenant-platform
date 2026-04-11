@@ -22,7 +22,8 @@ else
 fi
 
 echo "==> Reading config from stack outputs"
-STACK="OpenClawEksStack"
+# Use dynamic stack name discovery (from common.sh)
+# STACK is already set by common.sh
 
 get_stack_output() {
   aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \

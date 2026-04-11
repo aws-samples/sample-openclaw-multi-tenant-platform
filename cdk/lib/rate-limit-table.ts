@@ -21,12 +21,12 @@ export class RateLimitTable extends Construct {
       deletionProtection: false,   // Sample code, can be deleted
       removalPolicy: cdk.RemovalPolicy.DESTROY,  // Sample code
 
-      // Tags for cost tracking
-      tags: {
-        Component: 'auth',
-        Purpose: 'rate-limiting',
-      },
+      // Tags applied via cdk.Tags.of() after creation
     });
+
+    // Apply tags for cost tracking
+    cdk.Tags.of(this.table).add('Component', 'auth');
+    cdk.Tags.of(this.table).add('Purpose', 'rate-limiting');
 
     // Output table name for Lambda environment variable
     new cdk.CfnOutput(this, 'RateLimitTableName', {
