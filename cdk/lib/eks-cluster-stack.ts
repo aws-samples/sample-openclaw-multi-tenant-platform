@@ -810,6 +810,7 @@ export class EksClusterStack extends cdk.Stack {
         action: 'updateUserPool',
         parameters: {
           UserPoolId: userPool.userPoolId,
+          AutoVerifiedAttributes: ["email"],
           LambdaConfig: {
             PreSignUp: preSignupFn.functionArn,
             PostConfirmation: postConfirmFn.functionArn,
@@ -822,6 +823,7 @@ export class EksClusterStack extends cdk.Stack {
         action: 'updateUserPool',
         parameters: {
           UserPoolId: userPool.userPoolId,
+          AutoVerifiedAttributes: ["email"],
           LambdaConfig: {
             PreSignUp: preSignupFn.functionArn,
             PostConfirmation: postConfirmFn.functionArn,
