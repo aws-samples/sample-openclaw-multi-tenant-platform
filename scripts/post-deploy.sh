@@ -222,7 +222,10 @@ except Exception as e:
 done
 rm -f /tmp/cf-config-full.json /tmp/cf-config-update.json /tmp/cf-update-error.log
 
-echo "  CloudFront updated (deploying ~3-5 min)"
+# Invalidate cached S3 responses for /t/* so the new ALB behavior takes effect immediately
+aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/t/*" \
+  --query 'Invalidation.Id' --output text > /dev/null
+echo "  CloudFront updated + cache invalidated"
 
 # 7. Set bucket policy for error pages (OAC requires explicit bucket policy)
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
