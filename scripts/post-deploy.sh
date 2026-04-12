@@ -23,10 +23,11 @@ echo "  Domain: $DOMAIN"
 echo "  Custom domain: $CUSTOM_DOMAIN"
 
 # 1. Find internet-facing ALB (created by ALB Controller when Gateway is reconciled)
+# Use sort_by + [-1] to pick the most recently created ALB (handles orphans from prior deploys)
 ALB_ARN=$(aws elbv2 describe-load-balancers --region "$REGION" \
-  --query "LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')].LoadBalancerArn" --output text)
+  --query "sort_by(LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')],&CreatedTime)[-1].LoadBalancerArn" --output text)
 ALB_DNS=$(aws elbv2 describe-load-balancers --region "$REGION" \
-  --query "LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')].DNSName" --output text)
+  --query "sort_by(LoadBalancers[?Scheme=='internet-facing' && contains(LoadBalancerName,'openclaw')],&CreatedTime)[-1].DNSName" --output text)
 
 if [ -z "$ALB_ARN" ] || [ "$ALB_ARN" = "None" ]; then
   echo "Error: Internet-facing ALB not found. Ensure deploy-platform.sh ran and at least one tenant exists."
