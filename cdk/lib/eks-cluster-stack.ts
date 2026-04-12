@@ -606,7 +606,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // ── CloudWatch Alerts ──────────────────────────────────────────────────
     const alertsTopic = new sns.Topic(this, 'AlertsTopic', {
-      topicName: 'OpenClawAlerts',
+      topicName: `${this.stackName}-Alerts`,
       masterKey: eksSecretsKey,
     });
 

@@ -10,7 +10,8 @@ export class RateLimitTable extends Construct {
 
     // DynamoDB table for optimized pre-signup rate limiting
     this.table = new dynamodb.Table(this, 'SignupRateLimit', {
-      tableName: 'openclaw-signup-rate-limit',
+      // Let CloudFormation generate a unique table name to avoid conflicts
+      // across multiple stack deployments in the same account/region.
       partitionKey: {
         name: 'domain_hour',
         type: dynamodb.AttributeType.STRING,
