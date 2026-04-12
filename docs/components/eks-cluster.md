@@ -8,7 +8,7 @@ All infrastructure defined in `cdk/lib/eks-cluster-stack.ts`.
 
 | Setting | Value |
 |---------|-------|
-| Cluster name | `openclaw-cluster` |
+| Cluster name | `openclaw-{stackName}` (dynamic, or override via `clusterName` context) |
 | Kubernetes version | 1.32 |
 | Auth mode | `API_AND_CONFIG_MAP` |
 | Default capacity | 0 (all capacity via nodegroups/Karpenter) |

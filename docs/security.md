@@ -319,7 +319,7 @@ For production deployments, consider the following enhancements:
 10. **Secrets rotation**: enable Secrets Manager automatic rotation with a AWS Lambda rotator
 11. **Amazon EKS API endpoint access**: the default configuration uses public+private endpoint access so that customers can run `kubectl` after cloning the sample. For production, restrict to `EndpointAccess.PRIVATE` (requires VPN/Direct Connect) or `EndpointAccess.PUBLIC_AND_PRIVATE` with CIDR restrictions limiting API access to your corporate IP ranges
 12. **VPC 3 AZs**: the sample uses 2 AZs to minimize NAT Gateway costs. Production deployments should use 3 AZs for higher availability
-13. **Amazon S3 access logging**: add a dedicated log bucket for auth UI and error pages buckets
+13. **Amazon S3 access logging**: add a dedicated log bucket for auth UI bucket
 14. **PodDisruptionBudgets**: add PDBs for ArgoCD and KEDA controllers to prevent simultaneous eviction during node rotation
 15. **Amazon EKS add-on version pinning**: the sample uses default (latest compatible) versions for easier maintenance. Pin specific versions in production for reproducibility
 

@@ -2,14 +2,13 @@
 set -euo pipefail
 
 # Post-deploy script: adds ALB origin to the CDK-managed CloudFront distribution
-# Run after: cdk deploy + deploy-platform.sh + setup-keda.sh + first tenant creation
+# Run after: cdk deploy + deploy-platform.sh + setup-keda.sh
 #
-# The CDK CloudFront serves auth UI from S3 (default behavior).
-# This script adds the ALB as a second origin with /t/* behavior for tenant traffic:
+# The CDK CloudFront serves auth UI from S3 (default behavior) with a CloudFront
+# Function for SPA routing. This script adds the ALB as a second origin:
 #   CloudFront (claw.domain)
-#     /        -> S3 (auth UI)        [CDK-managed]
+#     /        -> S3 (auth UI)        [CDK-managed, SPA rewrite via CF Function]
 #     /t/*     -> ALB (tenant pods)   [added by this script]
-#     /error/* -> S3 (error pages)    [added by this script]
 
 source "$(dirname "$0")/lib/common.sh"
 

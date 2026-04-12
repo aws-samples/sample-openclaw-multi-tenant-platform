@@ -188,19 +188,10 @@ Sign up at `https://<your-domain>/auth/` with an email matching your `allowedEma
 ## Cleanup
 
 ```bash
-# 1. Delete all tenants
-for tenant in $(kubectl get applicationset openclaw-tenants -n argocd -o jsonpath='{.spec.generators[0].list.elements[*].name}'); do
-  ./scripts/delete-tenant.sh "$tenant" --force
-done
-
-# 2. Amazon CloudFront ALB origin and Route53 are cleaned up by cdk destroy
-
-# 3. Destroy AWS CDK stack
-cd cdk && npx cdk destroy  # Automatically detects stack name
-
-# 4. Clean up retained resources (not deleted by AWS CDK — data protection)
-./scripts/cleanup-test-resources.sh
+REGION=us-east-1 bash scripts/destroy-all.sh
 ```
+
+`destroy-all.sh` removes everything in reverse order: tenants → KEDA → Gateway (ALB) → ArgoCD → CDK destroy → log groups. This ensures K8s-managed resources (ALB, Target Groups) are cleaned up before VPC deletion.
 
 > **Retained resources**: Amazon EFS file systems use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
 >

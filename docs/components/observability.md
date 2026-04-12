@@ -7,8 +7,10 @@ Deployed as Amazon EKS addon (`amazon-cloudwatch-observability`) via AWS CDK. Us
 Collects pod stdout to CloudWatch Logs -- foundation for usage tracking and custom metrics.
 
 Log groups:
-- `/aws/containerinsights/openclaw-cluster/application` -- application logs (token usage)
-- `/aws/containerinsights/openclaw-cluster/performance` -- pod lifecycle metrics (cold start)
+- `/aws/containerinsights/{cluster-name}/application` -- application logs (token usage)
+- `/aws/containerinsights/{cluster-name}/performance` -- pod lifecycle metrics (cold start)
+
+> `{cluster-name}` is dynamically generated from the stack name (e.g., `openclaw-OpenClawEksStack`).
 
 ## CloudWatch Alarms
 
