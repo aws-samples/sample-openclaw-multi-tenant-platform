@@ -796,6 +796,12 @@ export class EksClusterStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Explicit L1 override: ensure self-signup is always enabled.
+    // CDK's selfSignUpEnabled maps to AllowAdminCreateUserOnly=false, but
+    // CloudFormation has been observed to default to true on fresh deploys.
+    (userPool.node.defaultChild as cognito.CfnUserPool).addPropertyOverride(
+      'AdminCreateUserConfig.AllowAdminCreateUserOnly', false);
+
     userPool.addDomain('CognitoDomain', {
       cognitoDomain: { domainPrefix: cognitoDomainPrefix },
     });
