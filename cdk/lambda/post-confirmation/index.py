@@ -25,7 +25,8 @@ CLUSTER_NAME = os.environ['CLUSTER_NAME']
 TENANT_ROLE_ARN = os.environ['TENANT_ROLE_ARN']
 DOMAIN = os.environ.get('DOMAIN', 'example.com')
 REGION = os.environ.get('AWS_REGION', 'us-west-2')
-USER_POOL_ID = os.environ['USER_POOL_ID']
+# USER_POOL_ID is read from event['userPoolId'] at runtime to avoid
+# circular dependency between UserPool and Lambda trigger in CDK.
 
 ALLOWED_URL_SCHEMES = {'https'}
 
@@ -232,6 +233,7 @@ def handler(event, context):
     global _eks_context_cache
     _eks_context_cache = None
 
+    user_pool_id = event['userPoolId']
     email = event['request']['userAttributes']['email']
     local = email.split('@')[0].lower()
     base_name = re.sub(r'[^a-z0-9-]', '', local)[:20].strip('-')
@@ -274,7 +276,7 @@ def handler(event, context):
 
     # 5. Store tenant name in Cognito so frontend can look it up on sign-in
     cognito.admin_update_user_attributes(
-        UserPoolId=USER_POOL_ID, Username=username,
+        UserPoolId=user_pool_id, Username=username,
         UserAttributes=[
             {'Name': 'custom:gateway_token', 'Value': token},
             {'Name': 'custom:tenant_name', 'Value': tenant},

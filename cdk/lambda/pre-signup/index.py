@@ -5,13 +5,12 @@ from datetime import datetime, timedelta, timezone
 import boto3
 
 ALLOWED_DOMAINS = [d.strip() for d in os.environ.get('ALLOWED_DOMAINS', 'example.com').split(',')]
-USER_POOL_ID = os.environ.get('USER_POOL_ID', '')
 RATE_LIMIT = int(os.environ.get('SIGNUP_RATE_LIMIT', '5'))
 
-cognito_client = boto3.client('cognito-idp') if USER_POOL_ID else None
+cognito_client = boto3.client('cognito-idp')
 
 
-def _count_recent_signups(domain):
+def _count_recent_signups(domain, user_pool_id):
     """Count users with the same email domain created in the last hour.
 
     Performance note: Cognito ListUsers does not support domain-based filtering
@@ -22,12 +21,12 @@ def _count_recent_signups(domain):
     For production deployments with 1000+ users, consider replacing this with a
     DynamoDB atomic counter keyed on (domain, hour) to avoid O(n) scans.
     """
-    if not cognito_client or not USER_POOL_ID:
+    if not user_pool_id:
         return 0
     cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
     count = 0
     params = {
-        'UserPoolId': USER_POOL_ID,
+        'UserPoolId': user_pool_id,
         'Limit': 60,
     }
     while True:
@@ -54,7 +53,8 @@ def handler(event, context):
         raise Exception('Registration is restricted to company email addresses.')
 
     # Rate limit: max RATE_LIMIT signups per domain per hour
-    if _count_recent_signups(domain) >= RATE_LIMIT:
+    user_pool_id = event.get('userPoolId', '')
+    if _count_recent_signups(domain, user_pool_id) >= RATE_LIMIT:
         raise Exception(f'Too many signups from {domain}. Please try again later.')
 
     return event

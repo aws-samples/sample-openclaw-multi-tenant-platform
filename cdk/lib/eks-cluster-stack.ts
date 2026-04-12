@@ -829,15 +829,10 @@ export class EksClusterStack extends cdk.Stack {
       reason: 'Wildcard required to avoid circular dependency between UserPool and Lambda trigger. See aws/aws-cdk#7016.',
     }], true);
 
-    // USER_POOL_ID env var — use L1 override to avoid circular dependency.
-    // lambdaTriggers creates UserPool → Lambda dependency; addEnvironment would
-    // create Lambda → UserPool dependency (cycle). addOverride bypasses CDK
-    // dependency tracking while still resolving the Ref at deploy time.
-    const cfnUserPool = userPool.node.defaultChild as cognito.CfnUserPool;
-    (preSignupFn.node.defaultChild as lambda.CfnFunction)
-      .addOverride('Properties.Environment.Variables.USER_POOL_ID', cfnUserPool.ref);
-    (postConfirmFn.node.defaultChild as lambda.CfnFunction)
-      .addOverride('Properties.Environment.Variables.USER_POOL_ID', cfnUserPool.ref);
+    // USER_POOL_ID is NOT passed as env var to avoid circular dependency
+    // (lambdaTriggers: UserPool→Lambda, addEnvironment: Lambda→UserPool = cycle).
+    // Both Lambdas read event['userPoolId'] at runtime instead — Cognito trigger
+    // events always include the UserPool ID.
 
     // Lambda triggers now handled natively by CDK lambdaTriggers property
     // This eliminates configuration drift and removes ~40 lines of complex custom resource code
