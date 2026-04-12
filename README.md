@@ -88,60 +88,24 @@ cp cdk/cdk.json.example cdk/cdk.json
 # Edit cdk/cdk.json -- fill in context values (see cdk.json.example for full list)
 ```
 
-#### 2. Deploy Infrastructure
+#### 2. Deploy (one command)
 
 ```bash
 cd cdk && npm install
 cdk bootstrap  # Only needed once per account/region
-# If using a named AWS profile:
-#   export AWS_PROFILE=your-profile
-# Ensure your AWS CLI default region matches your target deployment region:
-# aws configure get region   # should show your target region
-npx cdk deploy
+cd ..
+REGION=us-west-2 bash scripts/deploy-all.sh
 ```
 
-Creates: Amazon EKS cluster, VPC, IAM roles, Amazon EFS, AWS Lambda, Amazon S3, Amazon CloudFront + AWS WAF (edge), CloudWatch, SNS (~20 min).
+`deploy-all.sh` runs all steps automatically: CDK deploy (~20 min), ArgoCD, platform resources, KEDA, CloudFront ALB origin + Route53, and Cognito verification.
 
-#### 3. Setup ArgoCD
-
-```bash
-aws eks update-kubeconfig --region <region> --name <cluster-name>
-bash scripts/setup-argocd.sh
-```
-
-Installs ArgoCD via Helm. For production, consider Amazon EKS ArgoCD Capability (managed).
-
-#### 4. Deploy Platform
-
-```bash
-bash scripts/deploy-platform.sh
-```
-
-`deploy-platform.sh` creates the `openclaw-system` namespace, injects values from `cdk/cdk.json` into the ApplicationSet and Gateway manifests, then applies them.
-
+> **Manual steps**: If you prefer to run each step individually, see `scripts/deploy-all.sh` for the sequence.
 
 > **ECR Pull-Through Cache (optional)**: For production, you can enable ECR pull-through cache to avoid GHCR rate limits. Set `ghcrCredentialArn` in `cdk.json` -- see `cdk.json.example` for details.
 
+#### 3. Test
 
-#### 5. Post-Deploy Setup
-
-```bash
-./scripts/setup-keda.sh                    # Scale-to-zero
-```
-
-Amazon Cognito triggers, CloudWatch alarms, audit logging, and usage tracking are all managed by AWS CDK -- no manual setup needed.
-
-#### 6. Create First Tenant
-
-```bash
-./scripts/create-tenant.sh alice --email alice@example.com
-```
-
-#### 7. Finalize
-
-```bash
-./scripts/post-deploy.sh          # Add ALB origin to Amazon CloudFront + Route53 + AWS WAF
-```
+Sign up at `https://<your-domain>/auth/` with an email matching your `allowedEmailDomains`.
 
 > **Note**: Auth UI is deployed automatically by AWS CDK (`BucketDeployment`). If you need to manually re-deploy or override config, run `./scripts/deploy-auth-ui.sh`.
 
@@ -238,14 +202,11 @@ cd cdk && npx cdk destroy  # Automatically detects stack name
 ./scripts/cleanup-test-resources.sh
 ```
 
-> **Retained resources**: Amazon EFS file systems and Amazon S3 error-page buckets use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
+> **Retained resources**: Amazon EFS file systems use `removalPolicy: RETAIN` to protect tenant data. After `cdk destroy`, these remain in your account. To fully clean up:
 >
 > ```bash
 > # List retained Amazon EFS (check for tenant data before deleting)
 > aws efs describe-file-systems --query 'FileSystems[?contains(Name,`TenantEfs`)].FileSystemId' --output text
->
-> # List retained Amazon S3 buckets
-> aws s3api list-buckets --query 'Buckets[?contains(Name,`openclaweks`)].Name' --output text
 > ```
 >
 > Delete manually after confirming no data is needed.

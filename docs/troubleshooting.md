@@ -255,7 +255,7 @@ aws ec2 delete-security-group --group-id "$SG_ID"
 
 ### Retained resources after `cdk destroy`
 
-Amazon EFS file systems and Amazon S3 error-page buckets are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
+Amazon EFS file systems are retained (data protection). They don't block redeployment but accumulate over multiple destroy/deploy cycles. See README "Cleanup" section for manual cleanup commands.
 
 ### Amazon EFS "Failed to locate a free GID"
 

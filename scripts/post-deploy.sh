@@ -16,7 +16,6 @@ source "$(dirname "$0")/lib/common.sh"
 DOMAIN=$(get_output DomainName)
 CUSTOM_DOMAIN=$(get_output CustomDomain)
 WAF_ARN=$(get_output CloudFrontWafArn)
-ERROR_BUCKET=$(get_output ErrorPagesBucketName)
 
 echo "==> Post-deploy setup"
 echo "  Domain: $DOMAIN"
@@ -38,26 +37,7 @@ echo "  ALB: $ALB_DNS"
 # 2. WAF is on CloudFront (managed by CDK custom resource). ALB WAF is optional — see docs/security.md.
 echo "  CloudFront WAF: $WAF_ARN"
 
-# 3. Upload error pages to S3
-echo "  -> Uploading error pages to s3://${ERROR_BUCKET}"
-STATIC_DIR="$(dirname "$0")/../helm/charts/openclaw-platform/static"
-if [ -f "${STATIC_DIR}/503.html" ]; then
-  aws s3 cp "${STATIC_DIR}/503.html" "s3://${ERROR_BUCKET}/503.html" --content-type "text/html; charset=utf-8" --region "$REGION"
-fi
-
-# 4. Create or find OAC for error pages S3 origin
-OAC_NAME="openclaw-error-pages"
-OAC_ID=$(aws cloudfront list-origin-access-controls \
-  --query "OriginAccessControlList.Items[?Name=='${OAC_NAME}'].Id" --output text 2>/dev/null)
-if [ -z "$OAC_ID" ]; then
-  echo "  -> Creating OAC for error pages"
-  OAC_ID=$(aws cloudfront create-origin-access-control \
-    --origin-access-control-config "{\"Name\":\"${OAC_NAME}\",\"SigningProtocol\":\"sigv4\",\"SigningBehavior\":\"always\",\"OriginAccessControlOriginType\":\"s3\"}" \
-    --query 'OriginAccessControl.Id' --output text)
-fi
-echo "  OAC: $OAC_ID"
-
-# 5. Find CDK-managed CloudFront distribution
+# 3. Find CDK-managed CloudFront distribution
 if [ "$CUSTOM_DOMAIN" = "true" ]; then
   CF_ID=$(aws cloudfront list-distributions \
     --query "DistributionList.Items[?Aliases.Items[0]=='${DOMAIN}'].Id" --output text 2>/dev/null | head -1)
@@ -100,9 +80,6 @@ try:
     config = full['DistributionConfig']
 
     alb_dns = '${ALB_DNS}'
-    error_bucket = '${ERROR_BUCKET}'
-    region = '${REGION}'
-    oac_id = '${OAC_ID}'
 
     # Add ALB origin if not present
     origins = config['Origins']['Items']
@@ -130,71 +107,32 @@ try:
             if o['Id'] == 'alb':
                 o['DomainName'] = alb_dns
 
-    # Add error-pages origin with OAC (not empty OAI)
-    error_origin_ids = [o['Id'] for o in origins if o['Id'] == 'error-pages']
-    if not error_origin_ids:
-        origins.append({
-            'Id': 'error-pages',
-            'DomainName': f'{error_bucket}.s3.{region}.amazonaws.com',
-            'OriginPath': '',
-            'S3OriginConfig': {'OriginAccessIdentity': ''},
-            'OriginAccessControlId': oac_id,
-            'CustomHeaders': {'Quantity': 0, 'Items': []},
-            'OriginShield': {'Enabled': False},
-            'ConnectionAttempts': 3,
-            'ConnectionTimeout': 10,
-        })
-
     config['Origins']['Quantity'] = len(origins)
 
-    # Add /t/* and /error/* behaviors if not present
+    # Add /t/* behavior if not present
     behaviors = config.get('CacheBehaviors', {}).get('Items', [])
-
-    def make_behavior(path, origin_id, methods_all=False):
-        b = {
-            'PathPattern': path,
-            'TargetOriginId': origin_id,
+    if not any(b['PathPattern'] == '/t/*' for b in behaviors):
+        behaviors.append({
+            'PathPattern': '/t/*',
+            'TargetOriginId': 'alb',
             'ViewerProtocolPolicy': 'redirect-to-https',
             'Compress': True,
             'SmoothStreaming': False,
             'FieldLevelEncryptionId': '',
             'LambdaFunctionAssociations': {'Quantity': 0, 'Items': []},
             'FunctionAssociations': {'Quantity': 0, 'Items': []},
-        }
-        if methods_all:
-            b['AllowedMethods'] = {
+            'AllowedMethods': {
                 'Quantity': 7,
                 'Items': ['GET','HEAD','OPTIONS','PUT','POST','PATCH','DELETE'],
                 'CachedMethods': {'Quantity': 2, 'Items': ['GET','HEAD']}
-            }
-            b['CachePolicyId'] = '4135ea2d-6df8-44a3-9df3-4b5a84be39ad'
-            b['OriginRequestPolicyId'] = '216adef6-5c7f-47e4-b989-5492eafa07d3'
-        else:
-            b['AllowedMethods'] = {
-                'Quantity': 2,
-                'Items': ['GET','HEAD'],
-                'CachedMethods': {'Quantity': 2, 'Items': ['GET','HEAD']}
-            }
-            b['CachePolicyId'] = '658327ea-f89d-4fab-a63d-7e88639e58f6'
-        return b
-
-    if not any(b['PathPattern'] == '/t/*' for b in behaviors):
-        behaviors.append(make_behavior('/t/*', 'alb', methods_all=True))
-    if not any(b['PathPattern'] == '/error/*' for b in behaviors):
-        behaviors.append(make_behavior('/error/*', 'error-pages', methods_all=False))
-
+            },
+            'CachePolicyId': '4135ea2d-6df8-44a3-9df3-4b5a84be39ad',
+            'OriginRequestPolicyId': '216adef6-5c7f-47e4-b989-5492eafa07d3',
+        })
     config['CacheBehaviors'] = {'Quantity': len(behaviors), 'Items': behaviors}
 
-    # Merge custom error responses — add 502/503/504, preserve CDK-managed 403/404
-    existing_errors = config.get('CustomErrorResponses', {}).get('Items', [])
-    error_codes_to_add = {502, 503, 504}
-    merged = [e for e in existing_errors if e['ErrorCode'] not in error_codes_to_add]
-    merged.extend([
-        {'ErrorCode': 502, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
-        {'ErrorCode': 503, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
-        {'ErrorCode': 504, 'ResponsePagePath': '/error/503.html', 'ResponseCode': '503', 'ErrorCachingMinTTL': 5},
-    ])
-    config['CustomErrorResponses'] = {'Quantity': len(merged), 'Items': merged}
+    # Remove any custom error responses (SPA routing now handled by CloudFront Function)
+    config['CustomErrorResponses'] = {'Quantity': 0, 'Items': []}
 
     config['HttpVersion'] = 'http2and3'
 
@@ -228,20 +166,7 @@ aws cloudfront create-invalidation --distribution-id "$CF_ID" --paths "/t/*" \
   --query 'Invalidation.Id' --output text > /dev/null
 echo "  CloudFront updated + cache invalidated"
 
-# 7. Set bucket policy for error pages (OAC requires explicit bucket policy)
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-aws s3api put-bucket-policy --bucket "$ERROR_BUCKET" --policy "{
-  \"Version\": \"2012-10-17\",
-  \"Statement\": [{
-    \"Effect\": \"Allow\",
-    \"Principal\": {\"Service\": \"cloudfront.amazonaws.com\"},
-    \"Action\": \"s3:GetObject\",
-    \"Resource\": \"arn:aws:s3:::${ERROR_BUCKET}/*\",
-    \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::${ACCOUNT_ID}:distribution/${CF_ID}\"}}
-  }]
-}" --region "$REGION"
-
-# 8. Update Route53 if using custom domain
+# 7. Update Route53 if using custom domain
 if [ "$CUSTOM_DOMAIN" = "true" ]; then
   CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_ID" --query 'Distribution.DomainName' --output text)
   ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "$DOMAIN" --query "HostedZones[0].Id" --output text | sed 's|/hostedzone/||')
