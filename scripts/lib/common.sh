@@ -31,10 +31,14 @@ discover_stack_name() {
 
 STACK="${STACK:-$(discover_stack_name)}"
 
-# Cluster name — read from cdk.json if available
+# Cluster name — read from stack outputs (dynamic), fallback to cdk.json context
 _REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." 2>/dev/null && pwd)"
+if [[ -z "${CLUSTER:-}" ]]; then
+  CLUSTER=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
+    --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" --output text 2>/dev/null || echo "")
+fi
 if [[ -z "${CLUSTER:-}" ]] && [[ -f "${_REPO_ROOT}/cdk/cdk.json" ]]; then
-  CLUSTER="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo 'openclaw-cluster')"
+  CLUSTER="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || '')" 2>/dev/null || echo '')"
 fi
 CLUSTER="${CLUSTER:-openclaw-cluster}"
 

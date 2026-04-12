@@ -65,7 +65,10 @@ export class EksClusterStack extends cdk.Stack {
     // Tag private subnets for Karpenter EC2NodeClass subnet discovery.
     // Karpenter requires both 'internal-elb' and cluster-owned tags to match.
     // CDK adds 'internal-elb' automatically but not the cluster-owned tag.
-    const clusterName = (this.node.tryGetContext('clusterName') as string) || 'openclaw-cluster';
+    // Derive unique cluster name from stack name to prevent tag collisions
+    // across deployments. Context override is available for advanced users.
+    const stackSuffix = this.stackName.replace(/^OpenClawEksStack-/, '');
+    const clusterName = (this.node.tryGetContext('clusterName') as string) || `openclaw-${stackSuffix}`;
     for (const subnet of vpc.privateSubnets) {
       cdk.Tags.of(subnet).add(`kubernetes.io/cluster/${clusterName}`, 'owned');
     }
@@ -96,7 +99,7 @@ export class EksClusterStack extends cdk.Stack {
       vpc,
       version: eks.KubernetesVersion.V1_35,
       defaultCapacity: 0,
-      clusterName: (this.node.tryGetContext('clusterName') as string) || 'openclaw-cluster',
+      clusterName,
       authenticationMode: eks.AuthenticationMode.API_AND_CONFIG_MAP,
       kubectlLayer: new KubectlV35Layer(this, 'KubectlLayer'),
       secretsEncryptionKey: eksSecretsKey,

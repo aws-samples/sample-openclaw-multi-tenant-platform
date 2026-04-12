@@ -76,8 +76,9 @@ cd "$CDK_DIR"
 cdk deploy --require-approval never
 cd "$REPO_ROOT"
 
-# Get kubeconfig
-CLUSTER_NAME=$(node -e "console.log(require('$CDK_DIR/cdk.json').context.clusterName || 'openclaw-cluster')")
+# Get kubeconfig — read cluster name from stack outputs (dynamic per deployment)
+source "$SCRIPTS_DIR/lib/common.sh"
+CLUSTER_NAME="$CLUSTER"
 aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 echo "  Kubeconfig updated for $CLUSTER_NAME"
 echo ""

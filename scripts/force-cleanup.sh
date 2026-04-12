@@ -21,12 +21,15 @@ STACK=$(aws cloudformation list-stacks --region "$REGION" \
   --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
   --output text 2>/dev/null | head -1)
 [[ -z "$STACK" || "$STACK" == "None" ]] && STACK="OpenClawEksStack"
+# Cluster name — read from stack outputs, fallback to cdk.json, then discover from EKS
 _REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
-if [[ -f "${_REPO_ROOT}/cdk/cdk.json" ]]; then
-  CLUSTER_NAME="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo 'openclaw-cluster')"
-else
-  CLUSTER_NAME="openclaw-cluster"
+CLUSTER_NAME=$(aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='ClusterName'].OutputValue" --output text 2>/dev/null || echo "")
+if [[ -z "$CLUSTER_NAME" || "$CLUSTER_NAME" == "None" ]]; then
+  # Fallback: find any openclaw EKS cluster in the region
+  CLUSTER_NAME=$(aws eks list-clusters --region "$REGION" --query "clusters[?starts_with(@,'openclaw')]|[0]" --output text 2>/dev/null || echo "")
 fi
+CLUSTER_NAME="${CLUSTER_NAME:-openclaw-cluster}"
 
 log() { echo "  $(date '+%H:%M:%S') $*"; }
 
