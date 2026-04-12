@@ -124,9 +124,32 @@ done
 bash "$SCRIPTS_DIR/post-deploy.sh"
 echo ""
 
-# ── Smoke test ──────────────────────────────────────────────────────────────
+# ── Step 6: Verify & fix Cognito settings ───────────────────────────────────
+echo "==> Step 6: Verifying Cognito configuration"
 source "$SCRIPTS_DIR/lib/common.sh"
+POOL_ID=$(get_output CognitoPoolId)
 DOMAIN=$(get_output DomainName)
+
+# CloudFormation sometimes does not apply AllowAdminCreateUserOnly=false correctly.
+# Verify and fix if needed — this is idempotent and safe.
+ADMIN_ONLY=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL_ID" --region "$REGION" \
+  --query "UserPool.AdminCreateUserConfig.AllowAdminCreateUserOnly" --output text)
+if [ "$ADMIN_ONLY" = "True" ] || [ "$ADMIN_ONLY" = "true" ]; then
+  echo "  Fixing: self-signup was disabled, enabling..."
+  # Preserve existing LambdaConfig and AutoVerifiedAttributes
+  LAMBDA_CONFIG=$(aws cognito-idp describe-user-pool --user-pool-id "$POOL_ID" --region "$REGION" \
+    --query "UserPool.LambdaConfig" --output json)
+  aws cognito-idp update-user-pool --user-pool-id "$POOL_ID" --region "$REGION" \
+    --admin-create-user-config AllowAdminCreateUserOnly=false \
+    --auto-verified-attributes email \
+    --lambda-config "$LAMBDA_CONFIG"
+  echo "  Self-signup enabled."
+else
+  echo "  Self-signup: OK"
+fi
+echo ""
+
+# ── Smoke test ──────────────────────────────────────────────────────────────
 
 echo "============================================"
 echo "  Deployment Complete!"
