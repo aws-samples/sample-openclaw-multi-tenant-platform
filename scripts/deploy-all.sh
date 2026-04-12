@@ -71,8 +71,10 @@ echo "  All checks passed."
 echo ""
 
 # ── Step 1: CDK Deploy ─────────────────────────────────────────────────────
-echo "==> Step 1/5: CDK Deploy (~20 minutes)"
+echo "==> Step 1/6: CDK Deploy (~20 minutes)"
 cd "$CDK_DIR"
+npm install --silent 2>/dev/null
+cdk bootstrap --quiet 2>/dev/null || true  # idempotent, no-op if already bootstrapped
 cdk deploy --require-approval never
 cd "$REPO_ROOT"
 
@@ -84,7 +86,7 @@ echo "  Kubeconfig updated for $CLUSTER_NAME"
 echo ""
 
 # ── Step 2: ArgoCD ──────────────────────────────────────────────────────────
-echo "==> Step 2/5: Installing ArgoCD"
+echo "==> Step 2/6: Installing ArgoCD"
 kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f - 2>/dev/null
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml \
   --server-side --force-conflicts 2>&1 | tail -1
@@ -93,17 +95,17 @@ echo "  ArgoCD ready."
 echo ""
 
 # ── Step 3: Platform (ApplicationSet + Gateway) ────────────────────────────
-echo "==> Step 3/5: Deploying platform resources"
+echo "==> Step 3/6: Deploying platform resources"
 bash "$SCRIPTS_DIR/deploy-platform.sh"
 echo ""
 
 # ── Step 4: KEDA + HTTP Add-on ──────────────────────────────────────────────
-echo "==> Step 4/5: Installing KEDA"
+echo "==> Step 4/6: Installing KEDA"
 bash "$SCRIPTS_DIR/setup-keda.sh"
 echo ""
 
 # ── Step 5: Post-deploy (CloudFront ALB + Route53) ──────────────────────────
-echo "==> Step 5/5: Post-deploy setup"
+echo "==> Step 5/6: Post-deploy setup"
 
 # Wait for ALB to be created by Gateway controller
 echo "  Waiting for ALB to be provisioned..."
@@ -126,7 +128,7 @@ bash "$SCRIPTS_DIR/post-deploy.sh"
 echo ""
 
 # ── Step 6: Verify & fix Cognito settings ───────────────────────────────────
-echo "==> Step 6: Verifying Cognito configuration"
+echo "==> Step 6/6: Verifying Cognito configuration"
 source "$SCRIPTS_DIR/lib/common.sh"
 POOL_ID=$(get_output CognitoPoolId)
 DOMAIN=$(get_output DomainName)

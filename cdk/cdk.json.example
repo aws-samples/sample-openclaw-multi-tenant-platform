@@ -99,7 +99,6 @@
         "@aws-cdk/aws-elasticloadbalancingv2:networkLoadBalancerWithSecurityGroupByDefault": true,
         "@aws-cdk/aws-ecs-patterns:uniqueTargetGroupId": true,
         "@aws-cdk/aws-route53-patterns:useDistribution": true,
-        "clusterName": "openclaw-cluster",
         "_comment_zoneName": "Optional: custom domain. Leave empty to use CloudFront default domain (xxxxxx.cloudfront.net)",
         "zoneName": "your-domain.com",
         "_comment_certificateArn": "Optional: required only when zoneName is set. ACM cert must be in us-east-1 for CloudFront",
