@@ -87,7 +87,7 @@ export class EksClusterStack extends cdk.Stack {
 
     // KMS key for EKS envelope encryption of Kubernetes secrets
     const eksSecretsKey = new kms.Key(this, 'EksSecretsKey', {
-      alias: 'openclaw/eks-secrets',
+      alias: `openclaw/${this.stackName}/eks-secrets`,
       description: 'Envelope encryption for Kubernetes secrets in EKS cluster',
       enableKeyRotation: true,
     });
@@ -611,7 +611,7 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     const podRestartAlarm = new cloudwatch.Alarm(this, 'PodRestartAlarm', {
-      alarmName: 'OpenClaw-PodRestartCount',
+      alarmName: `${this.stackName}-PodRestartCount`,
       metric: new cloudwatch.Metric({
         namespace: 'ContainerInsights',
         metricName: 'pod_number_of_container_restarts',
@@ -647,7 +647,7 @@ export class EksClusterStack extends cdk.Stack {
       defaultValue: 0,
     });
     const coldStartAlarm = new cloudwatch.Alarm(this, 'ColdStartAlarm', {
-      alarmName: 'OpenClaw-PodColdStartSlow',
+      alarmName: `${this.stackName}-PodColdStartSlow`,
       metric: coldStartFilter.metric({ statistic: 'Maximum', period: cdk.Duration.seconds(300) }),
       evaluationPeriods: 1,
       threshold: 60,
@@ -671,7 +671,7 @@ export class EksClusterStack extends cdk.Stack {
       defaultValue: 0,
     });
     const bedrockLatencyAlarm = new cloudwatch.Alarm(this, 'BedrockLatencyAlarm', {
-      alarmName: 'OpenClaw-BedrockP95Latency',
+      alarmName: `${this.stackName}-BedrockP95Latency`,
       metric: bedrockLatencyFilter.metric({ statistic: 'p95', period: cdk.Duration.seconds(300) }),
       evaluationPeriods: 2,
       threshold: 10000,
