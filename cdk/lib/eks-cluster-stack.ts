@@ -915,7 +915,7 @@ export class EksClusterStack extends cdk.Stack {
       });
     }
 
-    const cfWafName = `OpenClaw-CF-WAF-${this.region}`;
+    const cfWafName = `${this.stackName}-CF-WAF`;
 
     // CloudFront WAF: if stack is in us-east-1, use native CfnWebACL (simpler, idempotent).
     // If not, use AwsCustomResource to create WAF in us-east-1 via SDK call.
