@@ -16,7 +16,11 @@ set -euo pipefail
 REGION="${AWS_REGION:-${1:-$(aws configure get region 2>/dev/null || echo us-east-1)}}"
 # Accept --region flag
 [[ "${1:-}" == "--region" ]] && REGION="${2:-$REGION}"
-STACK="OpenClawEksStack"
+# Dynamic stack name discovery — finds active OpenClawEksStack-* in the region
+STACK=$(aws cloudformation list-stacks --region "$REGION" \
+  --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
+  --output text 2>/dev/null | head -1)
+[[ -z "$STACK" || "$STACK" == "None" ]] && STACK="OpenClawEksStack"
 _REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
 if [[ -f "${_REPO_ROOT}/cdk/cdk.json" ]]; then
   CLUSTER_NAME="$(node -e "console.log(require('${_REPO_ROOT}/cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo 'openclaw-cluster')"
@@ -158,7 +162,10 @@ echo "Step 5: Cleaning retained resources..."
 
 # KMS keys + aliases (EKS secrets encryption)
 echo "  -> Cleaning KMS keys..."
-aws kms delete-alias --alias-name alias/openclaw/eks-secrets --region "$REGION" 2>/dev/null && log "Deleted KMS alias"
+# Delete all openclaw KMS aliases (stack-specific names like openclaw/StackName/eks-secrets)
+for alias in $(aws kms list-aliases --region "$REGION" --query "Aliases[?starts_with(AliasName,'alias/openclaw/')].AliasName" --output text 2>/dev/null); do
+  aws kms delete-alias --alias-name "$alias" --region "$REGION" 2>/dev/null && log "Deleted KMS alias: $alias"
+done
 for key in $(aws kms list-keys --region "$REGION" --query 'Keys[*].KeyId' --output text 2>/dev/null); do
   DESC=$(aws kms describe-key --key-id "$key" --region "$REGION" --query 'KeyMetadata.{State:KeyState,Desc:Description}' --output text 2>/dev/null)
   if echo "$DESC" | grep -qi "openclaw\|eks.*secret" && echo "$DESC" | grep -q "Enabled"; then

@@ -32,7 +32,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-STACK="OpenClawEksStack"
+STACK=$(aws cloudformation list-stacks --region "$REGION" \
+  --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
+  --output text 2>/dev/null | head -1)
+[[ -z "$STACK" || "$STACK" == "None" ]] && STACK="OpenClawEksStack"
 _REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)"
 
 # Logging functions

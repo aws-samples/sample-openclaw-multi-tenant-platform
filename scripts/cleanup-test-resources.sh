@@ -5,7 +5,10 @@ set -euo pipefail
 # Run with: bash scripts/cleanup-test-resources.sh [region]
 
 REGION="${1:-us-west-2}"
-STACK="OpenClawEksStack"
+STACK=$(aws cloudformation list-stacks --region "$REGION" \
+  --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
+  --output text 2>/dev/null | head -1)
+[[ -z "$STACK" || "$STACK" == "None" ]] && STACK="OpenClawEksStack"
 DRY_RUN="${DRY_RUN:-true}"
 
 get_output() { aws cloudformation describe-stacks --stack-name "$STACK" --region "$REGION" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text 2>/dev/null || echo ""; }

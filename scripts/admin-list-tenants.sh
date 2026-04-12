@@ -2,7 +2,10 @@
 set -euo pipefail
 
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || echo us-west-2)}"
-STACK="OpenClawEksStack"
+STACK=$(aws cloudformation list-stacks --region "$REGION" \
+  --query 'StackSummaries[?starts_with(StackName,`OpenClawEksStack`) && StackStatus!=`DELETE_COMPLETE` && !contains(StackName,`NestedStack`)].StackName' \
+  --output text 2>/dev/null | head -1)
+[[ -z "$STACK" || "$STACK" == "None" ]] && STACK="OpenClawEksStack"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --region) REGION="$2"; shift 2 ;;
