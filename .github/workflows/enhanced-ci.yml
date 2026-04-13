@@ -129,7 +129,7 @@ jobs:
       matrix:
         scenario:
           - { region: "us-east-1", domain: "false", name: "no-domain" }
-          - { region: "us-west-2", domain: "claw.snese.net", name: "custom-domain" }
+          - { region: "us-west-2", domain: "claw.example.com", name: "custom-domain" }
           - { region: "eu-west-1", domain: "false", name: "eu-no-domain" }
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

@@ -87,7 +87,7 @@ Before/After screenshots for UI changes.
 
 ### 👥 Reviewers
 
-@snese - for architecture/security review
+@your-team - for architecture/security review
 @[team-lead] - for feature completeness  
 @[ops-team] - for operational concerns
 

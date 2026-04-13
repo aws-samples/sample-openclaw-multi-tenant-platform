@@ -114,7 +114,7 @@ strategy:
   matrix:
     scenario:
       - { region: "us-east-1", domain: "false", name: "no-domain" }
-      - { region: "us-west-2", domain: "claw.snese.net", name: "custom-domain" }
+      - { region: "us-west-2", domain: "claw.example.com", name: "custom-domain" }
       - { region: "eu-west-1", domain: "false", name: "eu-no-domain" }
 ```
 
@@ -131,7 +131,7 @@ test('Complete Sign Up → Workspace Creation Flow', async ({ page }) => {
   
   // Sign Up
   await page.click('[data-testid="signup-tab"]');
-  await page.fill('#email', 'test@snese.net');
+  await page.fill('#email', 'test@example.com');
   await page.fill('#password', 'TestPassword123');
   await page.click('#submit-btn');
   

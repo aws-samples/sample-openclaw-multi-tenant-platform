@@ -16,3 +16,4 @@ __pycache__/
 operator/target/
 cdk/cdk.json.usw2
 cdk/cdk.json.use1
+cdk/cdk-us-east-1.json
