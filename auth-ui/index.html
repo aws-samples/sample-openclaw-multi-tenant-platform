@@ -170,11 +170,11 @@ function pollWorkspace(url,isNewSignup,gwToken){
   fallback.style.display='none';
   if(isNewSignup){bar.style.width='5%';bar.style.background='var(--primary)';ptext.textContent='Setting up...';}
   const max=isNewSignup?90:20;
-  let i=0;
+  let i=0,readyCount=0;
   const poll=async()=>{
     i++;
     if(isNewSignup){const p=Math.min(5+i*1.1,95);bar.style.width=p+'%';ptext.textContent=i<10?'Setting up account...':i<25?'Configuring AI assistant...':i<50?'Deploying workspace...':i<70?'Starting AI assistant...':'Almost ready...';}
-    try{const r=await fetch(url,{redirect:'manual'});if(r.status===401){window.location.href='/';return;}const isWorkspace=r.headers.get('x-keda-http-cold-start')!==null||r.headers.get('x-openclaw')!==null;const hasBody=r.ok&&(await r.text()).length>100;if(r.status>=200&&r.status<400&&isWorkspace&&hasBody){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';const dest=gwToken?url+(url.includes('#')?'':'#token=')+gwToken:url;setTimeout(()=>{window.location.href=dest},800);return;}}catch(e){}
+    try{const r=await fetch(url,{method:'HEAD',redirect:'manual'});if(r.status===401){window.location.href='/';return;}const isWorkspace=r.headers.get('x-keda-http-cold-start')!==null||r.headers.get('x-openclaw')!==null;if(r.status>=200&&r.status<400&&isWorkspace){readyCount++;if(readyCount>=3){if(isNewSignup){bar.style.width='100%';ptext.textContent='Ready!';}title.textContent='Workspace ready!';msg.textContent='Redirecting...';const dest=gwToken?url+(url.includes('#')?'':'#token=')+gwToken:url;setTimeout(()=>{window.location.href=dest},800);return;}}else{readyCount=0;}}catch(e){readyCount=0;}
     if(i>=max){
       // Terminal error state: stop spinner, show clear failure
       spinner.style.display='none';
