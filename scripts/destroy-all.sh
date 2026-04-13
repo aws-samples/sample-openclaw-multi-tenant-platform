@@ -124,14 +124,38 @@ if ! cdk destroy --force; then
 fi
 cd "$REPO_ROOT"
 
-# Clean up log groups (CloudWatch Observability addon creates these outside CloudFormation)
+# Clean up resources created outside CloudFormation
+
+# Log groups (CloudWatch Observability addon)
 for lg in $(aws logs describe-log-groups --log-group-name-prefix "/aws/containerinsights/openclaw" \
   --region "$REGION" --query "logGroups[*].logGroupName" --output text 2>/dev/null); do
   aws logs delete-log-group --log-group-name "$lg" --region "$REGION" 2>/dev/null && echo "  Deleted log group: $lg"
+done
+
+# CloudFront WAFs (created by CDK custom resource in us-east-1, not deleted by CDK destroy)
+for wacl_json in $(aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 \
+  --query "WebACLs[?contains(Name,'$STACK')].{Id:Id,Name:Name,Lock:LockToken}" --output json 2>/dev/null \
+  | python3 -c "import json,sys;[print(f'{w[\"Id\"]}|{w[\"Name\"]}|{w[\"Lock\"]}') for w in json.load(sys.stdin)]" 2>/dev/null); do
+  IFS='|' read -r id name lock <<< "$wacl_json"
+  aws wafv2 delete-web-acl --name "$name" --scope CLOUDFRONT --id "$id" --lock-token "$lock" --region us-east-1 2>/dev/null && echo "  Deleted WAF: $name"
+done
+
+# Karpenter instance profiles (broader match — Karpenter generates unpredictable names)
+for profile in $(aws iam list-instance-profiles \
+  --query "InstanceProfiles[?contains(InstanceProfileName,'$STACK') || contains(InstanceProfileName,'openclaw')].InstanceProfileName" \
+  --output text 2>/dev/null); do
+  for role in $(aws iam get-instance-profile --instance-profile-name "$profile" \
+    --query "InstanceProfile.Roles[*].RoleName" --output text 2>/dev/null); do
+    aws iam remove-role-from-instance-profile --instance-profile-name "$profile" --role-name "$role" 2>/dev/null
+  done
+  aws iam delete-instance-profile --instance-profile-name "$profile" 2>/dev/null && echo "  Deleted instance profile: $profile"
 done
 
 echo ""
 echo "============================================"
 echo "  Teardown Complete!"
 echo "  All resources in $REGION have been removed."
+echo ""
+echo "  Note: EFS file systems are retained (tenant data protection)."
+echo "  To delete: aws efs describe-file-systems --query 'FileSystems[?contains(Name,\`OpenClaw\`)].FileSystemId'"
 echo "============================================"
