@@ -108,8 +108,10 @@ sleep 5
 
 cd "$CDK_DIR"
 if ! cdk destroy --force; then
-  echo "  CDK destroy had errors. Cleaning instance profiles and retrying..."
+  echo "  CDK destroy had errors. Cleaning blocking resources and retrying..."
   cd "$REPO_ROOT"
+
+  # Instance profiles
   for profile in $(aws iam list-instance-profiles \
     --query "InstanceProfiles[?contains(InstanceProfileName,'openclaw')].InstanceProfileName" \
     --output text 2>/dev/null); do
@@ -119,6 +121,22 @@ if ! cdk destroy --force; then
     done
     aws iam delete-instance-profile --instance-profile-name "$profile" 2>/dev/null
   done
+
+  # VPC endpoints + security groups (block subnet/VPC deletion)
+  VPC_ID=$(aws cloudformation list-stack-resources --stack-name "$STACK" --region "$REGION" \
+    --query "StackResourceSummaries[?ResourceType=='AWS::EC2::VPC'].PhysicalResourceId" --output text 2>/dev/null)
+  if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+    for vpce in $(aws ec2 describe-vpc-endpoints --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" \
+      --query "VpcEndpoints[*].VpcEndpointId" --output text 2>/dev/null); do
+      aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$vpce" --region "$REGION" 2>/dev/null
+    done
+    sleep 10
+    for sg in $(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" \
+      --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null); do
+      aws ec2 delete-security-group --group-id "$sg" --region "$REGION" 2>/dev/null
+    done
+  fi
+
   cd "$CDK_DIR"
   cdk destroy --force || aws cloudformation delete-stack --stack-name "$STACK" --region "$REGION" --deletion-mode FORCE_DELETE_STACK
 fi
