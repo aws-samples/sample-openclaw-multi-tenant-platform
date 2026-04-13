@@ -80,7 +80,7 @@ TB7: ArgoCD ←→ Amazon EKS API        (ApplicationSet SSA, auto-sync prune+se
 | Gateway token never expires or rotates | Leaked token = permanent access | docs/security.md Layer 4, Production Hardening #1 |
 | No session persistence or logout | UX gap, not security critical | docs/security.md Layer 4, Production Hardening #3 |
 | No MFA | Lower auth assurance | docs/security.md Production Hardening #4 |
-| No SAST/DAST in CI | Relies on Probe + Holmes + cdk-nag | docs/security.md "What's NOT Covered" |
+| No SAST/DAST in CI | Relies on Semgrep + Trivy + cdk-nag in CI | docs/security.md "What's NOT Covered" |
 | No image signing | Supply chain risk | docs/security.md "What's NOT Covered" |
 | No GuardDuty Amazon EKS Runtime | No runtime threat detection | docs/security.md Production Hardening #8 |
 | AWS WAF sampled logging only | Limited forensics | docs/security.md Production Hardening #7 |

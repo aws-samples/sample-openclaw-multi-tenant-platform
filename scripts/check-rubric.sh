@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Holmes/Probe rubric compliance checks — run in CI to catch findings early.
+# Rubric compliance checks — run in CI to catch common documentation issues.
 # Usage: bash scripts/check-rubric.sh
 #
 # Checks:
