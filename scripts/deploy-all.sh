@@ -87,20 +87,23 @@ echo "  Kubeconfig updated for $CLUSTER_NAME"
 # Verify EFS mount targets are ready (they need time after creation to accept NFS connections)
 EFS_ID=$(get_output EfsFileSystemId)
 if [ -n "$EFS_ID" ] && [ "$EFS_ID" != "None" ]; then
-  echo "  Verifying EFS mount targets ($EFS_ID)..."
-  for i in $(seq 1 30); do
-    # Run a test pod that mounts EFS and exits
-    kubectl run efs-smoke-test --rm -i --restart=Never --timeout=30s \
-      --image=busybox --overrides="{
-        \"spec\":{\"containers\":[{\"name\":\"test\",\"image\":\"busybox\",\"command\":[\"ls\",\"/mnt\"],
-          \"volumeMounts\":[{\"name\":\"efs\",\"mountPath\":\"/mnt\"}]}],
-        \"volumes\":[{\"name\":\"efs\",\"csi\":{\"driver\":\"efs.csi.aws.com\",\"volumeAttributes\":{\"fileSystemId\":\"$EFS_ID\"}}}]}
-      }" 2>/dev/null && echo "  EFS mount verified." && break
-    if [ "$i" -eq 30 ]; then
-      echo "  WARNING: EFS mount test did not pass after 5 minutes. First sign-up may be slow."
-    fi
-    sleep 10
-  done
+  # Get mount target IP from the first available mount target
+  MT_IP=$(aws efs describe-mount-targets --file-system-id "$EFS_ID" --region "$REGION" \
+    --query "MountTargets[0].IpAddress" --output text 2>/dev/null)
+  if [ -n "$MT_IP" ] && [ "$MT_IP" != "None" ]; then
+    echo "  Verifying EFS mount target ($MT_IP:2049)..."
+    for i in $(seq 1 30); do
+      if kubectl run efs-check --rm -i --restart=Never --timeout=10s \
+        --image=busybox -- sh -c "nc -z -w3 $MT_IP 2049 && echo OK" 2>/dev/null | grep -q OK; then
+        echo "  EFS mount target responding."
+        break
+      fi
+      if [ "$i" -eq 30 ]; then
+        echo "  WARNING: EFS mount target not responding after 5 minutes. First sign-up may be slow."
+      fi
+      sleep 10
+    done
+  fi
 fi
 echo ""
 
