@@ -101,8 +101,27 @@ for profile in $(aws iam list-instance-profiles \
   aws iam delete-instance-profile --instance-profile-name "$profile" 2>/dev/null && echo "  Deleted instance profile: $profile"
 done
 
+# Delete Karpenter NodeClass to trigger instance profile cleanup by Karpenter controller
+kubectl delete ec2nodeclass --all --ignore-not-found 2>/dev/null || true
+kubectl delete nodepool --all --ignore-not-found 2>/dev/null || true
+sleep 5
+
 cd "$CDK_DIR"
-cdk destroy --force
+if ! cdk destroy --force; then
+  echo "  CDK destroy had errors. Cleaning instance profiles and retrying..."
+  cd "$REPO_ROOT"
+  for profile in $(aws iam list-instance-profiles \
+    --query "InstanceProfiles[?contains(InstanceProfileName,'openclaw')].InstanceProfileName" \
+    --output text 2>/dev/null); do
+    for role in $(aws iam get-instance-profile --instance-profile-name "$profile" \
+      --query "InstanceProfile.Roles[*].RoleName" --output text 2>/dev/null); do
+      aws iam remove-role-from-instance-profile --instance-profile-name "$profile" --role-name "$role" 2>/dev/null
+    done
+    aws iam delete-instance-profile --instance-profile-name "$profile" 2>/dev/null
+  done
+  cd "$CDK_DIR"
+  cdk destroy --force || aws cloudformation delete-stack --stack-name "$STACK" --region "$REGION" --deletion-mode FORCE_DELETE_STACK
+fi
 cd "$REPO_ROOT"
 
 # Clean up log groups (CloudWatch Observability addon creates these outside CloudFormation)
