@@ -84,27 +84,6 @@ CLUSTER_NAME="$CLUSTER"
 aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 echo "  Kubeconfig updated for $CLUSTER_NAME"
 
-# Verify EFS mount targets are ready (they need time after creation to accept NFS connections)
-EFS_ID=$(get_output EfsFileSystemId)
-if [ -n "$EFS_ID" ] && [ "$EFS_ID" != "None" ]; then
-  # Get mount target IP from the first available mount target
-  MT_IP=$(aws efs describe-mount-targets --file-system-id "$EFS_ID" --region "$REGION" \
-    --query "MountTargets[0].IpAddress" --output text 2>/dev/null)
-  if [ -n "$MT_IP" ] && [ "$MT_IP" != "None" ]; then
-    echo "  Verifying EFS mount target ($MT_IP:2049)..."
-    for i in $(seq 1 30); do
-      if kubectl run efs-check --rm -i --restart=Never --timeout=10s \
-        --image=busybox -- sh -c "nc -z -w3 $MT_IP 2049 && echo OK" 2>/dev/null | grep -q OK; then
-        echo "  EFS mount target responding."
-        break
-      fi
-      if [ "$i" -eq 30 ]; then
-        echo "  WARNING: EFS mount target not responding after 5 minutes. First sign-up may be slow."
-      fi
-      sleep 10
-    done
-  fi
-fi
 echo ""
 
 # ── Step 2: ArgoCD ──────────────────────────────────────────────────────────
@@ -174,7 +153,16 @@ else
 fi
 echo ""
 
-# ── Smoke test ──────────────────────────────────────────────────────────────
+# ── Health check ────────────────────────────────────────────────────────────
+echo "==> Health check"
+AUTH_URL="https://${DOMAIN}/auth/"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$AUTH_URL" 2>/dev/null || echo "000")
+if [ "$HTTP_CODE" = "200" ]; then
+  echo "  Auth UI ($AUTH_URL): OK"
+else
+  echo "  WARNING: Auth UI returned HTTP $HTTP_CODE. CloudFront may still be deploying (~3 min)."
+fi
+echo ""
 
 echo "============================================"
 echo "  Deployment Complete!"
