@@ -15,6 +15,14 @@ Deploy in ~30 minutes. Scale to 500 users. Pay only for what you use.
 
 > **Experimental** — This project is provided for experimentation and learning purposes only. It is **not intended for production use**. APIs, architecture, and configuration may change without notice. See [Security](docs/security.md) for details.
 
+## Architecture
+
+<p align="center">
+  <img src="docs/architecture-diagram.svg" alt="Architecture Diagram" width="800">
+</p>
+
+<!-- TODO: Add sign-up flow GIF when environment is available -->
+
 ## Features
 
 - **One tenant per user** -- isolated namespace, PVC, network policy, IAM role

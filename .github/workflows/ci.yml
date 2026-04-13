@@ -58,11 +58,17 @@ jobs:
       - name: Helm lint
         run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
 
-      - name: Python syntax
+      - name: CDK unit tests
+        working-directory: cdk
+        run: npx jest --silent
+
+      - name: Lambda pytest
         run: |
-          python3 -m py_compile cdk/lambda/pre-signup/index.py
-          python3 -m py_compile cdk/lambda/post-confirmation/index.py
-          python3 -m py_compile cdk/lambda/cost-enforcer/index.py
+          pip3 install pytest --quiet
+          for dir in cdk/lambda/pre-signup cdk/lambda/post-confirmation cdk/lambda/cost-enforcer; do
+            echo "Testing $dir..."
+            python3 -m pytest "$dir"/test_index.py -q
+          done
 
       - name: Shell syntax
         run: for f in scripts/*.sh; do bash -n "$f"; done
