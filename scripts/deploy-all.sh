@@ -83,6 +83,25 @@ source "$SCRIPTS_DIR/lib/common.sh"
 CLUSTER_NAME="$CLUSTER"
 aws eks update-kubeconfig --region "$REGION" --name "$CLUSTER_NAME"
 echo "  Kubeconfig updated for $CLUSTER_NAME"
+
+# Verify EFS mount targets are ready (they need time after creation to accept NFS connections)
+EFS_ID=$(get_output EfsFileSystemId)
+if [ -n "$EFS_ID" ] && [ "$EFS_ID" != "None" ]; then
+  echo "  Verifying EFS mount targets ($EFS_ID)..."
+  for i in $(seq 1 30); do
+    # Run a test pod that mounts EFS and exits
+    kubectl run efs-smoke-test --rm -i --restart=Never --timeout=30s \
+      --image=busybox --overrides="{
+        \"spec\":{\"containers\":[{\"name\":\"test\",\"image\":\"busybox\",\"command\":[\"ls\",\"/mnt\"],
+          \"volumeMounts\":[{\"name\":\"efs\",\"mountPath\":\"/mnt\"}]}],
+        \"volumes\":[{\"name\":\"efs\",\"csi\":{\"driver\":\"efs.csi.aws.com\",\"volumeAttributes\":{\"fileSystemId\":\"$EFS_ID\"}}}]}
+      }" 2>/dev/null && echo "  EFS mount verified." && break
+    if [ "$i" -eq 30 ]; then
+      echo "  WARNING: EFS mount test did not pass after 5 minutes. First sign-up may be slow."
+    fi
+    sleep 10
+  done
+fi
 echo ""
 
 # ── Step 2: ArgoCD ──────────────────────────────────────────────────────────
