@@ -101,9 +101,16 @@ if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
     --query "VpcEndpoints[*].VpcEndpointId" --output text 2>/dev/null); do
     aws ec2 delete-vpc-endpoints --vpc-endpoint-ids "$vpce" --region "$REGION" 2>/dev/null && echo "  Deleted VPC endpoint: $vpce"
   done
-  # Wait for ENIs to detach
-  sleep 15
-  # Non-default security groups
+  # Poll until all ENIs are detached (max 60 seconds)
+  echo "  Waiting for ENIs to detach..."
+  for i in $(seq 1 12); do
+    eni_count=$(aws ec2 describe-network-interfaces --region "$REGION" \
+      --filters "Name=vpc-id,Values=$VPC_ID" --query "length(NetworkInterfaces)" --output text 2>/dev/null || echo "0")
+    [ "$eni_count" = "0" ] && echo "  All ENIs detached." && break
+    [ "$i" -eq 12 ] && echo "  WARNING: $eni_count ENIs still present after 60s."
+    sleep 5
+  done
+  # Non-default security groups (safe to delete now that ENIs are gone)
   for sg in $(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC_ID" \
     --query "SecurityGroups[?GroupName!='default'].GroupId" --output text 2>/dev/null); do
     aws ec2 delete-security-group --group-id "$sg" --region "$REGION" 2>/dev/null && echo "  Deleted security group: $sg"
