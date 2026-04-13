@@ -21,7 +21,9 @@ Deploy in ~30 minutes. Scale to 500 users. Pay only for what you use.
   <img src="docs/architecture-diagram.svg" alt="Architecture Diagram" width="800">
 </p>
 
-<!-- TODO: Add sign-up flow GIF when environment is available -->
+<p align="center">
+  <img src="docs/signup-flow.gif" alt="Sign Up Flow" width="600">
+</p>
 
 ## Features
 
