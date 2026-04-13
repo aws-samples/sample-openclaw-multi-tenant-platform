@@ -73,10 +73,10 @@ cd sample-openclaw-multi-tenant-platform
 #### Prerequisites
 
 - AWS CLI v2 + configured profile
-- AWS CDK v2 (`npm install -g aws-cdk`), bootstrapped (`cdk bootstrap`)
+- AWS CDK v2 >= 2.1114.1 (`npm install -g aws-cdk`)
 - Docker or [Finch](https://github.com/runfinch/finch) (running — required for AWS CDK asset bundling). If using Finch, set `export CDK_DOCKER=finch` before running CDK commands
 - kubectl + Helm 3, Node.js 22+
-- Python 3 + PyYAML (`pip3 install pyyaml`) — required for no-domain deployment
+- Python 3 — required for CloudFront configuration management
 
 > **Important**: Set `allowedEmailDomains` in `cdk.json` to restrict who can sign up (e.g., `your-company.com`). Without this, anyone with a valid email can create a tenant. To disable self-signup entirely, set `selfSignupEnabled` to `false` in `cdk.json`.
 - (Optional) Route53 hosted zone + ACM certificate in us-east-1. Without a custom domain, the platform uses the CloudFront default domain (`xxxxxx.cloudfront.net`)

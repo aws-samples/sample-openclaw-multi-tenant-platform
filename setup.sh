@@ -92,7 +92,14 @@ phase1_verify() {
 phase2_run() {
   echo "  Installing ArgoCD via Helm..."
   echo "  Configuring kubectl..."
-  aws eks update-kubeconfig --region "$(aws configure get region 2>/dev/null || echo us-west-2)" --name "$(node -e "console.log(require('cdk/cdk.json').context.clusterName || 'openclaw-cluster')" 2>/dev/null || echo openclaw-cluster)"
+  local _region _cluster
+  _region="$(aws configure get region 2>/dev/null || echo us-west-2)"
+  _cluster=$(aws cloudformation describe-stacks --region "$_region" \
+    --query "Stacks[?starts_with(StackName,'OpenClawEksStack') && StackStatus!='DELETE_COMPLETE']|[0].Outputs[?OutputKey=='ClusterName'].OutputValue|[0]" \
+    --output text 2>/dev/null)
+  [ -z "$_cluster" ] || [ "$_cluster" = "None" ] && _cluster="$(node -e "console.log(require('cdk/cdk.json').context.clusterName || '')" 2>/dev/null)"
+  [ -z "$_cluster" ] && { echo "ERROR: Could not determine cluster name from stack outputs or cdk.json"; return 1; }
+  aws eks update-kubeconfig --region "$_region" --name "$_cluster"
   bash scripts/setup-argocd.sh
 }
 phase2_verify() {
