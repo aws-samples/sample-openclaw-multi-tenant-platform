@@ -68,6 +68,13 @@ scaleToZero:
   minReplicas: 0
   maxReplicas: 1
 
+# Sandbox model (ADR-0001/0003/0005). When enabled, the tenant workload is a
+# per-tenant SandboxTemplate + SandboxClaim instead of a Deployment.
+# runtimeClassName: "" = runc (PR#1); "gvisor" = kernel isolation (PR#2).
+sandbox:
+  enabled: false
+  runtimeClassName: ""
+
 config:
   gateway:
     port: 18789

@@ -1,4 +1,4 @@
-{{- if .Values.scaleToZero.enabled }}
+{{- if and .Values.scaleToZero.enabled (not .Values.sandbox.enabled) }}
 apiVersion: http.keda.sh/v1alpha1
 kind: HTTPScaledObject
 metadata:

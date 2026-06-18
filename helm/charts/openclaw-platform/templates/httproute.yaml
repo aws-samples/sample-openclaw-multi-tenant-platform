@@ -19,7 +19,7 @@ spec:
             type: PathPrefix
             value: /t/{{ .Values.tenant.name }}
       backendRefs:
-        {{- if .Values.scaleToZero.enabled }}
+        {{- if and .Values.scaleToZero.enabled (not .Values.sandbox.enabled) }}
         # Route through KEDA interceptor for scale-from-zero.
         # Interceptor counts requests, scales backend, then proxies.
         # Requires ReferenceGrant in keda namespace (created by Helm chart).
@@ -27,6 +27,9 @@ spec:
           namespace: keda
           port: 8080
         {{- else }}
+        # Direct to the tenant Service. When sandbox.enabled, this Service selects
+        # the Sandbox pod by label (ADR-0004: PR#1 keeps path-based routing,
+        # always-on, no KEDA).
         - name: {{ include "openclaw-helm.fullname" . }}
           port: {{ .Values.service.port }}
         {{- end }}

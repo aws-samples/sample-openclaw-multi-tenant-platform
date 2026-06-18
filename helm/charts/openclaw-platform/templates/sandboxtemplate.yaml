@@ -1,16 +1,26 @@
-{{- if not .Values.sandbox.enabled }}
-apiVersion: apps/v1
-kind: Deployment
+{{- if .Values.sandbox.enabled }}
+# Per-tenant SandboxTemplate (ADR-0001 / ADR-0003).
+#
+# Rendered PER TENANT by the ArgoCD ApplicationSet so it can carry the
+# per-tenant ServiceAccount (Pod Identity), gateway-token Secret, downward-API
+# env, and PVC — none of which fit in the v1alpha1 SandboxClaim.env (plain
+# name/value only). The SandboxClaim references this template by name.
+#
+# Runtime tier (ADR-0005): .Values.sandbox.runtimeClassName empty => runc (PR#1);
+# "gvisor" => PR#2 (a one-value change, scheduled onto the gVisor NodePool).
+#
+# Schema: extensions.agents.x-k8s.io/v1alpha1 (pinned v0.4.x, ADR-0002).
+# envVarsInjectionPolicy default is Disallowed; set Allowed so the per-tenant
+# SandboxClaim may inject env (ADR-0003).
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
 metadata:
   name: {{ include "openclaw-helm.fullname" . }}
   labels:
     {{- include "openclaw-helm.labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicas }}
-  selector:
-    matchLabels:
-      {{- include "openclaw-helm.selectorLabels" . | nindent 6 }}
-  template:
+  envVarsInjectionPolicy: Allowed
+  podTemplate:
     metadata:
       labels:
         {{- include "openclaw-helm.selectorLabels" . | nindent 8 }}
@@ -21,6 +31,9 @@ spec:
         instrumentation.opentelemetry.io/inject-dotnet: "false"
     spec:
       serviceAccountName: {{ include "openclaw-helm.fullname" . }}
+      {{- if .Values.sandbox.runtimeClassName }}
+      runtimeClassName: {{ .Values.sandbox.runtimeClassName }}
+      {{- end }}
       securityContext:
         fsGroup: 1000
         runAsUser: 1000
@@ -55,7 +68,7 @@ spec:
           mountPath: /home/node/.openclaw
         - name: tmp
           mountPath: /tmp
-      
+
       - name: init-skills
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         securityContext:
@@ -113,10 +126,6 @@ spec:
             if [ ! -f /home/node/.openclaw/workspace/node_modules/@aws-sdk/client-secrets-manager/dist-cjs/index.js ]; then
               cd /home/node/.openclaw/workspace && npm install --no-save @aws-sdk/client-secrets-manager 2>/dev/null
             fi
-            # Patch @smithy/credential-provider-imds: add EKS Pod Identity Agent IP (169.254.170.23)
-            # to GREENGRASS_HOSTS. Without this, fromContainerMetadata rejects the Pod Identity endpoint.
-            # Only patch workspace copy (writable PVC). /app is read-only (image layer) and cannot be
-            # modified with readOnlyRootFilesystem.
             IMDS_FILE=/home/node/.openclaw/workspace/node_modules/@smithy/credential-provider-imds/dist-cjs/index.js
             if [ -f "$IMDS_FILE" ] && ! grep -q "169.254.170.23" "$IMDS_FILE"; then
               sed -i 's/"127.0.0.1": true,/"127.0.0.1": true, "169.254.170.23": true,/' "$IMDS_FILE"
@@ -130,7 +139,7 @@ spec:
           mountPath: /home/node/.openclaw
         - name: tmp
           mountPath: /tmp
-      
+
       containers:
       - name: main
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -203,7 +212,7 @@ spec:
         - name: bash-aliases
           mountPath: /home/node/.bash_aliases
           subPath: bash_aliases
-      
+
       volumes:
       - name: config
         configMap:

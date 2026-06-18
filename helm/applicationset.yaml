@@ -48,9 +48,11 @@ spec:
             skills:
               - weather
               - gog
-            scaleToZero:
+            sandbox:
               enabled: true
-              minReplicas: 0
+              runtimeClassName: ""   # runc (PR#1, ADR-0005); PR#2 sets "gvisor"
+            scaleToZero:
+              enabled: false   # superseded by Sandbox model (ADR-0004/0006); always-on in PR#1, scale-to-zero returns via upstream KEP-968
             ingress:
               host: "DOMAIN"
             gateway:

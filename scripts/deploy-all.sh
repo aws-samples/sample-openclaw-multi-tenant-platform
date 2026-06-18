@@ -105,6 +105,13 @@ echo "==> Step 4/6: Installing KEDA"
 bash "$SCRIPTS_DIR/setup-keda.sh"
 echo ""
 
+# ── Step 4b: Agent Sandbox controller + CRDs (ADR-0001) ─────────────────────
+# Required for the Sandbox model (SandboxTemplate/SandboxClaim) the chart emits
+# when sandbox.enabled=true. CRDs must exist before ArgoCD syncs tenant claims.
+echo "==> Step 4b: Installing agent-sandbox controller + CRDs"
+bash "$SCRIPTS_DIR/setup-agent-sandbox.sh"
+echo ""
+
 # ── Step 5: Post-deploy (CloudFront ALB + Route53) ──────────────────────────
 echo "==> Step 5/6: Post-deploy setup"
 
