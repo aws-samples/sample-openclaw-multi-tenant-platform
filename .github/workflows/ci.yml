@@ -54,7 +54,11 @@ jobs:
           echo "::endgroup::"
 
       - name: Helm lint
-        run: helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
+        run: |
+          # legacy (Deployment) mode
+          helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
+          # sandbox (SandboxClaim/SandboxTemplate) mode
+          helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test --set sandbox.enabled=true
 
       - name: CDK unit tests
         working-directory: cdk
