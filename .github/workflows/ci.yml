@@ -61,6 +61,9 @@ jobs:
         run: npx jest --silent
 
       - name: Lambda pytest
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_REGION: us-east-1
         run: |
           pip3 install pytest --quiet
           for dir in cdk/lambda/pre-signup cdk/lambda/post-confirmation cdk/lambda/cost-enforcer; do
