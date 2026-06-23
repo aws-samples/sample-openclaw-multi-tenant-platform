@@ -1,0 +1,17 @@
+{{- if .Values.sandbox.enabled }}
+# Per-tenant SandboxClaim (ADR-0001 / ADR-0002).
+#
+# v0.4.x / v1alpha1: the claim references the SandboxTemplate DIRECTLY via
+# sandboxTemplateRef (verified from the v0.4.5 CRD). No WarmPool required on the
+# cold-start path. PR#1 is always-on (no lifecycle.shutdownTime); scale-to-zero
+# is deferred to the upstream KEP-968 path (ADR-0006).
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxClaim
+metadata:
+  name: {{ include "openclaw-helm.fullname" . }}
+  labels:
+    {{- include "openclaw-helm.labels" . | nindent 4 }}
+spec:
+  sandboxTemplateRef:
+    name: {{ include "openclaw-helm.fullname" . }}
+{{- end }}

@@ -1,4 +1,4 @@
-{{- if .Values.scaleToZero.enabled }}
+{{- if and .Values.scaleToZero.enabled (not .Values.sandbox.enabled) }}
 # ReferenceGrant allows this tenant's HTTPRoute to reference the KEDA
 # interceptor Service in the keda namespace (cross-namespace backendRef).
 apiVersion: gateway.networking.k8s.io/v1beta1

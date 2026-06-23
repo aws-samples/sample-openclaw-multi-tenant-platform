@@ -1,0 +1,73 @@
+# Platform-level SandboxTemplate for the `runc` (default) isolation tier.
+#
+# One reusable template per runtime tier (see docs/agent-sandbox.md). Per-tenant
+# specifics (ServiceAccount for Pod Identity, EFS PVC, config/secret volumes,
+# env) are layered on at claim time via the per-tenant SandboxClaim, not here.
+#
+# The gVisor tier (PR #2) is an identical template plus
+# `spec.podTemplate.spec.runtimeClassName: gvisor` and the gVisor NodePool
+# toleration — gVisor is delivered THROUGH this field, not as a separate layer.
+#
+# Schema validated with: kubectl apply --dry-run=server (against the installed
+# extensions.agents.x-k8s.io CRD, v0.4.5).
+apiVersion: extensions.agents.x-k8s.io/v1alpha1
+kind: SandboxTemplate
+metadata:
+  name: openclaw-runc
+  labels:
+    app.kubernetes.io/part-of: openclaw-platform
+    openclaw.io/runtime-tier: runc
+spec:
+  # runc tier: no runtimeClassName (default runtime). PR #2 adds an
+  # openclaw-gvisor template that sets runtimeClassName: gvisor.
+  podTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: openclaw
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: main
+          image: ghcr.io/openclaw/openclaw
+          command: ["node", "dist/index.js"]
+          args: ["gateway", "--port", "18789", "--bind", "lan"]
+          ports:
+            - containerPort: 18789
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            tcpSocket:
+              port: 18789
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 18789
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+          startupProbe:
+            tcpSocket:
+              port: 18789
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      restartPolicy: OnFailure

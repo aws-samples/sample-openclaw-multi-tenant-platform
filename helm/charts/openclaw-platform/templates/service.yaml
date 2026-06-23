@@ -1,3 +1,9 @@
+{{- if not .Values.sandbox.enabled }}
+# In sandbox mode the agent-sandbox controller creates its own headless Service
+# named after the Sandbox (= fullname), so we must NOT create a conflicting
+# ClusterIP Service here (the controller cannot adopt a non-headless Service —
+# ClusterIP is immutable). The HTTPRoute backendRef (= fullname) resolves to the
+# controller-created Service. (Found via deploy-verify, ADR-0004.)
 apiVersion: v1
 kind: Service
 metadata:
@@ -13,3 +19,4 @@ spec:
       name: gateway
   selector:
     {{- include "openclaw-helm.selectorLabels" . | nindent 4 }}
+{{- end }}
