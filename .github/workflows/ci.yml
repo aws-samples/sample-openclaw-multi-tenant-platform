@@ -59,6 +59,8 @@ jobs:
           helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test
           # sandbox (SandboxClaim/SandboxTemplate) mode
           helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test --set sandbox.enabled=true
+          # sandbox + gVisor runtime tier (PR#2)
+          helm lint helm/charts/openclaw-platform/ --set ingress.enabled=true --set ingress.host=test.example.com --set tenant.name=test --set sandbox.enabled=true --set sandbox.runtimeClassName=gvisor
 
       - name: CDK unit tests
         working-directory: cdk

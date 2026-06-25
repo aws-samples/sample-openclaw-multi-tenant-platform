@@ -72,7 +72,11 @@ scaleToZero:
 # per-tenant SandboxTemplate + SandboxClaim instead of a Deployment.
 # runtimeClassName: "" = runc (PR#1); "gvisor" = kernel isolation (PR#2).
 sandbox:
+  # Adopt the agent-sandbox Sandbox model for tenants (PR#1). false => legacy Deployment.
   enabled: false
+  # Runtime tier: "" => runc (default); "gvisor" => kernel isolation on the
+  # gVisor NodePool (PR#2). "gvisor" requires the gvisor RuntimeClass + gVisor
+  # NodePool provisioned by the CDK EKS stack.
   runtimeClassName: ""
 
 config:

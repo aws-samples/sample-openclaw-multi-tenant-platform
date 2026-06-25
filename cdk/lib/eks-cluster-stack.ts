@@ -526,6 +526,130 @@ export class EksClusterStack extends cdk.Stack {
     });
     nodePool.node.addDependency(nodeClass);
 
+    // ── gVisor runtime tier (PR#2) ──────────────────────────────────────────
+    // Optional kernel-isolation tier: a dedicated, tainted Karpenter NodePool
+    // whose AL2023 nodes install the gVisor `runsc` containerd shim via
+    // user-data, plus a `gvisor` RuntimeClass. Tenants opt in via the Helm
+    // value sandbox.runtimeClassName=gvisor (SandboxTemplate runtimeClassName).
+    // Verified on EKS 1.34 / containerd v2 (io.containerd.cri.v1.runtime path);
+    // Pod Identity (169.254.170.23) is reachable from runsc pods, so the tenant
+    // IAM model is unchanged across tiers.
+    const gvisorRuntimeClass = new eks.KubernetesManifest(this, 'GvisorRuntimeClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'node.k8s.io/v1',
+        kind: 'RuntimeClass',
+        metadata: { name: 'gvisor' },
+        handler: 'runsc',
+        scheduling: {
+          nodeSelector: { 'openclaw/runtime': 'gvisor' },
+          tolerations: [{ key: 'openclaw/runtime', operator: 'Equal', value: 'gvisor', effect: 'NoSchedule' }],
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorRuntimeClass.node.addDependency(karpenterChart);
+
+    const gvisorNodeClass = new eks.KubernetesManifest(this, 'GvisorNodeClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.k8s.aws/v1',
+        kind: 'EC2NodeClass',
+        metadata: { name: 'gvisor' },
+        spec: {
+          amiSelectorTerms: [{ alias: 'al2023@latest' }],
+          role: karpenterNodeRole.roleName,
+          subnetSelectorTerms: [
+            { tags: { 'kubernetes.io/role/internal-elb': '1', [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+          securityGroupSelectorTerms: [
+            { tags: { [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+          // String array .join('\n') keeps shell ${ARCH} literal (no TS interpolation).
+          userData: [
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="//"',
+            '',
+            '--//',
+            'Content-Type: text/x-shellscript; charset="us-ascii"',
+            '',
+            '#!/bin/bash',
+            'set -euxo pipefail',
+            'ARCH=$(uname -m)',
+            'mkdir -p /tmp/gvisor && cd /tmp/gvisor',
+            'curl -fsSL -o runsc "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/runsc"',
+            'curl -fsSL -o containerd-shim-runsc-v1 "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/containerd-shim-runsc-v1"',
+            'chmod +x runsc containerd-shim-runsc-v1',
+            'mv runsc containerd-shim-runsc-v1 /usr/local/bin/',
+            "cat <<'EOT' >> /etc/containerd/config.toml",
+            "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]",
+            '  runtime_type = "io.containerd.runsc.v1"',
+            "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc.options]",
+            '  TypeUrl = "io.containerd.runsc.v1.options"',
+            '  ConfigPath = "/etc/containerd/runsc.toml"',
+            'EOT',
+            "cat <<'EOT' > /etc/containerd/runsc.toml",
+            '[runsc_config]',
+            'platform = "ptrace"',
+            'network = "sandbox"',
+            'EOT',
+            'systemctl restart containerd',
+            '',
+            '--//',
+            'Content-Type: application/node.eks.aws',
+            '',
+            'apiVersion: node.eks.aws/v1alpha1',
+            'kind: NodeConfig',
+            'spec:',
+            '  kubelet:',
+            '    config:',
+            '      maxPods: 30',
+            '--//',
+          ].join('\n'),
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodeClass.node.addDependency(karpenterChart);
+
+    const gvisorNodePool = new eks.KubernetesManifest(this, 'GvisorNodePool', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.sh/v1',
+        kind: 'NodePool',
+        metadata: { name: 'gvisor' },
+        spec: {
+          template: {
+            metadata: { labels: { 'openclaw/runtime': 'gvisor' } },
+            spec: {
+              nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'gvisor' },
+              taints: [{ key: 'openclaw/runtime', value: 'gvisor', effect: 'NoSchedule' }],
+              requirements: [
+                { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand'] },
+                { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r', 't'] },
+                { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+                { key: 'karpenter.k8s.aws/instance-size', operator: 'In', values: ['medium', 'large', 'xlarge'] },
+                // Karpenter v1: the node-label key must also appear here or the
+                // scheduler won't select this pool for a pod that requests it.
+                { key: 'openclaw/runtime', operator: 'In', values: ['gvisor'] },
+              ],
+            },
+          },
+          limits: { cpu: '50' },
+          disruption: {
+            consolidationPolicy: 'WhenEmptyOrUnderutilized',
+            consolidateAfter: '1m',
+          },
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodePool.node.addDependency(gvisorNodeClass);
+
     // ── ArgoCD ────────────────────────────────────────────────────────────
     // Installed via Helm (scripts/setup-argocd.sh). For production, consider EKS Capability:
     //   aws eks create-capability --type ARGOCD (requires AWS Identity Center)
@@ -1035,7 +1159,24 @@ function handler(event) {
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [
-        s3deploy.Source.asset('../auth-ui'),
+        // Ship only the static runtime files. The auth-ui is vanilla JS with no
+        // build step; node_modules holds dev-only deps (jest/eslint/puppeteer,
+        // ~110MB) that are never served. Uploading them flooded the deployment
+        // Lambda (thousands of small files) and exceeded its timeout, blocking
+        // CREATE_COMPLETE. Excluding them drops the upload to ~265KB / 7 files.
+        s3deploy.Source.asset('../auth-ui', {
+          exclude: [
+            'node_modules',
+            'node_modules/**',
+            'tests',
+            'tests/**',
+            'package.json',
+            'package-lock.json',
+            '.git',
+            '.gitignore',
+            '**/.DS_Store',
+          ],
+        }),
       ],
       destinationBucket: authUiBucket,
       distribution,
