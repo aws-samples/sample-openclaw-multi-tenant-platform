@@ -134,7 +134,7 @@ four seams — nothing else in the platform should need to change:
 3. **Helm value `sandbox.runtimeClassName`** — the per-tenant `SandboxTemplate`
    passes it through; tenants flip tiers with a single value.
 4. **Conformance pass** — `scripts/conformance-runtime-tier.sh <runtimeClassName>`
-   must pass end-to-end (kernel identity, Pod Identity, EFS RWX, Bedrock invoke)
+   must pass end-to-end (kernel identity, Amazon EKS Pod Identity, Amazon EFS RWX, Amazon Bedrock invoke)
    on a CDK-deployed cluster before the tier is documented as supported.
 
 **Tier policy: at most two runtime tiers at any time (runc + one hardened
