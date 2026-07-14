@@ -176,10 +176,16 @@ export class EksClusterStack extends cdk.Stack {
     // by the API server but NOT enforced — the Amazon VPC CNI network policy agent is
     // off by default on Amazon EKS.
     // https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html
+    // ENABLE_PREFIX_DELEGATION raises per-node pod density (~16x) — one
+    // singleton pod per tenant makes IP capacity a real scaling input
+    // (docs/scaling-limits.md).
     new eks.CfnAddon(this, 'vpccni', {
       clusterName: cluster.clusterName,
       addonName: 'vpc-cni',
-      configurationValues: JSON.stringify({ enableNetworkPolicy: 'true' }),
+      configurationValues: JSON.stringify({
+        enableNetworkPolicy: 'true',
+        env: { ENABLE_PREFIX_DELEGATION: 'true' },
+      }),
       resolveConflicts: 'OVERWRITE',
     });
 
@@ -915,6 +921,10 @@ export class EksClusterStack extends cdk.Stack {
         DOMAIN: domainName,
         OPENCLAW_IMAGE: openclawImage,
         TENANT_ROLE_ARN: tenantRole.roleArn,
+        // Tenant-capacity guard: shared Gateway/ALB consumes ~1 rule + 1
+        // target group per tenant; "Target Groups per ALB" (100) is
+        // NON-adjustable. See docs/scaling-limits.md.
+        GATEWAY_TENANT_BUDGET: this.node.tryGetContext('gatewayTenantBudget') || '85',
       },
       timeout: cdk.Duration.seconds(60),
       deadLetterQueue: triggerDlq,

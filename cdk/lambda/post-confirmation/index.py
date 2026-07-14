@@ -141,6 +141,17 @@ def _resolve_tenant_name(base_name, email):
     except (KeyError, IndexError, TypeError):
         taken = {}
 
+    # Gateway tenant-capacity guard (docs/scaling-limits.md): the shared
+    # Gateway/ALB consumes ~1 listener rule + 1 target group per tenant, and
+    # "Target Groups per ALB" is a NON-adjustable quota (100). Refuse new
+    # tenants past the budget instead of failing silently at tenant #101.
+    budget = int(os.environ.get('GATEWAY_TENANT_BUDGET', '85'))
+    if len(taken) >= budget and email not in taken.values():
+        raise Exception(
+            f'Tenant capacity budget reached ({len(taken)}/{budget}). '
+            'The shared Gateway/ALB is near its non-adjustable target-group '
+            'limit. See docs/scaling-limits.md for scale-out options.')
+
     for suffix in ['', '-2', '-3', '-4', '-5', '-6', '-7', '-8', '-9']:
         candidate = f'{base_name}{suffix}'[:63]
         if candidate not in taken:
