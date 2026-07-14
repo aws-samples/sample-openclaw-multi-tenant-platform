@@ -542,6 +542,9 @@ export class EksClusterStack extends cdk.Stack {
         kind: 'RuntimeClass',
         metadata: { name: 'gvisor' },
         handler: 'runsc',
+        // Account for the per-pod gVisor Sentry (user-space kernel) so the
+        // scheduler and Karpenter don't overcommit gVisor nodes.
+        overhead: { podFixed: { memory: '128Mi', cpu: '50m' } },
         scheduling: {
           nodeSelector: { 'openclaw/runtime': 'gvisor' },
           tolerations: [{ key: 'openclaw/runtime', operator: 'Equal', value: 'gvisor', effect: 'NoSchedule' }],
@@ -644,11 +647,52 @@ export class EksClusterStack extends cdk.Stack {
             consolidationPolicy: 'WhenEmptyOrUnderutilized',
             consolidateAfter: '1m',
           },
+          // Prefer Graviton (arm64) for cost; see the amd64 pool below.
+          weight: 100,
         },
       }],
       overwrite: true,
     });
     gvisorNodePool.node.addDependency(gvisorNodeClass);
+
+    // x86_64 fallback pool for the gVisor tier. Shares the same EC2NodeClass —
+    // the userData installs runsc via $(uname -m), so it is arch-agnostic
+    // (gVisor publishes both x86_64 and aarch64 release binaries).
+    // Lower weight keeps arm64 (Graviton) as the preferred/default arch.
+    const gvisorNodePoolAmd64 = new eks.KubernetesManifest(this, 'GvisorNodePoolAmd64', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.sh/v1',
+        kind: 'NodePool',
+        metadata: { name: 'gvisor-amd64' },
+        spec: {
+          template: {
+            metadata: { labels: { 'openclaw/runtime': 'gvisor' } },
+            spec: {
+              nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'gvisor' },
+              taints: [{ key: 'openclaw/runtime', value: 'gvisor', effect: 'NoSchedule' }],
+              requirements: [
+                { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand'] },
+                { key: 'kubernetes.io/arch', operator: 'In', values: ['amd64'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r', 't'] },
+                { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+                { key: 'karpenter.k8s.aws/instance-size', operator: 'In', values: ['medium', 'large', 'xlarge'] },
+                { key: 'openclaw/runtime', operator: 'In', values: ['gvisor'] },
+              ],
+            },
+          },
+          limits: { cpu: '50' },
+          disruption: {
+            consolidationPolicy: 'WhenEmptyOrUnderutilized',
+            consolidateAfter: '1m',
+          },
+          weight: 10,
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodePoolAmd64.node.addDependency(gvisorNodeClass);
 
     // ── ArgoCD ────────────────────────────────────────────────────────────
     // Installed via Helm (scripts/setup-argocd.sh). For production, consider EKS Capability:

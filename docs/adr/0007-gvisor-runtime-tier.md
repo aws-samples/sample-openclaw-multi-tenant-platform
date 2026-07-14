@@ -35,10 +35,16 @@ mechanism for adopters who need it.
 - Add a **selectable gVisor tier** alongside the runc tier, off by default,
   enabled per-deployment via the `sandbox.runtimeClassName: gvisor` Helm value.
 - **Node infrastructure (CDK):** a dedicated, **tainted** gVisor Karpenter
-  `NodePool` (AL2023, **ARM64**) whose `EC2NodeClass` `userData` installs the
+  `NodePool` (AL2023, **ARM64-preferred**) whose `EC2NodeClass` `userData` installs the
   `runsc` + `containerd-shim-runsc-v1` artifacts and registers the runtime; plus a
   `gvisor` `RuntimeClass` (`handler: runsc`) pinned to the pool via
-  `scheduling.nodeSelector`.
+  `scheduling.nodeSelector`, with `overhead.podFixed` set so the scheduler
+  accounts for the per-pod Sentry cost.
+- **Architecture support:** Graviton (`arm64`) is the preferred/default
+  architecture (NodePool `weight: 100`); an `amd64` fallback pool (`weight: 10`)
+  shares the same `EC2NodeClass` — the userData resolves the gVisor release
+  binary via `$(uname -m)`, and the tenant image (`ghcr.io/openclaw/openclaw`) is
+  published multi-arch, so both architectures work without divergence.
 - **Tenant scheduling (Helm):** the per-tenant `SandboxTemplate`
   (`spec.podTemplate.spec`) sets `runtimeClassName: gvisor` and adds the gVisor
   pool `nodeSelector` + `NoSchedule` toleration when the gVisor value is set.
@@ -104,6 +110,37 @@ Fresh `cdk deploy` of the full stack on a net-new stack (`hclo-mac`/`us-east-1`)
   workloads; measure if latency-sensitive).
 - Pin agent-sandbox version: gVisor template scheduling fields validated against
   v0.4.5 — re-validate on upgrade.
+
+## What each layer actually buys (mechanism honesty)
+
+| Layer | Mechanism | Stops | Does NOT stop |
+|-------|-----------|-------|---------------|
+| Namespace + NetworkPolicy + ABAC (runc tier) | Logical isolation, L3/L4 egress rules, IAM session tags | Cross-tenant API/network access, lateral movement | Kernel exploits; exfiltration over allowed egress |
+| gVisor tier | **Syscall interception** by a user-space kernel (Sentry) | Most host-kernel attack surface from container escape | Data exfiltration over permitted HTTPS; syscall-ABI-compatible abuse; it is *not* hardware virtualization |
+| microVM-class runtime (e.g. Kata; future hardware-virtualized runtimes) | **Hardware virtualization** (separate guest kernel per pod) | Host kernel compromise from guest | Exfiltration over permitted egress; higher per-pod cost |
+
+No runtime tier substitutes for egress control: credential exfiltration uses
+perfectly normal syscalls and permitted HTTPS. See ADR-0008.
+
+## Runtime tier extension contract
+
+Any future runtime tier (e.g. a microVM-class runtime) plugs in through exactly
+four seams — nothing else in the platform should need to change:
+
+1. **`RuntimeClass`** — `handler` + `scheduling` (nodeSelector/tolerations) +
+   `overhead.podFixed`.
+2. **Karpenter `NodePool` + `EC2NodeClass`** — node label `openclaw/runtime=<tier>`,
+   matching taint, userData (or AMI) that provides the runtime handler.
+3. **Helm value `sandbox.runtimeClassName`** — the per-tenant `SandboxTemplate`
+   passes it through; tenants flip tiers with a single value.
+4. **Conformance pass** — `scripts/conformance-runtime-tier.sh <runtimeClassName>`
+   must pass end-to-end (kernel identity, Pod Identity, EFS RWX, Bedrock invoke)
+   on a CDK-deployed cluster before the tier is documented as supported.
+
+**Tier policy: at most two runtime tiers at any time (runc + one hardened
+tier). A new hardened tier replaces the previous one rather than accumulating**
+— three concurrent tiers triple the verification and maintenance surface of a
+sample without adding architectural insight.
 
 ## References
 
