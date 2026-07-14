@@ -526,6 +526,176 @@ export class EksClusterStack extends cdk.Stack {
     });
     nodePool.node.addDependency(nodeClass);
 
+    // ── gVisor runtime tier (PR#2) ──────────────────────────────────────────
+    // Optional kernel-isolation tier: a dedicated, tainted Karpenter NodePool
+    // whose AL2023 nodes install the gVisor `runsc` containerd shim via
+    // user-data, plus a `gvisor` RuntimeClass. Tenants opt in via the Helm
+    // value sandbox.runtimeClassName=gvisor (SandboxTemplate runtimeClassName).
+    // Verified on EKS 1.34 / containerd v2 (io.containerd.cri.v1.runtime path);
+    // Pod Identity (169.254.170.23) is reachable from runsc pods, so the tenant
+    // IAM model is unchanged across tiers.
+    const gvisorRuntimeClass = new eks.KubernetesManifest(this, 'GvisorRuntimeClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'node.k8s.io/v1',
+        kind: 'RuntimeClass',
+        metadata: { name: 'gvisor' },
+        handler: 'runsc',
+        // Account for the per-pod gVisor Sentry (user-space kernel) so the
+        // scheduler and Karpenter don't overcommit gVisor nodes.
+        overhead: { podFixed: { memory: '128Mi', cpu: '50m' } },
+        scheduling: {
+          nodeSelector: { 'openclaw/runtime': 'gvisor' },
+          tolerations: [{ key: 'openclaw/runtime', operator: 'Equal', value: 'gvisor', effect: 'NoSchedule' }],
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorRuntimeClass.node.addDependency(karpenterChart);
+
+    const gvisorNodeClass = new eks.KubernetesManifest(this, 'GvisorNodeClass', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.k8s.aws/v1',
+        kind: 'EC2NodeClass',
+        metadata: { name: 'gvisor' },
+        spec: {
+          amiSelectorTerms: [{ alias: 'al2023@latest' }],
+          role: karpenterNodeRole.roleName,
+          subnetSelectorTerms: [
+            { tags: { 'kubernetes.io/role/internal-elb': '1', [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+          securityGroupSelectorTerms: [
+            { tags: { [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
+          ],
+          // String array .join('\n') keeps shell ${ARCH} literal (no TS interpolation).
+          // gVisor release is PINNED (supply-chain): dated release + sha512
+          // verification. Bump deliberately; check https://gvisor.dev/docs/user_guide/install/
+          userData: [
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="//"',
+            '',
+            '--//',
+            'Content-Type: text/x-shellscript; charset="us-ascii"',
+            '',
+            '#!/bin/bash',
+            'set -euxo pipefail',
+            'ARCH=$(uname -m)',
+            'GVISOR_RELEASE=20260706',
+            'URL="https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/${ARCH}"',
+            'mkdir -p /tmp/gvisor && cd /tmp/gvisor',
+            'for f in runsc containerd-shim-runsc-v1; do',
+            '  curl -fsSL --retry 3 -o "$f" "${URL}/$f"',
+            '  curl -fsSL --retry 3 -o "$f.sha512" "${URL}/$f.sha512"',
+            '  sha512sum -c "$f.sha512"',
+            'done',
+            'chmod +x runsc containerd-shim-runsc-v1',
+            'mv runsc containerd-shim-runsc-v1 /usr/local/bin/',
+            "cat <<'EOT' >> /etc/containerd/config.toml",
+            "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc]",
+            '  runtime_type = "io.containerd.runsc.v1"',
+            "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.runsc.options]",
+            '  TypeUrl = "io.containerd.runsc.v1.options"',
+            '  ConfigPath = "/etc/containerd/runsc.toml"',
+            'EOT',
+            "cat <<'EOT' > /etc/containerd/runsc.toml",
+            '[runsc_config]',
+            // Platform intentionally NOT set: runsc defaults to systrap
+            // (ptrace is deprecated upstream and slower).
+            'network = "sandbox"',
+            'EOT',
+            'systemctl restart containerd',
+            '--//',
+          ].join('\n'),
+          // Kubelet config lives here (not in raw userData NodeConfig) so
+          // Karpenter sees maxPods when computing node capacity — otherwise
+          // it overestimates and pods go Pending.
+          kubelet: { maxPods: 30 },
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodeClass.node.addDependency(karpenterChart);
+
+    const gvisorNodePool = new eks.KubernetesManifest(this, 'GvisorNodePool', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.sh/v1',
+        kind: 'NodePool',
+        metadata: { name: 'gvisor' },
+        spec: {
+          template: {
+            metadata: { labels: { 'openclaw/runtime': 'gvisor' } },
+            spec: {
+              nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'gvisor' },
+              taints: [{ key: 'openclaw/runtime', value: 'gvisor', effect: 'NoSchedule' }],
+              requirements: [
+                { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand'] },
+                { key: 'kubernetes.io/arch', operator: 'In', values: ['arm64'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r', 't'] },
+                { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+                { key: 'karpenter.k8s.aws/instance-size', operator: 'In', values: ['medium', 'large', 'xlarge'] },
+                // Karpenter v1: the node-label key must also appear here or the
+                // scheduler won't select this pool for a pod that requests it.
+                { key: 'openclaw/runtime', operator: 'In', values: ['gvisor'] },
+              ],
+            },
+          },
+          limits: { cpu: '50' },
+          disruption: {
+            consolidationPolicy: 'WhenEmptyOrUnderutilized',
+            consolidateAfter: '1m',
+          },
+          // Prefer Graviton (arm64) for cost; see the amd64 pool below.
+          weight: 100,
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodePool.node.addDependency(gvisorNodeClass);
+
+    // x86_64 fallback pool for the gVisor tier. Shares the same EC2NodeClass —
+    // the userData installs runsc via $(uname -m), so it is arch-agnostic
+    // (gVisor publishes both x86_64 and aarch64 release binaries).
+    // Lower weight keeps arm64 (Graviton) as the preferred/default arch.
+    const gvisorNodePoolAmd64 = new eks.KubernetesManifest(this, 'GvisorNodePoolAmd64', {
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      cluster,
+      manifest: [{
+        apiVersion: 'karpenter.sh/v1',
+        kind: 'NodePool',
+        metadata: { name: 'gvisor-amd64' },
+        spec: {
+          template: {
+            metadata: { labels: { 'openclaw/runtime': 'gvisor' } },
+            spec: {
+              nodeClassRef: { group: 'karpenter.k8s.aws', kind: 'EC2NodeClass', name: 'gvisor' },
+              taints: [{ key: 'openclaw/runtime', value: 'gvisor', effect: 'NoSchedule' }],
+              requirements: [
+                { key: 'karpenter.sh/capacity-type', operator: 'In', values: ['on-demand'] },
+                { key: 'kubernetes.io/arch', operator: 'In', values: ['amd64'] },
+                { key: 'karpenter.k8s.aws/instance-category', operator: 'In', values: ['c', 'm', 'r', 't'] },
+                { key: 'karpenter.k8s.aws/instance-generation', operator: 'Gt', values: ['2'] },
+                { key: 'karpenter.k8s.aws/instance-size', operator: 'In', values: ['medium', 'large', 'xlarge'] },
+                { key: 'openclaw/runtime', operator: 'In', values: ['gvisor'] },
+              ],
+            },
+          },
+          limits: { cpu: '50' },
+          disruption: {
+            consolidationPolicy: 'WhenEmptyOrUnderutilized',
+            consolidateAfter: '1m',
+          },
+          weight: 10,
+        },
+      }],
+      overwrite: true,
+    });
+    gvisorNodePoolAmd64.node.addDependency(gvisorNodeClass);
+
     // ── ArgoCD ────────────────────────────────────────────────────────────
     // Installed via Helm (scripts/setup-argocd.sh). For production, consider EKS Capability:
     //   aws eks create-capability --type ARGOCD (requires AWS Identity Center)

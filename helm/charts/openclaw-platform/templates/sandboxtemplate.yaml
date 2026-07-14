@@ -233,9 +233,21 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.tolerations }}
+      {{- if or .Values.tolerations (eq .Values.sandbox.runtimeClassName "gvisor") }}
       tolerations:
+        {{- with .Values.tolerations }}
         {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if eq .Values.sandbox.runtimeClassName "gvisor" }}
+        # Tolerate the gVisor NodePool taint (PR#2). The gvisor RuntimeClass
+        # scheduling block also injects this + the nodeSelector, but we set it
+        # explicitly to match the ai-on-eks reference and avoid admission-order
+        # assumptions.
+        - key: openclaw/runtime
+          operator: Equal
+          value: gvisor
+          effect: NoSchedule
+        {{- end }}
       {{- end }}
       {{- with .Values.affinity }}
       affinity:
