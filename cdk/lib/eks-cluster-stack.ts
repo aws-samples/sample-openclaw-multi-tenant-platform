@@ -164,12 +164,24 @@ export class EksClusterStack extends cdk.Stack {
     });
 
     // ── Other EKS Add-ons (no special IAM needed) ───────────────────────────
-    for (const addonName of ['eks-pod-identity-agent', 'vpc-cni', 'coredns', 'kube-proxy']) {
+    for (const addonName of ['eks-pod-identity-agent', 'coredns', 'kube-proxy']) {
       new eks.CfnAddon(this, addonName.replace(/-/g, ''), {
         clusterName: cluster.clusterName,
         addonName,
       });
     }
+
+    // VPC CNI with NetworkPolicy enforcement enabled (ADR-0008). Without this,
+    // the per-tenant NetworkPolicy objects shipped by the Helm chart are stored
+    // by the API server but NOT enforced — the Amazon VPC CNI network policy agent is
+    // off by default on Amazon EKS.
+    // https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html
+    new eks.CfnAddon(this, 'vpccni', {
+      clusterName: cluster.clusterName,
+      addonName: 'vpc-cni',
+      configurationValues: JSON.stringify({ enableNetworkPolicy: 'true' }),
+      resolveConflicts: 'OVERWRITE',
+    });
 
     // ── CloudWatch Container Insights ─────────────────────────────────────
     const cwObsRole = new iam.Role(this, 'CwObservabilityRole', {
