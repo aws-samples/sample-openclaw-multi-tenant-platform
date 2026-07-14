@@ -23,6 +23,8 @@ that supersedes the old one (note it in both records).
 | [0004](0004-defer-hibernation-and-router.md) | Defer hibernation + sandbox-router; PR #1 keeps path-based routing and `operatingMode: Running` | Accepted |
 | [0005](0005-phased-delivery.md) | Phased delivery: lifecycle → router/hibernation → gVisor | Accepted |
 | [0006](0006-scale-to-zero-strategy.md) | Scale-to-zero strategy: adopt upstream KEP-968 (sandbox-gateway); always-on in PR #1 | Accepted |
+| [0007](0007-gvisor-runtime-tier.md) | gVisor runtime tier — selectable kernel isolation + runtime tier extension contract | Accepted |
+| [0008](0008-enforce-network-policy-egress.md) | Enforce per-tenant egress control via Amazon VPC CNI NetworkPolicy | Accepted |
 
 > 0001 is the foundation and the format template. 0006 supplements 0002/0004/0005
 > with the verified KEP-968 / release-status findings (2026-06-19).

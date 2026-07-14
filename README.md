@@ -29,7 +29,10 @@ Deploy in ~30 minutes. Scale to 500 users. Pay only for what you use.
 
 - **One tenant per user** -- isolated namespace, PVC, network policy, IAM role
 - **Zero API keys** -- LLM access via Amazon Bedrock + Pod Identity
-- **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s
+- **Scale to zero** -- KEDA scales idle pods to 0; cold start in 15-30s.
+  *Applies to the default (Deployment) tenant mode. The opt-in agent-sandbox
+  mode currently runs always-on — native suspend/resume is tracked upstream
+  (kubernetes-sigs/agent-sandbox KEP-968; see [ADR-0006](docs/adr/0006-scale-to-zero-strategy.md)).*
 - **3-layer origin protection** -- internet-facing ALB with CF-only SG + AWS WAF + HTTPS
 - **Custom auth UI** -- branded login/signup on your domain (no Amazon Cognito Hosted UI)
 - **Self-service signup** -- Amazon Cognito + AWS Lambda auto-provisions tenants
@@ -140,6 +143,7 @@ Sign up at `https://<your-domain>/auth/` with an email matching your `allowedEma
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Amazon Cognito signup + local token auth + 3-layer origin protection |
 | Tenant | Namespace isolation + NetworkPolicy (enforced via VPC CNI, see below) + ABAC |
+| Runtime | runc by default; opt-in gVisor kernel-isolation tier per tenant ([ADR-0007](docs/adr/0007-gvisor-runtime-tier.md)) |
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
