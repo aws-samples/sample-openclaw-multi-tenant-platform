@@ -25,7 +25,6 @@ IMAGE="ghcr.io/openclaw/openclaw:latest"
 FAIL=0
 
 runtime_class_field=""
-scheduling_fields=""
 if [ -n "$RUNTIME_CLASS" ]; then
   runtime_class_field="runtimeClassName: ${RUNTIME_CLASS}"
 fi
@@ -87,13 +86,33 @@ else
   echo "INFO: baseline runtime — record kernel string above for the tier's ADR"
 fi
 
-echo "==> 2/4 Pod Identity agent reachability"
-check "pod-identity" "wget -q -O- --timeout=5 http://169.254.170.23/v1/credentials 2>&1 | head -c 60 || curl -sf -m 5 http://169.254.170.23/v1/credentials | head -c 60"
+echo "==> 2/4 Amazon EKS Pod Identity credential fetch (authenticated)"
+# A real Pod Identity association injects AWS_CONTAINER_CREDENTIALS_FULL_URI and
+# an auth token file. An unauthenticated 401 from the agent proves nothing —
+# assert an authenticated call returns actual credentials (AccessKeyId).
+PI_OUT=$(kubectl exec -n "$NAMESPACE" "$POD" -- sh -c '
+  set -e
+  [ -n "${AWS_CONTAINER_CREDENTIALS_FULL_URI:-}" ] || { echo "NO_POD_IDENTITY_ENV"; exit 1; }
+  TOKEN=$(cat "${AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE}")
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf -m 5 -H "Authorization: ${TOKEN}" "${AWS_CONTAINER_CREDENTIALS_FULL_URI}"
+  else
+    wget -q -O- --timeout=5 --header="Authorization: ${TOKEN}" "${AWS_CONTAINER_CREDENTIALS_FULL_URI}"
+  fi' 2>&1)
+if echo "$PI_OUT" | grep -q '"AccessKeyId"'; then
+  echo "PASS: pod-identity — credentials returned for SA ${SERVICE_ACCOUNT}"
+else
+  echo "FAIL: pod-identity — $(echo "$PI_OUT" | head -2)"; FAIL=1
+fi
 
 echo "==> 3/4 EFS RWX write/read"
 check "efs-rwx" "echo conformance-\$(date +%s) > /data/.conformance && cat /data/.conformance && rm /data/.conformance"
 
-echo "==> 4/4 Bedrock invoke (ListFoundationModels via node SDK if present, else HTTPS reachability)"
-check "bedrock" "node -e 'fetch(\"https://bedrock.\"+(process.env.AWS_REGION||\"us-east-1\")+\".amazonaws.com/foundation-models\",{signal:AbortSignal.timeout(10000)}).then(r=>{console.log(\"HTTP\",r.status);process.exit(r.status<600?0:1)}).catch(e=>{console.error(e.message);process.exit(1)})'"
+echo "==> 4/4 Amazon Bedrock endpoint reachability (TLS + HTTP; NOT an authenticated invoke)"
+# Reachability-only by design: proves DNS + egress + TLS to the Bedrock endpoint
+# from inside the runtime. A 403 here is a PASS for reachability (request reached
+# the service). An authenticated invoke is the tenant app's own smoke test.
+BR_OUT=$(kubectl exec -n "$NAMESPACE" "$POD" -- node -e 'fetch("https://bedrock."+(process.env.AWS_REGION||"us-east-1")+".amazonaws.com/foundation-models",{signal:AbortSignal.timeout(10000)}).then(r=>{console.log("HTTP",r.status);process.exit((r.status>=200&&r.status<500)?0:1)}).catch(e=>{console.error(e.message);process.exit(1)})' 2>&1)
+if [ $? -eq 0 ]; then echo "PASS: bedrock-reachability — $BR_OUT"; else echo "FAIL: bedrock-reachability — $BR_OUT"; FAIL=1; fi
 
 [ "$FAIL" -eq 0 ] && echo "==> CONFORMANCE PASS (${RUNTIME_CLASS:-runc})" || { echo "==> CONFORMANCE FAIL"; exit 1; }

@@ -571,6 +571,8 @@ export class EksClusterStack extends cdk.Stack {
             { tags: { [`kubernetes.io/cluster/${cluster.clusterName}`]: 'owned' } },
           ],
           // String array .join('\n') keeps shell ${ARCH} literal (no TS interpolation).
+          // gVisor release is PINNED (supply-chain): dated release + sha512
+          // verification. Bump deliberately; check https://gvisor.dev/docs/user_guide/install/
           userData: [
             'MIME-Version: 1.0',
             'Content-Type: multipart/mixed; boundary="//"',
@@ -581,9 +583,14 @@ export class EksClusterStack extends cdk.Stack {
             '#!/bin/bash',
             'set -euxo pipefail',
             'ARCH=$(uname -m)',
+            'GVISOR_RELEASE=20260706',
+            'URL="https://storage.googleapis.com/gvisor/releases/release/${GVISOR_RELEASE}/${ARCH}"',
             'mkdir -p /tmp/gvisor && cd /tmp/gvisor',
-            'curl -fsSL -o runsc "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/runsc"',
-            'curl -fsSL -o containerd-shim-runsc-v1 "https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}/containerd-shim-runsc-v1"',
+            'for f in runsc containerd-shim-runsc-v1; do',
+            '  curl -fsSL --retry 3 -o "$f" "${URL}/$f"',
+            '  curl -fsSL --retry 3 -o "$f.sha512" "${URL}/$f.sha512"',
+            '  sha512sum -c "$f.sha512"',
+            'done',
             'chmod +x runsc containerd-shim-runsc-v1',
             'mv runsc containerd-shim-runsc-v1 /usr/local/bin/',
             "cat <<'EOT' >> /etc/containerd/config.toml",
@@ -595,22 +602,17 @@ export class EksClusterStack extends cdk.Stack {
             'EOT',
             "cat <<'EOT' > /etc/containerd/runsc.toml",
             '[runsc_config]',
-            'platform = "ptrace"',
+            // Platform intentionally NOT set: runsc defaults to systrap
+            // (ptrace is deprecated upstream and slower).
             'network = "sandbox"',
             'EOT',
             'systemctl restart containerd',
-            '',
-            '--//',
-            'Content-Type: application/node.eks.aws',
-            '',
-            'apiVersion: node.eks.aws/v1alpha1',
-            'kind: NodeConfig',
-            'spec:',
-            '  kubelet:',
-            '    config:',
-            '      maxPods: 30',
             '--//',
           ].join('\n'),
+          // Kubelet config lives here (not in raw userData NodeConfig) so
+          // Karpenter sees maxPods when computing node capacity — otherwise
+          // it overestimates and pods go Pending.
+          kubelet: { maxPods: 30 },
         },
       }],
       overwrite: true,
