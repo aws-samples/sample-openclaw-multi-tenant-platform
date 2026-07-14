@@ -139,12 +139,28 @@ Sign up at `https://<your-domain>/auth/` with an email matching your `allowedEma
 | Signup | AWS WAF Bot Control (opt-in) + email domain restriction + rate limiting |
 | Network | Internet-facing ALB with CF-only SG (pl-82a045eb) + AWS WAF + HTTPS |
 | Auth | Amazon Cognito signup + local token auth + 3-layer origin protection |
-| Tenant | Namespace isolation + NetworkPolicy + ABAC |
+| Tenant | Namespace isolation + NetworkPolicy (enforced via VPC CNI, see below) + ABAC |
 | Secrets | exec SecretRef -- fetched on-demand, never persisted |
 | LLM | Amazon Bedrock via Pod Identity -- zero API keys |
 | Cost | Per-tenant monthly budget with per-model pricing |
 | Data | PVC persists across scale-to-zero (Amazon EFS, multi-AZ) |
 | Audit | CloudTrail + Amazon S3 + Athena + Amazon EKS control plane logging |
+
+### Security model
+
+Each isolation layer buys something specific — and honestly does not buy
+something else. The per-tenant NetworkPolicy is **actually enforced**: the
+stack enables the Amazon VPC CNI network policy agent (off by default on
+Amazon EKS), giving tenants an HTTPS-only egress posture (443 to public,
+Pod Identity/IMDS/DNS allowed, cross-tenant and VPC-internal blocked).
+Exfiltration over permitted HTTPS remains out of scope for L3/L4 policy —
+the upgrade path (AWS Network Firewall FQDN filtering, DNS-aware CNI) is
+documented as a non-goal.
+
+Details and trade-offs:
+
+- [ADR-0007 — gVisor runtime tier + runtime tier extension contract](docs/adr/0007-gvisor-runtime-tier.md)
+- [ADR-0008 — Enforced per-tenant egress control](docs/adr/0008-enforce-network-policy-egress.md)
 
 ## Cost
 
