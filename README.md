@@ -187,6 +187,10 @@ Details and trade-offs:
 
 ## Documentation
 
+> **Capacity planning:** see [docs/scaling-limits.md](docs/scaling-limits.md) — the first
+> binding ceiling is the shared Gateway/ALB (~85–100 tenants, non-adjustable
+> target-group quota), not the commonly assumed IAM limits.
+
 | Doc | Description |
 |-----|-------------|
 | [Architecture](docs/architecture.md) | ApplicationSet + ArgoCD flow, tenant lifecycle |
