@@ -173,8 +173,8 @@ export class EksClusterStack extends cdk.Stack {
 
     // VPC CNI with NetworkPolicy enforcement enabled (ADR-0008). Without this,
     // the per-tenant NetworkPolicy objects shipped by the Helm chart are stored
-    // by the API server but NOT enforced — the VPC CNI network policy agent is
-    // off by default on EKS.
+    // by the API server but NOT enforced — the Amazon VPC CNI network policy agent is
+    // off by default on Amazon EKS.
     // https://docs.aws.amazon.com/eks/latest/userguide/cni-network-policy.html
     new eks.CfnAddon(this, 'vpccni', {
       clusterName: cluster.clusterName,

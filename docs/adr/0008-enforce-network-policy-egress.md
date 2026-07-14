@@ -1,4 +1,4 @@
-# ADR-0008: Enforce per-tenant egress control via VPC CNI NetworkPolicy
+# ADR-0008: Enforce per-tenant egress control via Amazon VPC CNI NetworkPolicy
 
 - **Status:** Accepted
 - **Date:** 2026-07-14
@@ -16,12 +16,12 @@ in ADR-0007).
 The Helm chart has always shipped a per-tenant `NetworkPolicy`
 (`networkPolicy.enabled: true` by default) that is effectively default-deny:
 
-- **Egress allowed:** DNS, EKS Pod Identity Agent (`169.254.170.23`), IMDS,
+- **Egress allowed:** DNS, Amazon EKS Pod Identity Agent (`169.254.170.23`), IMDS,
   TCP 443 to public IPs (except `10.0.0.0/8`), same-namespace pods.
 - **Everything else denied:** cross-tenant traffic, VPC-internal addresses,
   non-443 protocols.
 
-**However, on Amazon EKS these objects were stored but not enforced.** The VPC
+**However, on Amazon EKS these objects were stored but not enforced.** The Amazon VPC
 CNI's NetworkPolicy support is disabled by default and must be enabled
 explicitly on the add-on; nothing in this stack did so. The policy was
 decorative.

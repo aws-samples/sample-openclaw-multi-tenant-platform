@@ -44,7 +44,7 @@ ingress:
     alb.ingress.kubernetes.io/target-type: ip
 
 # Per-tenant egress control (ADR-0008). Enforced only when the cluster enables
-# the VPC CNI network policy agent (this stack's CDK does). Posture: HTTPS-only
+# the Amazon VPC CNI network policy agent (this stack's CDK does). Posture: HTTPS-only
 # egress — DNS / Pod Identity / IMDS / TCP 443-to-public allowed; plain HTTP
 # (:80), non-443 protocols, and VPC-internal (10.0.0.0/8) blocked.
 # If your VPC CIDR is not within 10.0.0.0/8, adjust the egress `except` block
