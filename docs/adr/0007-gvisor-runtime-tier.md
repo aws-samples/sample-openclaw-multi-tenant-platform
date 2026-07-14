@@ -68,7 +68,7 @@ mechanism for adopters who need it.
 
 ## Verification evidence (live, this codebase)
 
-Fresh `cdk deploy` of the full stack on a net-new stack (`hclo-mac`/`us-east-1`):
+Fresh `cdk deploy` of the full stack on a net-new stack (`us-east-1`):
 
 - Stack reached **CREATE_COMPLETE** (no manual resource creation).
 - A `runtimeClassName=gvisor` pod, scheduled by Karpenter onto a node labelled
