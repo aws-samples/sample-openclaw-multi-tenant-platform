@@ -1035,7 +1035,24 @@ function handler(event) {
 
     new s3deploy.BucketDeployment(this, 'AuthUiDeployment', {
       sources: [
-        s3deploy.Source.asset('../auth-ui'),
+        // Ship only the static runtime files. The auth-ui is vanilla JS with no
+        // build step; node_modules holds dev-only deps (jest/eslint/puppeteer,
+        // ~110MB) that are never served. Uploading them flooded the deployment
+        // Lambda (thousands of small files) and exceeded its timeout, blocking
+        // CREATE_COMPLETE. Excluding them drops the upload to ~265KB / 7 files.
+        s3deploy.Source.asset('../auth-ui', {
+          exclude: [
+            'node_modules',
+            'node_modules/**',
+            'tests',
+            'tests/**',
+            'package.json',
+            'package-lock.json',
+            '.git',
+            '.gitignore',
+            '**/.DS_Store',
+          ],
+        }),
       ],
       destinationBucket: authUiBucket,
       distribution,
