@@ -155,7 +155,10 @@ Amazon EKS), giving tenants an HTTPS-only egress posture (443 to public,
 Pod Identity/IMDS/DNS allowed, cross-tenant and VPC-internal blocked).
 Exfiltration over permitted HTTPS remains out of scope for L3/L4 policy —
 the upgrade path (AWS Network Firewall FQDN filtering, DNS-aware CNI) is
-documented as a non-goal.
+documented as a non-goal. Note also that enforcement runs in *standard mode*:
+a brand-new pod is default-allow for the brief window before its policies
+attach, so NetworkPolicy is not a startup-time exfiltration boundary (see
+ADR-0008 for strict mode).
 
 Details and trade-offs:
 
