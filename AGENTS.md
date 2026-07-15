@@ -185,3 +185,4 @@ CI runs on every PR (`.github/workflows/ci.yml`). Key design decisions:
 - Scripts: Bash, `set -euo pipefail`, use `get_output()` helper for CloudFormation outputs
 - CDK context: All configurable values in `cdk.json`, template in `cdk.json.example`
 - Documentation: English only, Markdown, stored in `docs/`
+- **Versioning, milestones, and labels**: follow [`docs/versioning-and-tracking.md`](docs/versioning-and-tracking.md) — tags mark delivered states (retroactive-friendly, `0.x`, decoupled from the Helm chart version), milestones group schedulable issues (`vMINOR — theme`), upstream-blocked work gets the `upstream-dependency` label and NO milestone, and every issue gets an `area/*` label
